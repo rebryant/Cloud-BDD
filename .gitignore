@@ -1,0 +1,15 @@
+*.o
+*~
+*.dat
+*.dSYM/*
+chunk_test
+chunktable_test
+shadow_test
+console_test
+set_test
+controller
+router
+tworker
+client
+runbdd
+bworker
