@@ -2,6 +2,8 @@
 *~
 *.dat
 *.dSYM/*
+*.cmd
+*.pyc
 chunk_test
 chunktable_test
 shadow_test
