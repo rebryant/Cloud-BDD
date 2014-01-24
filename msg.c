@@ -203,6 +203,20 @@ chunk_ptr msg_new_kill() {
     return msg_new_op(MSG_KILL);
 }
 
+/*
+  Create a message containing worker statistics.
+  Specify number of values and provide pointer to array of them.
+ */
+chunk_ptr msg_new_stat(int nstat, word_t *vals) {
+    chunk_ptr msg = chunk_new(nstat+1);
+    word_t h = MSG_STAT;
+    chunk_insert_word(msg, h, 0);
+    int i;
+    for (i = 0; i < nstat; i++)
+	chunk_insert_word(msg, vals[i], i+1);
+    return msg;
+}
+
 chunk_ptr msg_new_flush() {
     return msg_new_op(MSG_DO_FLUSH);
 }

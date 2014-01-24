@@ -273,7 +273,6 @@ bool do_quit_cmd(int argc, char *argv[]) {
     for (i = 0; i < quit_helper_cnt; i++) {
 	quit_helpers[i](argc, argv);
     }
-    report(1, "Exiting");
     quit_flag = true;
     return true;
 }
@@ -576,7 +575,6 @@ bool cmd_done() {
 
 void finish_cmd() {
     if (!quit_flag) {
-	report(1, "Invoking quit command");
 	do_quit_cmd(0, NULL);
     }
 }

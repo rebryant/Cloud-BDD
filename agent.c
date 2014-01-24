@@ -62,8 +62,7 @@ static unsigned seq_num = 0;
 static unsigned snb = 16;
 
 /* Function to call when flush message received */
-static cmd_function flush_helper = NULL;
-
+static flush_function flush_helper = NULL;
 
 /* Forward reference */
 bool quit_agent(int argc, char *argv[]);
@@ -82,7 +81,7 @@ struct OELE {
 op_ptr op_list = NULL;
 
 /* Set function to be called when agent command to flush its state */
-void set_agent_flush_helper(cmd_function ff) {
+void set_agent_flush_helper(flush_function ff) {
     flush_helper = ff;
 }
 
@@ -463,14 +462,22 @@ void run_worker() {
 		switch(code) {
 		case MSG_KILL:
 		    chunk_free(msg);
-		    report(1, "Received kill message from controller");
+		    report(5, "Received kill message from controller");
 		    quit_agent(0, NULL);
 		    return;
 		case MSG_DO_FLUSH:
 		    chunk_free(msg);
-		    report(1, "Received flush message from controller");
+		    report(5, "Received flush message from controller");
 		    if (flush_helper) {
-			flush_helper(0, NULL);
+			chunk_ptr msg = flush_helper();
+			if (!msg)
+			    break;
+			if (chunk_write(controller_fd, msg)) {
+			    report(5, "Sent statistics information to controller");
+			} else {
+			    err(false, "Failed to send statistics information to controller");
+			}
+			chunk_free(msg);
 		    }
 		    break;
 		default:

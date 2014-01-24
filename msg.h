@@ -19,6 +19,7 @@ typedef enum {
     MSG_REGISTER_AGENT,
     /* From worker back to controller */
     MSG_READY_WORKER,
+    MSG_STAT,
     /* From controller to router, worker, or client */
     MSG_DO_FLUSH,
     MSG_KILL,
@@ -113,6 +114,12 @@ chunk_ptr msg_new_worker_ready(unsigned agent);
 chunk_ptr msg_new_kill();
 /* Create message to notify any node that it should flush its state */
 chunk_ptr msg_new_flush();
+
+/*
+  Create a message containing worker statistics.
+  Specify number of values and provide pointer to array of them.
+ */
+chunk_ptr msg_new_stat(int nstat, word_t *vals);
 
 /** Useful functions **/
 

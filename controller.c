@@ -58,6 +58,11 @@ static set_ptr worker_fd_set = NULL;
 /* Set of client file descriptors */
 static set_ptr client_fd_set = NULL;
 
+/* Collect statistics from workers as a set of messages */
+static int stat_message_cnt = 0;
+static chunk_ptr *stat_messages = NULL;
+
+
 /* Forward declarations */
 bool quit_controller(int argc, char *argv[]);
 bool do_flush_cmd(int argc, char *argv[]);
@@ -65,6 +70,7 @@ bool do_flush_cmd(int argc, char *argv[]);
 bool do_status_cmd(int argc, char *argv[]) {
     report(0, "Connections: %u routers, %u workers, %u clients",
 	   router_fd_set->nelements, worker_fd_set->nelements, client_fd_set->nelements);
+    report(0, "%d/%u worker stat messages received", stat_message_cnt, worker_fd_set->nelements);
     return true;
 }
 
@@ -95,6 +101,9 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     snb = 32-biglog2(nworkers+maxclients);
     worker_cnt = nworkers;
     maxclients = mc;
+    stat_message_cnt = 0;
+    stat_messages = calloc_or_fail(worker_cnt, sizeof(chunk_ptr), "init_controller");
+
 }
     
 bool do_flush_cmd(int argc, char *argv[]) {
@@ -117,6 +126,11 @@ bool do_flush_cmd(int argc, char *argv[]) {
 	    err(false, "Failed to send flush message to client with descriptor %d", fd);
 	    ok = false;
 	}
+    }
+    chunk_free(msg);
+    while (stat_message_cnt > 0) {
+	chunk_free(stat_messages[--stat_message_cnt]);
+	stat_messages[stat_message_cnt] = NULL;
     }
     return ok;
 }
@@ -159,6 +173,10 @@ bool quit_controller(int argc, char *argv[]) {
     set_free(router_fd_set);
     set_free(worker_fd_set);
     set_free(client_fd_set);
+    while (stat_message_cnt > 0) {
+	chunk_free(stat_messages[--stat_message_cnt]);
+    }
+    free_array(stat_messages, sizeof(chunk_ptr), worker_cnt);
     return true;
 }
 
@@ -226,6 +244,38 @@ static void add_agent(int fd, bool isclient) {
     report(3, "Added agent %u with descriptor %d", agent, fd);
 }
 
+/* Accumulate worker messages with statistics */
+static void add_stat_message(chunk_ptr msg) {
+    stat_messages[stat_message_cnt++] = msg;
+    /* See if we've accumulated a full set */
+    if (stat_message_cnt >= worker_cnt) {
+	size_t nstat = stat_messages[0]->length - 1;
+	/* Accumulate and print */
+	report(1, "Worker statistics:");
+	size_t i, w;
+	for (i = 1; i <= nstat; i++) {
+	    chunk_ptr msg = stat_messages[0];
+	    word_t minval, maxval, sumval;
+	    minval = maxval = sumval = chunk_get_word(msg, i);
+	    for (w = 1; w < worker_cnt; w++) {
+		chunk_ptr msg = stat_messages[w];		
+		word_t val = chunk_get_word(msg, i);
+		if (val < minval)
+		    minval = val;
+		if (val > maxval)
+		    maxval = val;
+		sumval += val;
+	    }
+	    report(1, "Parameter %d\tMin: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
+		   (int) i-1, minval, maxval, (double) sumval/worker_cnt, sumval);
+	}
+	for (w = 0; w < worker_cnt; w++) {
+	    chunk_free(stat_messages[w]);
+	    stat_messages[w] = NULL;
+	}
+	stat_message_cnt = 0;
+    }
+}
 
 static void run_controller(char *infile_name) {
     if (!start_cmd(infile_name))
@@ -243,15 +293,13 @@ static void run_controller(char *infile_name) {
 	    fd = w;
 	    add_fd(fd);
 	}
-	if (need_routers == 0 && need_workers > 0) {
-	    /* Check for worker ready messages */
+	if (need_routers == 0) {
+	    /* Accept messages from workers */
 	    set_iterstart(worker_fd_set);
 	    while (set_iternext(worker_fd_set, &w)) {
 		fd = w;
 		add_fd(fd);
 	    }
-	}
-	if (need_routers == 0 && need_workers == 0) {
 	    /* Accept messages from clients */
 	    set_iterstart(client_fd_set);
 	    while (set_iternext(client_fd_set, &w)) {
@@ -345,10 +393,10 @@ static void run_controller(char *infile_name) {
 		    break;
 		}
 	    } else if (set_member(worker_fd_set, (word_t) fd, false)) {
-		/* Message from worker.  Should indicate that the worker is ready */
-		chunk_free(msg);
+		/* Message from worker */
 		switch (code) {
 		case MSG_READY_WORKER:
+		    chunk_free(msg);
 		    if (need_workers == 0) {
 			err(false, "Unexpected worker ready.  (Ignored)");
 			close(fd);
@@ -366,11 +414,17 @@ static void run_controller(char *infile_name) {
 			}
 		    }
 		    break;
+		case MSG_STAT:
+		    /* Message gets stashed away.  Don't free it */
+		    add_stat_message(msg);
+		    break;
 		default:
+		    chunk_free(msg);
 		    err(false, "Unexpected message code %u from worker", code);
 		}
 	    } else if (set_member(client_fd_set, (word_t) fd, false)) {
 		/* Message from client */
+		chunk_free(msg);
 		switch(code){
 		case MSG_KILL:
 		    /* Shutdown entire system */

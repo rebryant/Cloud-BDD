@@ -37,8 +37,14 @@ bool send_as_operand(word_t dest, word_t val);
 /* Insert an operand into an operation */
 void insert_operand(chunk_ptr op, chunk_ptr oper, unsigned offset);
 
-/* Set function to be called when agent command to flush its state */
-void set_agent_flush_helper(cmd_function ff);
+/*
+  Function to flush state and return message with accumulated statistics.
+  Function returns NULL when not statistics to provide 
+*/
+typedef chunk_ptr (*flush_function)();
+
+/* Provide handler to support flush operation. */
+void set_agent_flush_helper(flush_function ff);
 
 /* Fire an operation and wait for returned operand */
 chunk_ptr fire_and_wait(chunk_ptr msg);

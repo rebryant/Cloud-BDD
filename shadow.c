@@ -185,7 +185,7 @@ ref_t shadow_new_variable(shadow_mgr mgr) {
 	r = ref_new_variable(mgr->ref_mgr);
     }
     if (mgr->do_dist) {
-	ref_t rdist = dist_var();
+	ref_t rdist = dist_var(mgr->ref_mgr);
 	if (mgr->do_local) {
 	    if (!check_refs(mgr, r, rdist))
 		return REF_INVALID;
@@ -214,7 +214,7 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 	r = ref_ite(mgr->ref_mgr, iref, tref, eref);
     }
     if (mgr->do_dist) {
-	ref_t rdist = dist_ite(iref, tref, eref);
+	ref_t rdist = dist_ite(mgr->ref_mgr, iref, tref, eref);
 	if (mgr->do_local) {
 	    if (!check_refs(mgr, r, rdist)) {
 		return REF_INVALID;

@@ -56,6 +56,8 @@ bool do_status(int argc, char *argv[]);
 bool do_var(int argc, char *argv[]);
 bool do_xor(int argc, char *argv[]);
 
+chunk_ptr run_flush();
+
 static ref_t get_ref();
 static void assign_ref(char *name, ref_t r, bool saturate);
 
@@ -97,6 +99,9 @@ static bool bdd_quit(int argc, char *argv[]) {
     }
     keyvalue_free(nametable);
     keyvalue_free(reftable);
+    if (do_ref(smgr)) {
+	ref_show_stat(smgr->ref_mgr);
+    }
     free_shadow_mgr(smgr);
     return true;
 }
@@ -167,7 +172,7 @@ int main(int argc, char *argv[]) {
     init_cmd();
     if (do_dist) {
 	init_agent(true, hbuf, port);
-	set_agent_flush_helper(do_flush);
+	set_agent_flush_helper(run_flush);
     }
     console_init(do_dist);
     set_verblevel(level);
@@ -450,6 +455,12 @@ bool do_flush(int argc, char *argv[]) {
     mem_status(stdout);
     bdd_init();
     return true;
+}
+
+/* Version for remote flushes */
+chunk_ptr run_flush() {
+    do_flush(0, NULL);
+    return NULL;
 }
 
 

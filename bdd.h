@@ -69,15 +69,15 @@ typedef word_t ref_t;
 
 /* Build in an array of counters to keep track of statistics */
 typedef enum {STAT_UNIQ_CURR, STAT_UNIQ_PEAK, STAT_UNIQ_TOTAL, STAT_UNIQ_COLLIDE,
-	      STAT_ITE_CNT, STAT_ITE_HIT_CNT, STAT_ITE_NEW_CNT} stat_t;
+	      STAT_ITE_CNT, STAT_ITE_LOCAL_CNT, STAT_ITE_HIT_CNT, STAT_ITE_NEW_CNT} stat_t;
 
-#define NSTAT 7
+#define NSTAT 8
 
 typedef struct {
     int variable_cnt;
     keyvalue_table_ptr unique_table;
     keyvalue_table_ptr ite_table;
-    size_t stat_counter[NSTAT];
+    word_t stat_counter[NSTAT];
 } ref_mgr_ele, *ref_mgr;
 
 /* Create a new manager */
@@ -186,11 +186,12 @@ Supported Operations
 **/
 
 
-typedef enum { OP_VAR, OP_CANONIZE, OP_CANONIZE_LOOKUP, OP_RETRIEVE_LOOKUP, OP_ITE_LOOKUP, OP_ITE_RECURSE, OP_ITE_STORE } opcode_t;
+typedef enum { OP_VAR, OP_CANONIZE, OP_CANONIZE_LOOKUP, OP_RETRIEVE_LOOKUP,
+	       OP_ITE_LOOKUP, OP_ITE_RECURSE, OP_ITE_STORE } opcode_t;
 
 void init_dref_mgr();
 void free_dref_mgr();
-bool flush_dref_mgr(int argc, char *argv[]);
+chunk_ptr flush_dref_mgr();
 
 chunk_ptr build_var(word_t dest);
 
@@ -216,11 +217,7 @@ bool do_ite_recurse_op(chunk_ptr op);
 bool do_ite_store_op(chunk_ptr op);
 
 /* Operations available to client */
-ref_t dist_var();
-ref_t dist_ite(ref_t iref, ref_t tref, ref_t eref);
-/* Special cases of ITE */
-ref_t dist_and(ref_t aref, ref_t bref);
-ref_t dist_or(ref_t aref, ref_t bref);
-ref_t dist_xor(ref_t aref, ref_t bref);
+ref_t dist_var(ref_mgr mgr);
+ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref);
 
 

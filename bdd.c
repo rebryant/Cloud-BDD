@@ -141,13 +141,13 @@ void ref_show(ref_t r, char *buf) {
 	sprintf(buf, "%cV.%d", nc, var);
 	break;
     case BDD_FUNCTION:
-	sprintf(buf, "%cF.%d.%lx+%d", nc, var, hash, uniq);
+	sprintf(buf, "%cF.%d.%" PRIx64 "+%d", nc, var, hash, uniq);
 	break;
     case BDD_INVALID:
-	sprintf(buf, "%cI.%d.%lx+%d", nc, var, hash, uniq);
+	sprintf(buf, "%cI.%d.%" PRIx64 "+%d", nc, var, hash, uniq);
 	break;
     default:
-	sprintf(buf, "%cI.%d.%lx+%d", nc, var, hash, uniq);
+	sprintf(buf, "%cI.%d.%" PRIx64 "+%d", nc, var, hash, uniq);
 	break;
     }
 }
@@ -341,11 +341,12 @@ void ref_deref(ref_mgr mgr, ref_t r, ref_t *vrefp, ref_t *hirefp, ref_t *lorefp)
 /* Perform local parts of ITE.  Return either result or (possibly negated) invalid ref.
    In latter case, set *iucpp to triple with ITE arguments
 */
-ref_t ref_ite_local(ref_t iref, ref_t tref, ref_t eref, chunk_ptr *ucpp) {
+ref_t ref_ite_local(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref, chunk_ptr *ucpp) {
     ref_t r;
     ref_t siref = iref;
     ref_t stref = tref;
     ref_t seref = eref;
+    mgr->stat_counter[STAT_ITE_CNT]++;
     /* Simple cases */
     if (iref == REF_ONE)
 	r = tref;
@@ -416,6 +417,8 @@ ref_t ref_ite_local(ref_t iref, ref_t tref, ref_t eref, chunk_ptr *ucpp) {
 	if (negate)
 	    r = REF_NEGATE(r);
     }
+    if (!REF_IS_INVALID(r))
+	mgr->stat_counter[STAT_ITE_LOCAL_CNT]++;
     if (verblevel >= 4) {
 	char sibuf[24], stbuf[24], sebuf[24];
 	ref_show(siref, sibuf);
@@ -442,7 +445,11 @@ ref_t ref_ite_local(ref_t iref, ref_t tref, ref_t eref, chunk_ptr *ucpp) {
     
 ref_t ref_ite_lookup(ref_mgr mgr, chunk_ptr ucp) {
     ref_t r;
-    if (!keyvalue_find(mgr->ite_table, (word_t) ucp, (word_t *) &r))
+    word_t w;
+    if (keyvalue_find(mgr->ite_table, (word_t) ucp, (word_t *) &w)) {
+	r = (ref_t) w;
+	mgr->stat_counter[STAT_ITE_HIT_CNT]++;
+    } else
 	r = REF_INVALID;
 
     if (verblevel >= 4) {
@@ -483,13 +490,13 @@ static void ref_ite_recurse(ref_mgr mgr,
 		     ref_t *newhip, ref_t *newlop) {
     *newhip = ref_ite(mgr, irefhi, trefhi, erefhi);
     *newlop = ref_ite(mgr, ireflo, treflo, ereflo);
+    mgr->stat_counter[STAT_ITE_NEW_CNT]++;
 }
 
 /* ITE operation */
 ref_t ref_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
-    mgr->stat_counter[STAT_ITE_CNT]++;
     chunk_ptr ucp;
-    ref_t r = ref_ite_local(iref, tref, eref, &ucp);
+    ref_t r = ref_ite_local(mgr, iref, tref, eref, &ucp);
     if (!REF_IS_INVALID(r)) {
 	return r;
     }
@@ -499,7 +506,6 @@ ref_t ref_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 	chunk_free(ucp);
 	if (neg)
 	    r = REF_NEGATE(r);
-	mgr->stat_counter[STAT_ITE_HIT_CNT]++;
 	if (verblevel >= 4) {
 	    char buf1[24];
 	    ref_show(r, buf1);
@@ -550,7 +556,6 @@ ref_t ref_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     ref_t vref = REF_VAR(var);
     r = ref_canonize(mgr, vref, newhi, newlo);
     ref_ite_store(mgr, ucp, r);
-    mgr->stat_counter[STAT_ITE_NEW_CNT]++;
     if (neg)
 	r = REF_NEGATE(r);
     if (verblevel >= 4) {
@@ -597,7 +602,7 @@ static word_t uop_node_support(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t l
 static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
 static word_t uop_node_cofactor(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
 static word_t uop_node_equant(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
-
+void ref_show_stat(ref_mgr mgr);
 
 static uop_node_fun uop_node_functions[] = { uop_node_mark, uop_node_support, uop_node_density, uop_node_cofactor, uop_node_equant };
 
@@ -890,14 +895,15 @@ void ref_collect(ref_mgr mgr, set_ptr roots) {
 
 
 void ref_show_stat(ref_mgr mgr) {
-    report(0, "Unique table.  Total generated %lu.  Current %lu.  Peak %lu.  Collisions %lu",
+    report(0, "Unique table.  Total generated %" PRIu64 ".  Current %" PRIu64 ".  Peak %" PRIu64 ".  Collisions %" PRIu64,
 	   mgr->stat_counter[STAT_UNIQ_TOTAL],
 	   mgr->stat_counter[STAT_UNIQ_CURR],
 	   mgr->stat_counter[STAT_UNIQ_PEAK],
 	   mgr->stat_counter[STAT_UNIQ_COLLIDE]);
 
-    report(0, "ITEs: Total %lu.  Lookup hits %lu.  New %lu",
+    report(0, "ITEs: Total %" PRIu64 ".  Done Locally %" PRIu64 ".  Lookup hits %" PRIu64 ".  New %" PRIu64,
 	   mgr->stat_counter[STAT_ITE_CNT],
+	   mgr->stat_counter[STAT_ITE_LOCAL_CNT],
 	   mgr->stat_counter[STAT_ITE_HIT_CNT],
 	   mgr->stat_counter[STAT_ITE_NEW_CNT]);
 }
@@ -958,17 +964,19 @@ void free_dref_mgr() {
 	ilist_ptr ilist = (ilist_ptr) wv;
 	ilist_free(ilist);
     }
+    ref_show_stat(dmgr->rmgr);
     keyvalue_free(dmgr->deferred_ite_table);
     free_ref_mgr(dmgr->rmgr);
     free_block(dmgr, sizeof(dref_mgr_ele));
 }
 
-bool flush_dref_mgr(int argc, char *argv[]) {
-    report(1, "Flushing state");
+chunk_ptr flush_dref_mgr() {
+    report(3, "Flushing state");
+    chunk_ptr msg = msg_new_stat(NSTAT, dmgr->rmgr->stat_counter);
     free_dref_mgr();
     mem_status(stdout);
     init_dref_mgr();
-    return true;
+    return msg;
 }
 
 chunk_ptr build_var(word_t dest) {
@@ -1064,7 +1072,6 @@ static bool send_ref_as_operand(word_t dest, ref_t ref) {
     return send_as_operand(dest, (word_t) ref);
 
 }
-
 
 bool do_var_op(chunk_ptr op) {
     ref_mgr mgr = dmgr->rmgr;
@@ -1162,7 +1169,6 @@ bool do_ite_lookup_op(chunk_ptr op) {
 	chunk_free(ucp);
 	if (negate)
 	    rlook = REF_NEGATE(rlook);
-	mgr->stat_counter[STAT_ITE_HIT_CNT]++;
 	if (verblevel >= 4) {
 	    char buf1[24];
 	    ref_show(rlook, buf1);
@@ -1262,6 +1268,8 @@ bool do_ite_lookup_op(chunk_ptr op) {
 }
 
 bool do_ite_recurse_op(chunk_ptr op) {
+    ref_mgr mgr = dmgr->rmgr;
+    mgr->stat_counter[STAT_ITE_NEW_CNT]++;
     word_t dest =          chunk_get_word(op, 0+OP_HEADER_CNT);
     ref_t vref =   (ref_t) chunk_get_word(op, 1+OP_HEADER_CNT);
     ref_t irefhi = (ref_t) chunk_get_word(op, 2+OP_HEADER_CNT);
@@ -1272,8 +1280,8 @@ bool do_ite_recurse_op(chunk_ptr op) {
     ref_t ereflo = (ref_t) chunk_get_word(op, 7+OP_HEADER_CNT);
     bool ok = true;
     chunk_ptr hiucp, loucp;
-    ref_t nhiref = ref_ite_local(irefhi, trefhi, erefhi, &hiucp);
-    ref_t nloref = ref_ite_local(ireflo, treflo, ereflo, &loucp);
+    ref_t nhiref = ref_ite_local(mgr, irefhi, trefhi, erefhi, &hiucp);
+    ref_t nloref = ref_ite_local(mgr, ireflo, treflo, ereflo, &loucp);
     /* Note for future: Could begin canonization for case where both hiref & loref are valid */
     chunk_ptr cop = build_canonize(dest, vref);
     if (REF_IS_INVALID(nhiref)) {
@@ -1353,7 +1361,7 @@ bool do_ite_store_op(chunk_ptr op) {
 }
 
 /* Operations available to client */
-ref_t dist_var() {
+ref_t dist_var(ref_mgr mgr) {
     word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
     chunk_ptr msg = build_var(dest);
     chunk_ptr rmsg = fire_and_wait(msg);
@@ -1367,14 +1375,14 @@ ref_t dist_var() {
     return r;
 }
 
-ref_t dist_ite(ref_t iref, ref_t tref, ref_t eref) {
+ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     chunk_ptr ucp = NULL;
     if (verblevel >= 4) {
 	char buf1[24], buf2[24], buf3[24];
 	ref_show(iref, buf1); ref_show(tref, buf2); ref_show(eref, buf3);
 	report(4, "Computing Distance ITE(%s, %s, %s)", buf1, buf2, buf3);
     }
-    ref_t rlocal = ref_ite_local(iref, tref, eref, &ucp);
+    ref_t rlocal = ref_ite_local(mgr, iref, tref, eref, &ucp);
     if (REF_IS_INVALID(rlocal)) {
 	ref_t niref = (ref_t) chunk_get_word(ucp, 0);
 	ref_t ntref = (ref_t) chunk_get_word(ucp, 1);
@@ -1395,16 +1403,4 @@ ref_t dist_ite(ref_t iref, ref_t tref, ref_t eref) {
     } else {
 	return rlocal;
     }
-}
-
-ref_t dist_and(ref_t aref, ref_t bref) {
-    return dist_ite(aref, bref, REF_ZERO);
-}
-
-ref_t dist_or(ref_t aref, ref_t bref) {
-    return dist_ite(aref, REF_ONE, bref);
-}
-
-ref_t dist_xor(ref_t aref, ref_t bref) {
-    return dist_ite(aref, REF_NEGATE(bref), bref);
 }
