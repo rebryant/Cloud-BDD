@@ -27,7 +27,7 @@ report.o: report.c report.h
 bdd.o: bdd.c dtype.h bdd.h table.h chunk.h report.h msg.h console.h agent.h
 	$(CC) $(CFLAGS) $(BDDFLAGS) -c bdd.c
 
-shadow.o: shadow.c shadow.h bdd.h table.h chunk.h report.h
+shadow.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg.h
 	$(CC) $(CFLAGS) $(BDDFLAGS) $(CUDDINC) -c shadow.c
 
 console.o: console.c console.h report.h

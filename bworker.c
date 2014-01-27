@@ -19,11 +19,10 @@
 #include "table.h"
 #include "chunk.h"
 #include "report.h"
-#include "bdd.h"
 #include "msg.h"
 #include "console.h"
 #include "agent.h"
-
+#include "bdd.h"
 
 static void init(char *controller_name, unsigned controller_port) {
     init_agent(false, controller_name, controller_port);

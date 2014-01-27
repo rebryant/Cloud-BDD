@@ -12,6 +12,9 @@
 #include "table.h"
 #include "chunk.h"
 #include "report.h"
+#include "msg.h"
+#include "console.h"
+#include "agent.h"
 #include "bdd.h"
 
 #include "cudd.h"

@@ -13,10 +13,11 @@
 #include "table.h"
 #include "chunk.h"
 #include "report.h"
-#include "bdd.h"
+
 #include "msg.h"
 #include "console.h"
 #include "agent.h"
+#include "bdd.h"
 
 /* Unique table uses a linked list for each possible hash value. */
 
@@ -113,7 +114,8 @@ static void clear_ite_entry(word_t key, word_t value) {
 static void clear_ite_table(ref_mgr mgr) {
     keyvalue_apply(mgr->ite_table, clear_ite_entry);
     keyvalue_free(mgr->ite_table);
-    mgr->ite_table = keyvalue_new(chunk_hash, chunk_equal);    
+    mgr->ite_table = keyvalue_new(chunk_hash, chunk_equal);
+    mgr->stat_counter[STATB_ITEC_CURR] = 0;
 }
 
 void free_ref_mgr(ref_mgr mgr) {
@@ -234,13 +236,13 @@ static ref_t ref_canonize_lookup(ref_mgr mgr, chunk_ptr ucp) {
 	    report(4, "Creating unique table entry [%s,%s,%s] --> %s",
 		   vbuf, hibuf, lobuf, rbuf);
 	}
-	mgr->stat_counter[STAT_UNIQ_CURR]++;
-	if (mgr->stat_counter[STAT_UNIQ_CURR] > mgr->stat_counter[STAT_UNIQ_PEAK])
-	    mgr->stat_counter[STAT_UNIQ_PEAK] = mgr->stat_counter[STAT_UNIQ_CURR];
-	mgr->stat_counter[STAT_UNIQ_TOTAL]++;
+	mgr->stat_counter[STATB_UNIQ_CURR]++;
+	if (mgr->stat_counter[STATB_UNIQ_CURR] > mgr->stat_counter[STATB_UNIQ_PEAK])
+	    mgr->stat_counter[STATB_UNIQ_PEAK] = mgr->stat_counter[STATB_UNIQ_CURR];
+	mgr->stat_counter[STATB_UNIQ_TOTAL]++;
 	if (have_list) {
 	    *tailp = ls;
-	    mgr->stat_counter[STAT_UNIQ_COLLIDE]++;
+	    mgr->stat_counter[STATB_UNIQ_COLLIDE]++;
 	} else {
 	    /* First entry for this hash */
 	    keyvalue_insert(mgr->unique_table, (word_t) h, (word_t) ls);
@@ -346,7 +348,7 @@ ref_t ref_ite_local(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref, chunk_ptr *
     ref_t siref = iref;
     ref_t stref = tref;
     ref_t seref = eref;
-    mgr->stat_counter[STAT_ITE_CNT]++;
+    mgr->stat_counter[STATB_ITE_CNT]++;
     /* Simple cases */
     if (iref == REF_ONE)
 	r = tref;
@@ -418,7 +420,7 @@ ref_t ref_ite_local(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref, chunk_ptr *
 	    r = REF_NEGATE(r);
     }
     if (!REF_IS_INVALID(r))
-	mgr->stat_counter[STAT_ITE_LOCAL_CNT]++;
+	mgr->stat_counter[STATB_ITE_LOCAL_CNT]++;
     if (verblevel >= 4) {
 	char sibuf[24], stbuf[24], sebuf[24];
 	ref_show(siref, sibuf);
@@ -448,7 +450,7 @@ ref_t ref_ite_lookup(ref_mgr mgr, chunk_ptr ucp) {
     word_t w;
     if (keyvalue_find(mgr->ite_table, (word_t) ucp, (word_t *) &w)) {
 	r = (ref_t) w;
-	mgr->stat_counter[STAT_ITE_HIT_CNT]++;
+	mgr->stat_counter[STATB_ITE_HIT_CNT]++;
     } else
 	r = REF_INVALID;
 
@@ -482,6 +484,10 @@ void ref_ite_store(ref_mgr mgr, chunk_ptr ucp, ref_t r) {
 	       ibuf, tbuf, ebuf, rbuf);
     }
     keyvalue_insert(mgr->ite_table, (word_t) ucp, (word_t) r);
+    mgr->stat_counter[STATB_ITEC_TOTAL]++;
+    mgr->stat_counter[STATB_ITEC_CURR]++;
+    if (mgr->stat_counter[STATB_ITEC_CURR] > mgr->stat_counter[STATB_ITEC_PEAK])
+	mgr->stat_counter[STATB_ITEC_PEAK] = mgr->stat_counter[STATB_ITEC_CURR];
 }
 
 /* Recursive calls for ITE */
@@ -490,7 +496,7 @@ static void ref_ite_recurse(ref_mgr mgr,
 		     ref_t *newhip, ref_t *newlop) {
     *newhip = ref_ite(mgr, irefhi, trefhi, erefhi);
     *newlop = ref_ite(mgr, ireflo, treflo, ereflo);
-    mgr->stat_counter[STAT_ITE_NEW_CNT]++;
+    mgr->stat_counter[STATB_ITE_NEW_CNT]++;
 }
 
 /* ITE operation */
@@ -889,23 +895,41 @@ void ref_collect(ref_mgr mgr, set_ptr roots) {
     mgr->unique_table = new_uniq;
     clear_ite_table(mgr);
     set_free(rset);
-    mgr->stat_counter[STAT_UNIQ_CURR] = end_cnt;
+    mgr->stat_counter[STATB_UNIQ_CURR] = end_cnt;
     report(1, "Garbage Collection: %lu --> %lu function refs", start_cnt, end_cnt);
 }
 
 
 void ref_show_stat(ref_mgr mgr) {
+    /* Gather statistics information */
+    size_t i;
+    mgr->stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    for (i = STATA_BYTE_PEAK+1; i < NSTATA; i++)
+	mgr->stat_counter[i] = agent_stat_counter[i];
+    report(0, "Peak bytes %" PRIu64,
+	   mgr->stat_counter[STATA_BYTE_PEAK]);
+    report(0, "Operations.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
+	   mgr->stat_counter[STATA_OPERATION_TOTAL],
+	   mgr->stat_counter[STATA_OPERATION_LOCAL]);
+    report(0, "Operands.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
+	   mgr->stat_counter[STATA_OPERAND_TOTAL],
+	   mgr->stat_counter[STATA_OPERAND_LOCAL]);
     report(0, "Unique table.  Total generated %" PRIu64 ".  Current %" PRIu64 ".  Peak %" PRIu64 ".  Collisions %" PRIu64,
-	   mgr->stat_counter[STAT_UNIQ_TOTAL],
-	   mgr->stat_counter[STAT_UNIQ_CURR],
-	   mgr->stat_counter[STAT_UNIQ_PEAK],
-	   mgr->stat_counter[STAT_UNIQ_COLLIDE]);
+	   mgr->stat_counter[STATB_UNIQ_TOTAL],
+	   mgr->stat_counter[STATB_UNIQ_CURR],
+	   mgr->stat_counter[STATB_UNIQ_PEAK],
+	   mgr->stat_counter[STATB_UNIQ_COLLIDE]);
 
-    report(0, "ITEs: Total %" PRIu64 ".  Done Locally %" PRIu64 ".  Lookup hits %" PRIu64 ".  New %" PRIu64,
-	   mgr->stat_counter[STAT_ITE_CNT],
-	   mgr->stat_counter[STAT_ITE_LOCAL_CNT],
-	   mgr->stat_counter[STAT_ITE_HIT_CNT],
-	   mgr->stat_counter[STAT_ITE_NEW_CNT]);
+    report(0, "ITEs. Total %" PRIu64 ".  Done Locally %" PRIu64 ".  Lookup hits %" PRIu64 ".  New %" PRIu64,
+	   mgr->stat_counter[STATB_ITE_CNT],
+	   mgr->stat_counter[STATB_ITE_LOCAL_CNT],
+	   mgr->stat_counter[STATB_ITE_HIT_CNT],
+	   mgr->stat_counter[STATB_ITE_NEW_CNT]);
+    report(0, "ITE cache.  Total generated %" PRIu64 ".  Current %" PRIu64 ".  Peak %" PRIu64 ".  Collisions %" PRIu64,
+	   mgr->stat_counter[STATB_ITEC_TOTAL],
+	   mgr->stat_counter[STATB_ITEC_CURR],
+	   mgr->stat_counter[STATB_ITEC_PEAK]);
+
 }
 
 /*********** Distributed implementations ***************/
@@ -972,7 +996,12 @@ void free_dref_mgr() {
 
 chunk_ptr flush_dref_mgr() {
     report(3, "Flushing state");
-    chunk_ptr msg = msg_new_stat(NSTAT, dmgr->rmgr->stat_counter);
+    /* Gather statistics information */
+    size_t i;
+    dmgr->rmgr->stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    for (i = STATA_BYTE_PEAK+1; i < NSTATA; i++)
+	dmgr->rmgr->stat_counter[i] = agent_stat_counter[i];
+    chunk_ptr msg = msg_new_stat(1, NSTAT, dmgr->rmgr->stat_counter);
     free_dref_mgr();
     mem_status(stdout);
     init_dref_mgr();
@@ -989,7 +1018,7 @@ chunk_ptr build_var(word_t dest) {
 }
 
 chunk_ptr build_canonize(word_t dest, ref_t vref) {
-    word_t worker = choose_own_worker();
+    word_t worker = choose_some_worker();
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_CANONIZE, worker, id, 4 + OP_HEADER_CNT);
     chunk_insert_word(op, dest,            0+OP_HEADER_CNT);
@@ -1040,7 +1069,7 @@ chunk_ptr build_ite_lookup(word_t dest, ref_t iref, ref_t tref, ref_t eref, bool
 }
 
 chunk_ptr build_ite_recurse(word_t dest, ref_t vref) {
-    word_t worker = choose_own_worker();
+    word_t worker = choose_some_worker();
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_ITE_RECURSE, worker, id, 8 + OP_HEADER_CNT);
     chunk_insert_word(op, dest,          0+OP_HEADER_CNT);
@@ -1269,7 +1298,7 @@ bool do_ite_lookup_op(chunk_ptr op) {
 
 bool do_ite_recurse_op(chunk_ptr op) {
     ref_mgr mgr = dmgr->rmgr;
-    mgr->stat_counter[STAT_ITE_NEW_CNT]++;
+    mgr->stat_counter[STATB_ITE_NEW_CNT]++;
     word_t dest =          chunk_get_word(op, 0+OP_HEADER_CNT);
     ref_t vref =   (ref_t) chunk_get_word(op, 1+OP_HEADER_CNT);
     ref_t irefhi = (ref_t) chunk_get_word(op, 2+OP_HEADER_CNT);
@@ -1402,5 +1431,47 @@ ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 	return r;
     } else {
 	return rlocal;
+    }
+}
+
+/* Summary statistics */
+
+/* Information for processing statistics information */
+static char *stat_items[NSTAT] = {
+    /* These come from stat_counter in agent */
+    "Peak bytes allocated  ",
+    "Total operations sent ",
+    "Total local operations",
+    "Total operands   sent ",
+    "Total local operands  ",
+    /* These come from BDD package */
+    "Current unique entries",
+    "Peak unique entries   ",
+    "Total unique entires  ",
+    "Unique hash collisions",
+    "Total number of ITEs  ",
+    "ITEs handled locally  ",
+    "ITEs found in table   ",
+    "ITES causing recursion",
+    "Current ITEc entries  ",
+    "Peak ITEc entries     ",
+    "Total ITEc entries    ",
+};
+
+/* For processing summary statistics information */
+void do_summary_stat(chunk_ptr smsg) {
+    size_t i;
+    word_t h = chunk_get_word(smsg, 0);
+    int nworker = msg_get_header_workercount(h);
+    if (nworker <= 0) {
+	err(false, "Invalid number of workers: %d", nworker);
+	nworker = 1;
+    }
+    for (i = 0; i < NSTAT; i++) {
+	word_t minval = chunk_get_word(smsg, 1 + i*3 + 0);
+	word_t maxval = chunk_get_word(smsg, 1 + i*3 + 1);
+	word_t sumval = chunk_get_word(smsg, 1 + i*3 + 2);
+	report(1, "%s: Min: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
+	       stat_items[i], minval, maxval, (double) sumval/nworker, sumval);
     }
 }

@@ -13,13 +13,14 @@
 #include "table.h"
 #include "chunk.h"
 #include "report.h"
-#include "bdd.h"
 
+#include "msg.h"
+#include "console.h"
+#include "agent.h"
+#include "bdd.h"
 #include "cudd.h"
 #include "shadow.h"
-#include "console.h"
-#include "msg.h"
-#include "agent.h"
+
 
 /* Global parameters */
 /* Should I perform garbage collection? */
@@ -46,7 +47,7 @@ bool do_collect(int argc, char *argv[]);
 bool do_delete(int argc, char *argv[]);
 bool do_density(int argc, char *argv[]);
 bool do_equal(int argc, char *argv[]);
-bool do_flush(int argc, char *argv[]);
+bool do_local_flush(int argc, char *argv[]);
 bool do_information(int argc, char *argv[]);
 bool do_ite(int argc, char *argv[]);
 bool do_nothing(int argc, char *argv[]);
@@ -73,20 +74,20 @@ static void bdd_init() {
 }
 
 static void console_init(bool do_dist) {
-    add_cmd("and", do_and,                 "and  fd f1 f2 ... | fd <- f1 & f2 & ...");
-    add_cmd("collect", do_collect,         "collect           | Perform garbage collection");
-    add_cmd("delete", do_delete,           "delete f1 f2 ...  | Delete functions");
-    add_cmd("density", do_density,         "density f1 f2 ... | Display function densities");
-    add_cmd("equal", do_equal,             "equal f1 f2       | Test for equality");
+    add_cmd("and", do_and,                 " fd f1 f2 ... | fd <- f1 & f2 & ...");
+    add_cmd("collect", do_collect,         "              | Perform garbage collection");
+    add_cmd("delete", do_delete,           " f1 f2 ...    | Delete functions");
+    add_cmd("density", do_density,         " f1 f2 ...    | Display function densities");
+    add_cmd("equal", do_equal,             " f1 f2        | Test for equality");
     if (!do_dist)
-	add_cmd("flush", do_flush,             "flush             | Reset");
-    add_cmd("ite", do_ite,                 "ite  fd fi ft fe  | fd <- ITE(fi, ft, fe)");
-    add_cmd("or", do_or,                   "or   fd f1 f2 ... | fd <- f1 | f2 | ...");
-    add_cmd("information", do_information, "information f1 .. | Display combined information about functions");
-    add_cmd("size", do_nothing,            "size              | Show number of nodes for each variable"); 
-    add_cmd("status", do_status,      "print statistics");
-    add_cmd("var", do_var,            "var   v1 v2 ...   | Create variables");
-    add_cmd("xor", do_xor,            "xor  fd f1 f2 ... | fd <- f1 ^ f2 ^ ...");
+	add_cmd("flush", do_local_flush,   "              | Flush local state");
+    add_cmd("ite", do_ite,                 " fd fi ft fe  | fd <- ITE(fi, ft, fe)");
+    add_cmd("or", do_or,                   " fd f1 f2 ... | fd <- f1 | f2 | ...");
+    add_cmd("info", do_information,        " f1 ..        | Display combined information about functions");
+    add_cmd("size", do_nothing,            "              | Show number of nodes for each variable"); 
+    add_cmd("status", do_status,           "              | Print statistics");
+    add_cmd("var", do_var,                 " v1 v2 ...    | Create variables");
+    add_cmd("xor", do_xor,                 " fd f1 f2 ... | fd <- f1 ^ f2 ^ ...");
     add_param("collect", &enable_collect, "Enable garbage collection");
 }
 
@@ -173,6 +174,7 @@ int main(int argc, char *argv[]) {
     if (do_dist) {
 	init_agent(true, hbuf, port);
 	set_agent_flush_helper(run_flush);
+	set_agent_stat_helper(do_summary_stat);
     }
     console_init(do_dist);
     set_verblevel(level);
@@ -449,7 +451,7 @@ bool do_equal(int argc, char *argv[]) {
     return true;
 }
 
-bool do_flush(int argc, char *argv[]) {
+bool do_local_flush(int argc, char *argv[]) {
     report(1, "Flushing state");
     bdd_quit(0, NULL);
     mem_status(stdout);
@@ -459,7 +461,7 @@ bool do_flush(int argc, char *argv[]) {
 
 /* Version for remote flushes */
 chunk_ptr run_flush() {
-    do_flush(0, NULL);
+    do_local_flush(0, NULL);
     return NULL;
 }
 

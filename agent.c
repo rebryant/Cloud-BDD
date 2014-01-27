@@ -64,9 +64,16 @@ static unsigned snb = 16;
 /* Function to call when flush message received */
 static flush_function flush_helper = NULL;
 
+/* Function to call when stat message received */
+static stat_function stat_helper = NULL;
+
+/* Array of counters for accumulating statistics */
+size_t agent_stat_counter[NSTATA] = {0};
+
 /* Forward reference */
 bool quit_agent(int argc, char *argv[]);
-bool do_kill(int argc, char *argv[]);
+bool do_agent_kill(int argc, char *argv[]);
+bool do_agent_flush(int argc, char *argv[]);
 
 /* Represent set of operations as linked list */
 typedef struct OELE op_ele, *op_ptr;
@@ -85,6 +92,12 @@ void set_agent_flush_helper(flush_function ff) {
     flush_helper = ff;
 }
 
+/* Set function to be called when agent command to flush its state */
+void set_agent_stat_helper(stat_function sf) {
+    stat_helper = sf;
+}
+
+
 /* Add an operation */
 void add_op_handler(unsigned opcode, op_handler h) {
     op_ptr ele = (op_ptr) malloc_or_fail(sizeof(op_ele), "add_op_handler");
@@ -97,6 +110,9 @@ void add_op_handler(unsigned opcode, op_handler h) {
 void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
     operator_table = word_keyvalue_new();
     deferred_operand_table = word_keyvalue_new();
+    size_t i;
+    for (i = 0; i < NSTATA; i++)
+	agent_stat_counter[i] = 0;
 
     chunk_ptr msg;
     bool eof;
@@ -169,7 +185,8 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
     report(2, "All %d routers connected", nrouters);
     if (isclient) {
 	add_quit_helper(quit_agent);
-	add_cmd("kill", do_kill,             "kill              | Shutdown system");
+	add_cmd("kill", do_agent_kill,     "kill         | Shutdown system");
+	add_cmd("flush", do_agent_flush,   "flush        | Flush system");
     } else {
 	/* Worker must notify controller that it's ready */
 	chunk_ptr rmsg = msg_new_worker_ready(own_agent);
@@ -213,12 +230,23 @@ bool quit_agent(int argc, char *argv[]) {
     return true;
 }
 
-bool do_kill(int argc, char *argv[]) {
+bool do_agent_kill(int argc, char *argv[]) {
     chunk_ptr msg = msg_new_kill();
     if (chunk_write(controller_fd, msg)) {
 	report(3, "Notified controller that want to kill system");
     } else {
 	err(false, "Couldn't notify controller that want to kill system");
+    }
+    chunk_free(msg);
+    return true;
+}
+
+bool do_agent_flush(int argc, char *argv[]) {
+    chunk_ptr msg = msg_new_flush();
+    if (chunk_write(controller_fd, msg)) {
+	report(3, "Notified controller that want to flush system");
+    } else {
+	err(false, "Couldn't notify controller that want to flush system");
     }
     chunk_free(msg);
     return true;
@@ -237,8 +265,13 @@ unsigned choose_hashed_worker(word_t hash) {
 }
 
 /* Get agent ID for random worker */
-unsigned choose_random_worker() {
-    return choose_hashed_worker(random());
+unsigned choose_some_worker() {
+    return
+#if 0
+	choose_hashed_worker(random());
+#else
+	choose_own_worker(random());
+#endif
 }
 
 /* Get agent ID for local worker */
@@ -267,15 +300,24 @@ bool send_op(chunk_ptr msg) {
     unsigned agent = msg_get_header_agent(h);
     unsigned code = msg_get_header_code(h);
     unsigned id = msg_get_header_op_id(h);
-    if (self_route && agent == own_agent && code == MSG_OPERATION) {
-	report(6, "Routing operator with id 0x%x to self", id);
-	receive_operation(chunk_clone(msg));
-	return true;
+
+    if (code == MSG_OPERATION) {
+	agent_stat_counter[STATA_OPERATION_TOTAL]++;
+	if (self_route && agent == own_agent) {
+	    agent_stat_counter[STATA_OPERATION_LOCAL]++;
+	    report(6, "Routing operator with id 0x%x to self", id);
+	    receive_operation(chunk_clone(msg));
+	    return true;
+	}
     }
-    if (self_route && agent == own_agent && code == MSG_OPERAND && !isclient) {
-	report(6, "Routing operand with id 0x%x to self", id);
-	receive_operand(chunk_clone(msg));
-	return true;
+    if (code == MSG_OPERAND) {
+	agent_stat_counter[STATA_OPERAND_TOTAL]++;
+	if (self_route && agent == own_agent && !isclient) {
+	    agent_stat_counter[STATA_OPERAND_LOCAL]++;
+	    report(6, "Routing operand with id 0x%x to self", id);
+	    receive_operand(chunk_clone(msg));
+	    return true;
+	}
     }
     unsigned idx = random() % nrouters;
     int rfd = router_fd_array[idx];
@@ -619,14 +661,22 @@ void run_client(char *infile_name) {
 		switch(code) {
 		case MSG_DO_FLUSH:
 		    chunk_free(msg);
-		    report(1, "Received flush message from controller");
+		    report(5, "Received flush message from controller");
 		    if (flush_helper) {
-			flush_helper(0, NULL);
+			flush_helper();
 		    }
+		    break;
+		case MSG_STAT:
+		    report(5, "Received summary statistics from controller");
+		    if (stat_helper) {
+			/* Get a copy of the byte usage from memory allocator */
+			stat_helper(msg);
+		    }
+		    chunk_free(msg);
 		    break;
 		case MSG_KILL:
 		    chunk_free(msg);
-		    report(1, "Received kill message from controller");
+		    report(5, "Received kill message from controller");
 		    finish_cmd();
 		    break;
 		default:

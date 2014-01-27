@@ -78,7 +78,8 @@ static size_t allocate_cnt = 0;
 static size_t allocate_bytes = 0;
 static size_t free_cnt = 0;
 static size_t free_bytes = 0;
-static size_t peak_bytes = 0;
+/* This one is externally visible */
+size_t peak_bytes = 0;
 static size_t current_bytes = 0;
 
 

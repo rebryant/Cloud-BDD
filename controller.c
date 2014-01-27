@@ -61,13 +61,14 @@ static set_ptr client_fd_set = NULL;
 /* Collect statistics from workers as a set of messages */
 static int stat_message_cnt = 0;
 static chunk_ptr *stat_messages = NULL;
-
+/* File descriptor of client that requested flush */
+static int flush_requestor_fd = -1;
 
 /* Forward declarations */
 bool quit_controller(int argc, char *argv[]);
-bool do_flush_cmd(int argc, char *argv[]);
+bool do_controller_flush_cmd(int argc, char *argv[]);
 
-bool do_status_cmd(int argc, char *argv[]) {
+bool do_controller_status_cmd(int argc, char *argv[]) {
     report(0, "Connections: %u routers, %u workers, %u clients",
 	   router_fd_set->nelements, worker_fd_set->nelements, client_fd_set->nelements);
     report(0, "%d/%u worker stat messages received", stat_message_cnt, worker_fd_set->nelements);
@@ -93,8 +94,8 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     worker_fd_set = word_set_new();
     client_fd_set = word_set_new();
     init_cmd();
-    add_cmd("status", do_status_cmd,        "status          | Determine status of connected nodes");
-    add_cmd("flush", do_flush_cmd,          "flush           | Flush state of all agents");
+    add_cmd("status", do_controller_status_cmd,       "              | Determine status of connected nodes");
+    add_cmd("flush", do_controller_flush_cmd,         "              | Flush state of all agents");
     add_quit_helper(quit_controller);
     need_routers = nrouters;
     need_workers = nworkers;
@@ -102,11 +103,12 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     worker_cnt = nworkers;
     maxclients = mc;
     stat_message_cnt = 0;
+    flush_requestor_fd = -1;
     stat_messages = calloc_or_fail(worker_cnt, sizeof(chunk_ptr), "init_controller");
 
 }
     
-bool do_flush_cmd(int argc, char *argv[]) {
+bool do_controller_flush_cmd(int argc, char *argv[]) {
     chunk_ptr msg = msg_new_flush();
     word_t w;
     int fd;
@@ -128,10 +130,6 @@ bool do_flush_cmd(int argc, char *argv[]) {
 	}
     }
     chunk_free(msg);
-    while (stat_message_cnt > 0) {
-	chunk_free(stat_messages[--stat_message_cnt]);
-	stat_messages[stat_message_cnt] = NULL;
-    }
     return ok;
 }
 
@@ -246,34 +244,53 @@ static void add_agent(int fd, bool isclient) {
 
 /* Accumulate worker messages with statistics */
 static void add_stat_message(chunk_ptr msg) {
+    word_t *stat_summary = NULL;
     stat_messages[stat_message_cnt++] = msg;
     /* See if we've accumulated a full set */
     if (stat_message_cnt >= worker_cnt) {
 	size_t nstat = stat_messages[0]->length - 1;
+	if (flush_requestor_fd >= 0)
+	    stat_summary = calloc_or_fail(nstat * 3, sizeof(word_t), "add_stat_message");
 	/* Accumulate and print */
 	report(1, "Worker statistics:");
 	size_t i, w;
-	for (i = 1; i <= nstat; i++) {
+	for (i = 0; i < nstat; i++) {
 	    chunk_ptr msg = stat_messages[0];
 	    word_t minval, maxval, sumval;
-	    minval = maxval = sumval = chunk_get_word(msg, i);
+	    minval = maxval = sumval = chunk_get_word(msg, i+1);
 	    for (w = 1; w < worker_cnt; w++) {
 		chunk_ptr msg = stat_messages[w];		
-		word_t val = chunk_get_word(msg, i);
+		word_t val = chunk_get_word(msg, i+1);
 		if (val < minval)
 		    minval = val;
 		if (val > maxval)
 		    maxval = val;
 		sumval += val;
 	    }
+	    if (stat_summary) {
+		stat_summary[3*i + 0] = minval;
+		stat_summary[3*i + 1] = maxval;
+		stat_summary[3*i + 2] = sumval;
+	    }
 	    report(1, "Parameter %d\tMin: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
 		   (int) i-1, minval, maxval, (double) sumval/worker_cnt, sumval);
+	}
+	if (flush_requestor_fd >= 0) {
+	    chunk_ptr msg = msg_new_stat(worker_cnt, nstat*3, stat_summary);
+	    if (chunk_write(flush_requestor_fd, msg)) {
+		report(5, "Sent statistical summary to client at fd %d", flush_requestor_fd);
+	    } else {
+		err(false, "Failed to send statistical summary to client at fd %d", flush_requestor_fd);
+	    }
+	    chunk_free(msg);
+	    free_array(stat_summary, nstat*3, sizeof(word_t));
 	}
 	for (w = 0; w < worker_cnt; w++) {
 	    chunk_free(stat_messages[w]);
 	    stat_messages[w] = NULL;
 	}
 	stat_message_cnt = 0;
+	flush_requestor_fd = -1;
     }
 }
 
@@ -431,6 +448,11 @@ static void run_controller(char *infile_name) {
 		    report(2, "Remote request to kill system");
 		    finish_cmd();
 		    return;
+		case MSG_DO_FLUSH:
+		    /* Iniitiate a flush operation */
+		    flush_requestor_fd = fd;
+		    do_controller_flush_cmd(0, NULL);
+		    break;
 		default:
 		    err(false, "Unexpected message code %u from client", code);
 		}

@@ -18,7 +18,7 @@ Data structure for representing data as a sequence of 64-bit words
 /* Some macros */
 #define CHUNK_WORD_VALID(cp, idx) ((((cp)->vmask) >> (idx)) & 0x1)
 
-#define CHUNK_ADD_WORD_VALID(cp, idx) ((cp)->vmask | (0x1 << (idx)))
+#define CHUNK_ADD_WORD_VALID(cp, idx) ((cp)->vmask | (0x1llu << (idx)))
 
 /* Error handling */
 /* Default error function does nothing */

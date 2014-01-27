@@ -43,3 +43,6 @@ void free_string(char *s);
 
 /* Report current allocation status */
 void mem_status(FILE *fp);
+
+/* Counter giving peak memory usage */
+size_t peak_bytes;

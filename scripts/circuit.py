@@ -203,7 +203,7 @@ class Circuit:
         self.cmdLine("delete", obj)
 
     def information(self, obj):
-        self.cmdLine("information", obj)
+        self.cmdLine("info", obj)
 
     def collect(self):
         self.write("collect")

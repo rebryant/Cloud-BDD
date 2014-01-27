@@ -67,11 +67,13 @@ typedef word_t ref_t;
 /* Remove negation from ref */
 #define REF_ABSVAL(ref) ((ref)&~((word_t)1<<REF_FIELD_NEG))
 
-/* Build in an array of counters to keep track of statistics */
-typedef enum {STAT_UNIQ_CURR, STAT_UNIQ_PEAK, STAT_UNIQ_TOTAL, STAT_UNIQ_COLLIDE,
-	      STAT_ITE_CNT, STAT_ITE_LOCAL_CNT, STAT_ITE_HIT_CNT, STAT_ITE_NEW_CNT} stat_t;
-
-#define NSTAT 8
+/* Maintain an array of counters to keep track of statistics */
+/* These stats combine STATA's from agent with STATB's from here */
+typedef enum {STATB_UNIQ_CURR = STATA_END, STATB_UNIQ_PEAK, STATB_UNIQ_TOTAL, STATB_UNIQ_COLLIDE,
+	      STATB_ITE_CNT, STATB_ITE_LOCAL_CNT, STATB_ITE_HIT_CNT, STATB_ITE_NEW_CNT,
+	      STATB_ITEC_CURR, STATB_ITEC_PEAK, STATB_ITEC_TOTAL} statb_t;
+#define NSTATB 11
+#define NSTAT (NSTATA+NSTATB)
 
 typedef struct {
     int variable_cnt;
@@ -156,7 +158,7 @@ Supported Operations
 
    Canonize(dest, vref, *hiref, *loref):
       Find or create ref for node.
-      Performed by local worker.
+      Performed by arbitrary worker.
       Typically must then call CanonizeLookup
 
    CanonizeLookup(dest, hash, vref, hiref, loref, negate):
@@ -175,7 +177,7 @@ Supported Operations
       
    ITERecurse(dest, vref, *irefhi, *ireflo, *trefhi, *treflo, *erefhi, *ereflo):
       Recursive portion of ITE based on cofactors of arguments
-      Performed locally
+      Performed by arbitrary worker
       
    ITEStore(dest, iref, tref, eref, *ref, negate):
       Store result of ITE operation in operation cache
@@ -220,4 +222,5 @@ bool do_ite_store_op(chunk_ptr op);
 ref_t dist_var(ref_mgr mgr);
 ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref);
 
-
+/* For processing summary statistics information */
+void do_summary_stat(chunk_ptr smsg);

@@ -1,5 +1,13 @@
 /* Implementation of client or worker in dataflow system */
 
+/* Counters tracked by agent */
+typedef enum {STATA_BYTE_PEAK, STATA_OPERATION_TOTAL, STATA_OPERATION_LOCAL, STATA_OPERAND_TOTAL, STATA_OPERAND_LOCAL, STATA_END}
+    stata_t;
+
+#define NSTATA 5
+/* Array of counters for accumulating statistics */
+size_t agent_stat_counter[NSTATA];
+
 /* What's my agent ID? */
 unsigned own_agent;
 
@@ -17,11 +25,12 @@ unsigned new_operator_id();
 /* Get agent ID for worker based on some hashed value */
 unsigned choose_hashed_worker(word_t hash);
 
-/* Get agent ID for random worker */
-unsigned choose_random_worker();
+/* Get agent ID for arbitary worker */
+unsigned choose_some_worker();
 
 /* Get agent ID for local worker */
 unsigned choose_own_worker();
+
 
 /*
   Send chunk containing either operator or operand.
@@ -45,6 +54,15 @@ typedef chunk_ptr (*flush_function)();
 
 /* Provide handler to support flush operation. */
 void set_agent_flush_helper(flush_function ff);
+
+/*
+  Function to receive summary statistics message.
+  For each value, have min, max, and sum in sequence.
+*/
+typedef void (*stat_function)(chunk_ptr smsg);
+
+/* Provide handler to support flush operation. */
+void set_agent_stat_helper(stat_function ff);
 
 /* Fire an operation and wait for returned operand */
 chunk_ptr fire_and_wait(chunk_ptr msg);

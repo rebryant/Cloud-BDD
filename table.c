@@ -562,7 +562,7 @@ size_t wordarray_hash(word_t *a, size_t cnt, word_t submask)
 	    val ^= (size_t) a[i];
 	submask >>= 1;
     }
-    return val * 997;    
+    return (val * 997) % 2147483629ULL;    
 }
 
 
