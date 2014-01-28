@@ -28,14 +28,17 @@
 bool do_incr_cmd(int argc, char *argv[]);
 bool do_fork_cmd(int argc, char *argv[]);
 bool do_join_cmd(int argc, char *argv[]);
+bool do_status_cmd(int argc, char *argv[]);
 
 
 static void init(char *controller_name, unsigned controller_port) {
     init_cmd();
     init_agent(true, controller_name, controller_port);
-    add_cmd("incr", do_incr_cmd,               " val cnt       | Increment val cnt times");
-    add_cmd("fork", do_fork_cmd,               " width val cnt | Perform width incrs and join results");
-    add_cmd("join", do_join_cmd,               " v1 v2         | Compute v1+v2");
+    set_agent_stat_helper(do_summary_stat);
+    add_cmd("incr", do_incr_cmd,               " val cnt      | Increment val cnt times");
+    add_cmd("fork", do_fork_cmd,               " wdth val cnt | Perform width incrs and join results");
+    add_cmd("join", do_join_cmd,               " v1 v2        | Compute v1+v2");
+    add_cmd("status", do_status_cmd,               "              | Print statistics");
 }
 
 static void usage(char *cmd) {
@@ -178,4 +181,9 @@ int main(int argc, char *argv[]) {
     finish_cmd();
     mem_status(stdout);
     return 0;
+}
+
+bool do_status_cmd(int argc, char *argv[]) {
+    agent_show_stat();
+    return true;
 }

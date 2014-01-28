@@ -207,7 +207,7 @@ chunk_ptr msg_new_kill() {
   Create a message containing worker statistics.
   Specify number of values and provide pointer to array of them.
  */
-chunk_ptr msg_new_stat(int nworker, int nstat, word_t *vals) {
+chunk_ptr msg_new_stat(int nworker, int nstat, size_t *vals) {
     chunk_ptr msg = chunk_new(nstat+1);
     word_t h = ((nworker & MASK16) << 16) | MSG_STAT;
     chunk_insert_word(msg, h, 0);

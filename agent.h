@@ -1,10 +1,10 @@
 /* Implementation of client or worker in dataflow system */
 
 /* Counters tracked by agent */
-typedef enum {STATA_BYTE_PEAK, STATA_OPERATION_TOTAL, STATA_OPERATION_LOCAL, STATA_OPERAND_TOTAL, STATA_OPERAND_LOCAL, STATA_END}
-    stata_t;
+enum {STATA_BYTE_PEAK, STATA_OPERATION_TOTAL,
+      STATA_OPERATION_LOCAL, STATA_OPERAND_TOTAL,
+      STATA_OPERAND_LOCAL, NSTATA};
 
-#define NSTATA 5
 /* Array of counters for accumulating statistics */
 size_t agent_stat_counter[NSTATA];
 
@@ -19,14 +19,20 @@ typedef bool (*op_handler)(chunk_ptr args);
 /* Add handler for operation */
 void add_op_handler(unsigned opcode, op_handler h);
 
+/* Print statistics about agent */
+void agent_show_stat();
+
 /* Create a new operator id */
 unsigned new_operator_id();
 
 /* Get agent ID for worker based on some hashed value */
 unsigned choose_hashed_worker(word_t hash);
 
-/* Get agent ID for arbitary worker */
+/* Get agent ID for arbitary worker (Policy determines how chosen) */
 unsigned choose_some_worker();
+
+/* Get agent ID for random worker */
+unsigned choose_random_worker();
 
 /* Get agent ID for local worker */
 unsigned choose_own_worker();

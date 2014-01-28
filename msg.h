@@ -119,7 +119,7 @@ chunk_ptr msg_new_flush();
   Create a message containing worker statistics.
   Specify number of workers, number of values and provide pointer to array of values.
  */
-chunk_ptr msg_new_stat(int nworker, int nstat, word_t *vals);
+chunk_ptr msg_new_stat(int nworker, int nstat, size_t *vals);
 
 /** Useful functions **/
 

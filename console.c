@@ -106,12 +106,12 @@ void init_cmd() {
     param_list = NULL;
     err_cnt = 0;
     quit_flag = false;
-    add_cmd("help", do_help_cmd,       "                  | Show documentation");
-    add_cmd("option", do_option_cmd,       " (name:val)*  | Display & set options");
-    add_cmd("quit", do_quit_cmd,       "                  | Exit program");
-    add_cmd("source", do_source_cmd,   " file             | Read commands from source file");
-    add_cmd("time", do_time_cmd,       " cmd arg ...      | Time command execution");
-    add_cmd("#", do_comment_cmd,       " ...              | Display comment");
+    add_cmd("help", do_help_cmd,       "              | Show documentation");
+    add_cmd("option", do_option_cmd,   "     name val | Display & set options");
+    add_cmd("quit", do_quit_cmd,       "              | Exit program");
+    add_cmd("source", do_source_cmd,   " file         | Read commands from source file");
+    add_cmd("time", do_time_cmd,       " cmd arg ...  | Time command execution");
+    add_cmd("#", do_comment_cmd,       " ...          | Display comment");
     add_param("verbose", &verblevel, "Verbosity level");
     add_param("error", &err_limit,   "Number of errors until exit");
     add_param("echo", &echo, "Do/don't echo commands");
@@ -287,7 +287,7 @@ bool do_help_cmd(int argc, char *argv[]) {
     param_ptr plist = param_list;
     report(0, "Options:");
     while (plist) {
-	report(0, "\t%s\t%s", plist->name, plist->documentation);
+	report(0, "\t%s\t%d\t%s", plist->name, *plist->valp, plist->documentation);
 	plist = plist->next;
     }
     return true;

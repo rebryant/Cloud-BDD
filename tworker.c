@@ -26,6 +26,7 @@
 
 static void init(char *controller_name, unsigned controller_port) {
     init_agent(false, controller_name, controller_port);
+    set_agent_flush_helper(flush_worker);
     add_op_handler(OP_IFORK, do_ifork_op);
     add_op_handler(OP_INCR, do_incr_op);
     add_op_handler(OP_JOIN, do_join_op);

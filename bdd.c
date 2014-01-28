@@ -903,8 +903,8 @@ void ref_collect(ref_mgr mgr, set_ptr roots) {
 void ref_show_stat(ref_mgr mgr) {
     /* Gather statistics information */
     size_t i;
-    mgr->stat_counter[STATA_BYTE_PEAK] = peak_bytes;
-    for (i = STATA_BYTE_PEAK+1; i < NSTATA; i++)
+    agent_stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    for (i = 0; i < NSTATA; i++)
 	mgr->stat_counter[i] = agent_stat_counter[i];
     report(0, "Peak bytes %" PRIu64,
 	   mgr->stat_counter[STATA_BYTE_PEAK]);
@@ -919,17 +919,15 @@ void ref_show_stat(ref_mgr mgr) {
 	   mgr->stat_counter[STATB_UNIQ_CURR],
 	   mgr->stat_counter[STATB_UNIQ_PEAK],
 	   mgr->stat_counter[STATB_UNIQ_COLLIDE]);
-
-    report(0, "ITEs. Total %" PRIu64 ".  Done Locally %" PRIu64 ".  Lookup hits %" PRIu64 ".  New %" PRIu64,
+    report(0, "ITEs. Total %" PRIu64 ".  Done Locally %" PRIu64 ".  Hit cache %" PRIu64 ".  Cause recursion %" PRIu64,
 	   mgr->stat_counter[STATB_ITE_CNT],
 	   mgr->stat_counter[STATB_ITE_LOCAL_CNT],
 	   mgr->stat_counter[STATB_ITE_HIT_CNT],
 	   mgr->stat_counter[STATB_ITE_NEW_CNT]);
-    report(0, "ITE cache.  Total generated %" PRIu64 ".  Current %" PRIu64 ".  Peak %" PRIu64 ".  Collisions %" PRIu64,
+    report(0, "ITE cache.  Total generated %" PRIu64 ".  Current %" PRIu64 ".  Peak %" PRIu64,
 	   mgr->stat_counter[STATB_ITEC_TOTAL],
 	   mgr->stat_counter[STATB_ITEC_CURR],
 	   mgr->stat_counter[STATB_ITEC_PEAK]);
-
 }
 
 /*********** Distributed implementations ***************/
@@ -998,8 +996,8 @@ chunk_ptr flush_dref_mgr() {
     report(3, "Flushing state");
     /* Gather statistics information */
     size_t i;
-    dmgr->rmgr->stat_counter[STATA_BYTE_PEAK] = peak_bytes;
-    for (i = STATA_BYTE_PEAK+1; i < NSTATA; i++)
+    agent_stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    for (i = 0; i < NSTATA; i++)
 	dmgr->rmgr->stat_counter[i] = agent_stat_counter[i];
     chunk_ptr msg = msg_new_stat(1, NSTAT, dmgr->rmgr->stat_counter);
     free_dref_mgr();

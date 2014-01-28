@@ -49,6 +49,14 @@
 
 ********************************************************/
 
+chunk_ptr flush_worker() {
+    report(3, "Flushing state");
+    /* Gather statistics information */
+    agent_stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    chunk_ptr msg = msg_new_stat(1, NSTATA, agent_stat_counter);
+    return msg;
+}
+
 chunk_ptr build_ifork(word_t dest, word_t width, word_t val, word_t cnt) {
     word_t worker = choose_random_worker();
     word_t id = new_operator_id();
@@ -179,5 +187,35 @@ bool do_join_op(chunk_ptr op) {
 	err(false, "Couldn't send result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u", val, agent, operator_id, offset);
     chunk_free(result);
     return ok;
+}
+
+/* Summary statistics */
+
+/* Information for processing statistics information */
+static char *stat_items[NSTAT] = {
+    /* These come from stat_counter in agent */
+    "Peak bytes allocated  ",
+    "Total operations sent ",
+    "Total local operations",
+    "Total operands   sent ",
+    "Total local operands  ",
+};
+
+/* For processing summary statistics information */
+void do_summary_stat(chunk_ptr smsg) {
+    size_t i;
+    word_t h = chunk_get_word(smsg, 0);
+    int nworker = msg_get_header_workercount(h);
+    if (nworker <= 0) {
+	err(false, "Invalid number of workers: %d", nworker);
+	nworker = 1;
+    }
+    for (i = 0; i < NSTAT; i++) {
+	word_t minval = chunk_get_word(smsg, 1 + i*3 + 0);
+	word_t maxval = chunk_get_word(smsg, 1 + i*3 + 1);
+	word_t sumval = chunk_get_word(smsg, 1 + i*3 + 2);
+	report(1, "%s: Min: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
+	       stat_items[i], minval, maxval, (double) sumval/nworker, sumval);
+    }
 }
 

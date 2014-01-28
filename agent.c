@@ -185,8 +185,8 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
     report(2, "All %d routers connected", nrouters);
     if (isclient) {
 	add_quit_helper(quit_agent);
-	add_cmd("kill", do_agent_kill,     "kill         | Shutdown system");
-	add_cmd("flush", do_agent_flush,   "flush        | Flush system");
+	add_cmd("kill", do_agent_kill,     "              | Shutdown system");
+	add_cmd("flush", do_agent_flush,   "              | Flush system");
     } else {
 	/* Worker must notify controller that it's ready */
 	chunk_ptr rmsg = msg_new_worker_ready(own_agent);
@@ -230,6 +230,19 @@ bool quit_agent(int argc, char *argv[]) {
     return true;
 }
 
+void agent_show_stat() {
+    /* Gather statistics information */
+    agent_stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    report(0, "Peak bytes %" PRIu64,
+	   agent_stat_counter[STATA_BYTE_PEAK]);
+    report(0, "Operations.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
+	   agent_stat_counter[STATA_OPERATION_TOTAL],
+	   agent_stat_counter[STATA_OPERATION_LOCAL]);
+    report(0, "Operands.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
+	   agent_stat_counter[STATA_OPERAND_TOTAL],
+	   agent_stat_counter[STATA_OPERAND_LOCAL]);
+}
+
 bool do_agent_kill(int argc, char *argv[]) {
     chunk_ptr msg = msg_new_kill();
     if (chunk_write(controller_fd, msg)) {
@@ -265,12 +278,19 @@ unsigned choose_hashed_worker(word_t hash) {
 }
 
 /* Get agent ID for random worker */
+unsigned choose_random_worker() {
+    return
+	choose_hashed_worker(random());
+}
+
+
+/* Get agent ID for random worker */
 unsigned choose_some_worker() {
     return
 #if 0
-	choose_hashed_worker(random());
+	choose_random_worker();
 #else
-	choose_own_worker(random());
+	choose_own_worker();
 #endif
 }
 

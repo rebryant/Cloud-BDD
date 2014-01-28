@@ -69,17 +69,15 @@ typedef word_t ref_t;
 
 /* Maintain an array of counters to keep track of statistics */
 /* These stats combine STATA's from agent with STATB's from here */
-typedef enum {STATB_UNIQ_CURR = STATA_END, STATB_UNIQ_PEAK, STATB_UNIQ_TOTAL, STATB_UNIQ_COLLIDE,
-	      STATB_ITE_CNT, STATB_ITE_LOCAL_CNT, STATB_ITE_HIT_CNT, STATB_ITE_NEW_CNT,
-	      STATB_ITEC_CURR, STATB_ITEC_PEAK, STATB_ITEC_TOTAL} statb_t;
-#define NSTATB 11
-#define NSTAT (NSTATA+NSTATB)
+enum {STATB_UNIQ_CURR = NSTATA, STATB_UNIQ_PEAK, STATB_UNIQ_TOTAL, STATB_UNIQ_COLLIDE,
+      STATB_ITE_CNT, STATB_ITE_LOCAL_CNT, STATB_ITE_HIT_CNT, STATB_ITE_NEW_CNT,
+      STATB_ITEC_CURR, STATB_ITEC_PEAK, STATB_ITEC_TOTAL, NSTAT};
 
 typedef struct {
     int variable_cnt;
     keyvalue_table_ptr unique_table;
     keyvalue_table_ptr ite_table;
-    word_t stat_counter[NSTAT];
+    size_t stat_counter[NSTAT];
 } ref_mgr_ele, *ref_mgr;
 
 /* Create a new manager */

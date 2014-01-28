@@ -244,13 +244,13 @@ static void add_agent(int fd, bool isclient) {
 
 /* Accumulate worker messages with statistics */
 static void add_stat_message(chunk_ptr msg) {
-    word_t *stat_summary = NULL;
+    size_t *stat_summary = NULL;
     stat_messages[stat_message_cnt++] = msg;
     /* See if we've accumulated a full set */
     if (stat_message_cnt >= worker_cnt) {
 	size_t nstat = stat_messages[0]->length - 1;
 	if (flush_requestor_fd >= 0)
-	    stat_summary = calloc_or_fail(nstat * 3, sizeof(word_t), "add_stat_message");
+	    stat_summary = calloc_or_fail(nstat * 3, sizeof(size_t), "add_stat_message");
 	/* Accumulate and print */
 	report(1, "Worker statistics:");
 	size_t i, w;
@@ -273,7 +273,7 @@ static void add_stat_message(chunk_ptr msg) {
 		stat_summary[3*i + 2] = sumval;
 	    }
 	    report(1, "Parameter %d\tMin: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
-		   (int) i-1, minval, maxval, (double) sumval/worker_cnt, sumval);
+		   (int) i, minval, maxval, (double) sumval/worker_cnt, sumval);
 	}
 	if (flush_requestor_fd >= 0) {
 	    chunk_ptr msg = msg_new_stat(worker_cnt, nstat*3, stat_summary);
@@ -283,7 +283,7 @@ static void add_stat_message(chunk_ptr msg) {
 		err(false, "Failed to send statistical summary to client at fd %d", flush_requestor_fd);
 	    }
 	    chunk_free(msg);
-	    free_array(stat_summary, nstat*3, sizeof(word_t));
+	    free_array(stat_summary, nstat*3, sizeof(size_t));
 	}
 	for (w = 0; w < worker_cnt; w++) {
 	    chunk_free(stat_messages[w]);
