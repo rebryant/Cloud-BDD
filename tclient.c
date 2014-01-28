@@ -121,8 +121,8 @@ bool do_join_cmd(int argc, char *argv[]) {
     }
     word_t d = msg_build_destination(own_agent, new_operator_id(), 0);
     chunk_ptr msg = build_join(d);
-    chunk_insert_word(msg, (word_t) val1, 2);
-    chunk_insert_word(msg, (word_t) val2, 3);
+    op_insert_word(msg, (word_t) val1, 1+OP_HEADER_CNT);
+    op_insert_word(msg, (word_t) val2, 2+OP_HEADER_CNT);
     chunk_ptr rmsg = fire_and_wait(msg);
     chunk_free(msg);
     if (!rmsg) {

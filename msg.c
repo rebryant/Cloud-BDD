@@ -118,11 +118,19 @@ unsigned msg_get_header_snb(word_t header) {
 /** Message builders **/
 
 /* Create an empty operator */
-/* len specifies total message length */
+/* len specifies total message length, including header */
 chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, unsigned operator_id, unsigned len) {
+    if (len > OP_MAX_LENGTH) {
+	err(true, "Requested operator length %u > max allowable %u",
+	    len, (unsigned) OP_MAX_LENGTH);
+	return false;
+    }
     chunk_ptr result = chunk_new(len);
     word_t h1 = ((word_t) agent << 48) | ((word_t) operator_id) << 16 | (opcode << 8) | MSG_OPERATION;
     chunk_insert_word(result, h1, 0);
+    /* Add valid bits (Initially only header and valid mask) */
+    word_t vmask = 0x3u;
+    chunk_insert_word(result, vmask, 1);
     return result;
 }
 
@@ -147,9 +155,7 @@ unsigned msg_get_dest_offset(word_t dest) {
 }
 
 
-
-/* Create an empty operand */
-/* len specifies number of words in payload */
+/* Create an empty operand.  len specifies total message size, including header */
 chunk_ptr msg_new_operand(word_t dest, unsigned len) {
     chunk_ptr result = chunk_new(len);
     word_t h1 = dest | MSG_OPERAND;

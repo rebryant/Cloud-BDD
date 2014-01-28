@@ -308,8 +308,8 @@ static bool self_route = true;
 
 /* Send single-valued operand */
 bool send_as_operand(word_t dest, word_t val) {
-    chunk_ptr oper = msg_new_operand(dest, 2);
-    chunk_insert_word(oper, val, 1);
+    chunk_ptr oper = msg_new_operand(dest, 1 + OPER_HEADER_CNT);
+    chunk_insert_word(oper, val, 0 + OPER_HEADER_CNT);
     bool ok = send_op(oper);
     chunk_free(oper);
     return ok;
@@ -350,21 +350,43 @@ bool send_op(chunk_ptr msg) {
     return ok;
 }
 
+/* Insert word into operator, updating its valid mask.  Offset includes header size */
+void op_insert_word(chunk_ptr op, word_t wd, size_t offset) {
+    word_t vmask = chunk_get_word(op, 1);
+    chunk_insert_word(op, wd, offset);
+    vmask |= (0x1llu << offset);
+    chunk_replace_word(op, vmask, 1);
+}
+
 /* Insert an operand into an operation */
-void insert_operand(chunk_ptr op, chunk_ptr oper, unsigned offset) {
+void op_insert_operand(chunk_ptr op, chunk_ptr oper, unsigned offset) {
     size_t i;
-    size_t n = oper->length-1;
-    /* Debugging stuff */
-    word_t h = chunk_get_word(op, 0);
-    unsigned opcode = msg_get_header_opcode(h);
-    report(6, "Inserting operand with %u words into operation with opcode %u at offset %u.  Mask 0x%lx",
-	   (unsigned) n, opcode, offset, op->vmask);
+    size_t n = oper->length-OPER_HEADER_CNT;
+    if (verblevel >= 6) {
+	word_t h = chunk_get_word(op, 0);
+	word_t vmask = chunk_get_word(op, 1);
+	unsigned opcode = msg_get_header_opcode(h);
+	report(6, "Inserting operand with %u words into operation with opcode %u at offset %u.  Mask 0x%lx",
+	       (unsigned) n, opcode, offset, vmask);
+    }
     for (i = 0; i < n; i++) {
-	word_t w = chunk_get_word(oper, i+1);
-	chunk_insert_word(op, w, i+offset);
+	word_t w = chunk_get_word(oper, i+OPER_HEADER_CNT);
+	op_insert_word(op, w, i+offset);
     }
 }
 
+/* Check whether all fields an an operator are valid */
+bool op_check_full(chunk_ptr op) {
+    if (op == NULL) {
+	err(false, "op_check_full given null pointer");
+	return false;
+    }
+    word_t len = op->length;
+    word_t vmask = chunk_get_word(op, 1);
+    /* Create checking vmask */
+    word_t cmask = len == OP_MAX_LENGTH ? ~0ULL : (1ULL << len) - 1;
+    return vmask == cmask;
+}
 
 /* For managing select command in main control loop */
 static fd_set cset;
@@ -406,7 +428,7 @@ static void add_deferred_operand(unsigned operator_id, chunk_ptr operand, unsign
 
 /* Check status of operation and fire if enabled */
 static bool check_fire(chunk_ptr op) {
-    if (!chunk_filled(op)) {
+    if (!op_check_full(op)) {
 	return false;
     }
     word_t h = chunk_get_word(op, 0);
@@ -446,7 +468,7 @@ static void receive_operation(chunk_ptr op) {
 	operand_ptr ls = (operand_ptr) w;
 	while (ls) {
 	    operand_ptr ele = ls;
-	    insert_operand(op, ls->operand, ls->offset);
+	    op_insert_operand(op, ls->operand, ls->offset);
 	    report(5, "Inserted operand with offset %u into received operator with id 0x%x", ls->offset, id);
 	    chunk_free(ls->operand);
 	    ls = ls->next;
@@ -471,7 +493,7 @@ static void receive_operand(chunk_ptr oper) {
     if (keyvalue_find(operator_table, (word_t) id, &w)) {
 	/* Operation exists */
 	chunk_ptr op = (chunk_ptr) w;
-	insert_operand(op, oper, offset);
+	op_insert_operand(op, oper, offset);
 	report(5, "Inserted operand with offset %u into existing operator with id 0x%x", offset, id);
 	chunk_free(oper);
 	if (check_fire(op)) {

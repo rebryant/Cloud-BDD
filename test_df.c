@@ -61,10 +61,10 @@ chunk_ptr build_ifork(word_t dest, word_t width, word_t val, word_t cnt) {
     word_t worker = choose_random_worker();
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_IFORK, worker, id, 4 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest,  0+OP_HEADER_CNT);
-    chunk_insert_word(op, width, 1+OP_HEADER_CNT);
-    chunk_insert_word(op, val,   2+OP_HEADER_CNT);
-    chunk_insert_word(op, cnt,   3+OP_HEADER_CNT);
+    op_insert_word(op, dest,  0+OP_HEADER_CNT);
+    op_insert_word(op, width, 1+OP_HEADER_CNT);
+    op_insert_word(op, val,   2+OP_HEADER_CNT);
+    op_insert_word(op, cnt,   3+OP_HEADER_CNT);
     report(5, "Created fork operation.  Worker %u.  Operator Id 0x%x.  Width %u, val %u, cnt %u",
 	   worker, id, width, val, cnt);
     return op;
@@ -74,9 +74,9 @@ chunk_ptr build_incr(word_t dest, word_t val, word_t cnt) {
     word_t worker = choose_random_worker();
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_INCR, worker, id, 3 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest, 0+OP_HEADER_CNT);
-    chunk_insert_word(op, val,  1+OP_HEADER_CNT);
-    chunk_insert_word(op, cnt,  2+OP_HEADER_CNT);
+    op_insert_word(op, dest, 0+OP_HEADER_CNT);
+    op_insert_word(op, val,  1+OP_HEADER_CNT);
+    op_insert_word(op, cnt,  2+OP_HEADER_CNT);
     report(5, "Created incr operation.  Worker %u.  Operator Id 0x%x.  val %u, cnt %u",
 	   worker, id, val, cnt);
     return op;
@@ -86,7 +86,7 @@ chunk_ptr build_join(word_t dest) {
     word_t worker = choose_random_worker();
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_JOIN, worker, id, 3 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest, 0+OP_HEADER_CNT);
+    op_insert_word(op, dest, 0+OP_HEADER_CNT);
     report(5, "Created join operation.  Worker %u.  Operator Id 0x%x", worker, id);
     return op;
 }
@@ -149,8 +149,8 @@ bool do_incr_op(chunk_ptr op) {
     word_t cnt = chunk_get_word(op, 2+OP_HEADER_CNT);
     bool ok = true;
     if (cnt == 0) {
-	chunk_ptr result = msg_new_operand(dest, 2);
-	chunk_insert_word(result, val, 1);
+	chunk_ptr result = msg_new_operand(dest, 1+OPER_HEADER_CNT);
+	chunk_insert_word(result, val, 0+OPER_HEADER_CNT);
 	ok = ok && send_op(result);
 	if (ok)
 	    report(5, "Sent incr result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u", val, agent, operator_id, offset);
@@ -178,8 +178,8 @@ bool do_join_op(chunk_ptr op) {
     word_t val1 = chunk_get_word(op, 1+OP_HEADER_CNT);
     word_t val2 = chunk_get_word(op, 2+OP_HEADER_CNT);
     word_t val = val1+val2;
-    chunk_ptr result = msg_new_operand(dest, 2);
-    chunk_insert_word(result, val, 1);
+    chunk_ptr result = msg_new_operand(dest, 1+OPER_HEADER_CNT);
+    chunk_insert_word(result, val, 0+OPER_HEADER_CNT);
     bool ok = send_op(result);
     if (ok)
 	report(5, "Sent join result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u", val, agent, operator_id, offset);

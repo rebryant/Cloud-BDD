@@ -49,8 +49,17 @@ bool send_op(chunk_ptr msg);
 /* Send single-valued operand */
 bool send_as_operand(word_t dest, word_t val);
 
-/* Insert an operand into an operation */
-void insert_operand(chunk_ptr op, chunk_ptr oper, unsigned offset);
+/* Insert word into operator, updating its valid mask.  Offset includes header size */
+void op_insert_word(chunk_ptr op, word_t wd, size_t offset);
+
+/*
+  Insert an operand into an operation.
+  Updates its valid mask.  Offset includes header size
+ */
+void op_insert_operand(chunk_ptr op, chunk_ptr oper, unsigned offset);
+
+/* Check whether all fields an an operator are valid */
+bool op_check_full(chunk_ptr op);
 
 /*
   Function to flush state and return message with accumulated statistics.

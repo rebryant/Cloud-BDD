@@ -546,21 +546,32 @@ size_t string_hash(word_t sp)
     return val;    
 }
 
+
 /* Hash array of words */
+#ifdef VMASK
 /* If submask nonzero, then it designates which words to hash */
 size_t wordarray_hash(word_t *a, size_t cnt, word_t submask)
+#else
+size_t wordarray_hash(word_t *a, size_t cnt)
+#endif
 {
     size_t i;
     size_t val = 0;
     int shift_left = 3;
     int shift_right = SIZET_BITS - shift_left;
+#ifdef VMASK 
     if (submask == 0)
 	submask = ~(word_t) 0;
+#endif
     for (i = 0; i < cnt; i++) {
 	val = (val << shift_left) | (val >> shift_right);
+#ifdef VMASK
 	if (submask & 0x1)
 	    val ^= (size_t) a[i];
 	submask >>= 1;
+#else
+	val ^= (size_t) a[i];
+#endif
     }
     return (val * 997) % 2147483629ULL;    
 }

@@ -16,9 +16,11 @@ Data structure for representing data as a sequence of 64-bit words
 #include "report.h"
 
 /* Some macros */
+#ifdef VMASK
 #define CHUNK_WORD_VALID(cp, idx) ((((cp)->vmask) >> (idx)) & 0x1)
 
 #define CHUNK_ADD_WORD_VALID(cp, idx) ((cp)->vmask | (0x1llu << (idx)))
+#endif
 
 /* Error handling */
 /* Default error function does nothing */
@@ -64,7 +66,9 @@ chunk_ptr chunk_new(size_t len) {
 	chunk_error("Could not allocate chunk", cp);
     }
     cp->length = len;
+#ifdef VMASK
     cp->vmask = 0;
+#endif
     return cp;
 }
 
@@ -85,7 +89,9 @@ chunk_ptr chunk_clone(chunk_ptr cp) {
     }
     chunk_ptr ncp = chunk_new(cp->length);
     ncp->length = cp->length;
+#ifdef VMASK
     ncp->vmask = cp ->vmask;
+#endif
     size_t i;
     for (i = 0; i < cp->length; i++) {
 	    ncp->words[i] = cp->words[i];
@@ -99,11 +105,16 @@ bool chunk_filled(chunk_ptr cp) {
 	chunk_error("Null Pointer", cp);
 	return false;
     }
+#ifdef VMASK
     word_t mask = cp->vmask;
     word_t len = cp->length;
     /* Create checking mask */
     word_t cmask = len == CHUNK_MAX_LENGTH ? ~0ULL : (1ULL << len) - 1;
     return mask == cmask;
+#else
+    /* Can't determine validity without vmask */
+    return false;
+#endif
 }
 
 /* Insert word into chunk */
@@ -116,14 +127,34 @@ void chunk_insert_word(chunk_ptr cp, word_t wd, size_t offset) {
 	chunk_error("Out of bounds insertion", cp);
 	return;
     }
+#ifdef VMASK
     if (chunk_check_level >= 3 && CHUNK_WORD_VALID(cp, offset)) {
 	char buf[128];
 	sprintf(buf, "Insertion into occupied word.  Offset %u", (unsigned) offset);
 	chunk_error(buf, cp);
 	return;
     }
+#endif
     cp->words[offset] = wd;
+#ifdef VMASK
     cp->vmask = CHUNK_ADD_WORD_VALID(cp, offset);
+#endif
+}
+
+/* Replace word in chunk */
+void chunk_replace_word(chunk_ptr cp, word_t wd, size_t offset) {
+    if (cp == NULL && chunk_check_level >= 2) {
+	chunk_error("Null Pointer", cp);
+	return;
+    }
+    if (chunk_check_level >= 2 && offset >= cp->length) {
+	chunk_error("Out of bounds insertion", cp);
+	return;
+    }
+    cp->words[offset] = wd;
+#ifdef VMASK
+    cp->vmask = CHUNK_ADD_WORD_VALID(cp, offset);
+#endif
 }
 
 /* Get word from chunk */
@@ -134,9 +165,11 @@ word_t chunk_get_word(chunk_ptr cp, size_t offset) {
     if (chunk_check_level >= 2 && offset >= cp->length) {
 	chunk_error("Out of bounds retrieval", cp);
     }
+#ifdef VMASK
     if (chunk_check_level >= 3 && !CHUNK_WORD_VALID(cp, offset)) {
 	chunk_error("Retrieval of invalid word", cp);
     }
+#endif
     return cp->words[offset];
 }
 
@@ -149,8 +182,12 @@ void chunk_insert_chunk(chunk_ptr cdestp, chunk_ptr csrcp, size_t offset) {
     size_t i;
     size_t len = (size_t) csrcp->length;
     for(i = 0; i < len; i++) {
+#ifdef VMASK
 	if (CHUNK_WORD_VALID(csrcp, i))
 	    chunk_insert_word(cdestp, csrcp->words[i], i + offset);
+#else
+	chunk_insert_word(cdestp, csrcp->words[i], i + offset);
+#endif
     }
 }
 
@@ -264,7 +301,11 @@ char * chunk2str(chunk_ptr cp) {
 /* Compute hash signature for chunk */
 size_t chunk_hash(word_t vcp) {
     chunk_ptr cp = (chunk_ptr) vcp;
+#ifdef VMASK
     size_t result = wordarray_hash(cp->words, cp->length, cp->vmask);
+#else
+    size_t result = wordarray_hash(cp->words, cp->length);
+#endif
     return result;
 }
 
@@ -274,28 +315,37 @@ bool chunk_equal(word_t vcp1, word_t vcp2) {
     chunk_ptr cp2 = (chunk_ptr) vcp2;
     if (cp1 == NULL)
 	return (cp2 == NULL);
-    int result = 1;
+    bool ok = true;
+#ifdef VMASK
     word_t vmask1 = cp1->vmask;
     word_t vmask2 = cp2->vmask;
     size_t i;
     /* OK for chunks to have different lengths, as long as mask bits cover same words */
     size_t len = cp1->length < cp2->length ? cp1->length : cp2->length;
-    for (i = 0; i < len; i++) {
+    for (i = 0; ok && i < len; i++) {
 	int check1 = vmask1 & 0x1;
 	int check2 = vmask2 & 0x1;
 	if (check1 != check2) {
-	    result = false;
-	    break;
+	    ok = false;
 	}
-	if (check1 && cp1->words[i] != cp2->words[i]) {
-	    result = false;
-	    break;
+	if (ok && check1 && cp1->words[i] != cp2->words[i]) {
+	    ok = false;
 	}
 	vmask1 >>= 1;
 	vmask2 >>= 1;
     }
-    result = result && vmask1 == 0 && vmask2 == 0;
-    return result;
+    ok = ok && vmask1 == 0 && vmask2 == 0;
+#else
+    size_t i;
+    size_t len = cp1->length;
+    if (len != cp2->length)
+	ok = false;
+    for (i = 0; ok && i < len; i++) {
+	if (cp1->words[i] != cp2->words[i])
+	    ok = false;
+    }
+#endif VMASK
+    return ok;
 }
 
 keyvalue_table_ptr chunk_table_new() {

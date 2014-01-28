@@ -12,6 +12,7 @@ set_test
 controller
 router
 tworker
+tclient
 client
 runbdd
 bworker

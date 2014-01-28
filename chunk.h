@@ -18,11 +18,22 @@ unsigned chunk_check_level;
 
 typedef struct {
     size_t length;   /* Number of data words in chunk.  Maximum value = 64 */
+#ifdef VMASK
     word_t vmask;    /* Bit vector indicating which words of this chunk are valid */
+#endif
     word_t words[1]; /* First data word.  Chunks can have up to 64 words */
 } chunk_t, *chunk_ptr;
 
-#define CHUNK_MAX_LENGTH (WORD_BITS)
+/* Set parameter limiting maximum allowable chunk length. */
+#ifdef VMASK
+/* When chunk includes valid mask, limited by mask length */
+#define CHUNK_MAX_LENGTH WORD_BITS
+#else
+/* Otherwise, limit is arbitrary */
+#define CHUNK_MAX_LENGTH 1024
+#endif
+
+/* Total number of bytes in longest possible chunk */
 #define CHUNK_MAX_SIZE   (sizeof(chunk_t) + sizeof(word_t) * ((CHUNK_MAX_LENGTH) - 1))
 
 /* Create a new chunk */
@@ -39,6 +50,9 @@ bool chunk_filled(chunk_ptr cp);
 
 /* Insert word into chunk */
 void chunk_insert_word(chunk_ptr cp, word_t wd, size_t offset);
+
+/* Replace word into chunk */
+void chunk_replace_word(chunk_ptr cp, word_t wd, size_t offset);
 
 /* Get word from chunk */
 word_t chunk_get_word(chunk_ptr cp, size_t offset);

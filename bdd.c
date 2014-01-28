@@ -608,7 +608,7 @@ static word_t uop_node_support(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t l
 static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
 static word_t uop_node_cofactor(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
 static word_t uop_node_equant(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
-void ref_show_stat(ref_mgr mgr);
+
 
 static uop_node_fun uop_node_functions[] = { uop_node_mark, uop_node_support, uop_node_density, uop_node_cofactor, uop_node_equant };
 
@@ -720,8 +720,6 @@ static double w2d(word_t w) {
 static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
     /* Aux info is null */
     double val;
-    char buf[24];
-    ref_show(r, buf);
     if (r == REF_ONE) {
 	val = 1.0;
     } else if (r == REF_ZERO) {
@@ -1010,7 +1008,7 @@ chunk_ptr build_var(word_t dest) {
     word_t worker = choose_hashed_worker(0);
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_VAR, worker, id, 1 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest, 0+OP_HEADER_CNT);
+    op_insert_word(op, dest, 0+OP_HEADER_CNT);
     report(4, "Created Var operation.  Worker %u.  Operator ID 0x%x.", worker, id);
     return op;
 }
@@ -1019,8 +1017,8 @@ chunk_ptr build_canonize(word_t dest, ref_t vref) {
     word_t worker = choose_some_worker();
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_CANONIZE, worker, id, 4 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest,            0+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) vref,   1+OP_HEADER_CNT);
+    op_insert_word(op, dest,            0+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) vref,   1+OP_HEADER_CNT);
     report(4, "Created Canonize operation.  Worker %u.  Operator ID 0x%x.", worker, id);
     return op;
 }
@@ -1029,12 +1027,12 @@ chunk_ptr build_canonize_lookup(word_t dest, word_t hash, ref_t vref, ref_t hire
     word_t worker = choose_hashed_worker(hash);
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_CANONIZE_LOOKUP, worker, id, 6 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest,            0+OP_HEADER_CNT);
-    chunk_insert_word(op, hash,            1+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) vref,   2+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) hiref,  3+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) loref,  4+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) negate, 5+OP_HEADER_CNT);
+    op_insert_word(op, dest,            0+OP_HEADER_CNT);
+    op_insert_word(op, hash,            1+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) vref,   2+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) hiref,  3+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) loref,  4+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) negate, 5+OP_HEADER_CNT);
     report(4, "Created Canonize Lookup operation.  Worker %u.  Operator ID 0x%x.", worker, id);
     return op;
 }
@@ -1044,8 +1042,8 @@ chunk_ptr build_retrieve_lookup(word_t dest, ref_t ref) {
     word_t worker = choose_hashed_worker(hash);
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_RETRIEVE_LOOKUP, worker, id, 2 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest,            0+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) ref,    1+OP_HEADER_CNT);
+    op_insert_word(op, dest,            0+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) ref,    1+OP_HEADER_CNT);
     report(4, "Created Retrieve Lookup operation.  Worker %u.  Operator ID 0x%x.", worker, id);
     return op;
 }
@@ -1056,11 +1054,11 @@ chunk_ptr build_ite_lookup(word_t dest, ref_t iref, ref_t tref, ref_t eref, bool
     word_t worker = choose_hashed_worker(hash);
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_ITE_LOOKUP, worker, id, 5 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest,            0+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) iref,   1+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) tref,   2+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) eref,  3+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) negate, 4+OP_HEADER_CNT);
+    op_insert_word(op, dest,            0+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) iref,   1+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) tref,   2+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) eref,  3+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) negate, 4+OP_HEADER_CNT);
     report(4, "Created ITE Lookup operation.  Worker %u.  Operator ID 0x%x.", worker, id);
     chunk_free(ucp);
     return op;
@@ -1070,8 +1068,8 @@ chunk_ptr build_ite_recurse(word_t dest, ref_t vref) {
     word_t worker = choose_some_worker();
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_ITE_RECURSE, worker, id, 8 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest,          0+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) vref, 1+OP_HEADER_CNT);
+    op_insert_word(op, dest,          0+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) vref, 1+OP_HEADER_CNT);
     report(4, "Created ITE Recurse operation.  Worker %u.  Operator ID 0x%x.", worker, id);
     return op;
 }
@@ -1080,11 +1078,11 @@ chunk_ptr build_ite_store(word_t dest, word_t iref, word_t tref, word_t eref, bo
     word_t worker = choose_own_worker();
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_ITE_STORE, worker, id, 6 + OP_HEADER_CNT);
-    chunk_insert_word(op, dest,            0+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) iref,   1+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) tref,   2+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) eref,  3+OP_HEADER_CNT);
-    chunk_insert_word(op, (word_t) negate, 5+OP_HEADER_CNT);
+    op_insert_word(op, dest,            0+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) iref,   1+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) tref,   2+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) eref,  3+OP_HEADER_CNT);
+    op_insert_word(op, (word_t) negate, 5+OP_HEADER_CNT);
     report(4, "Created ITE Store operation.  Worker %u.  Operator ID 0x%x.", worker, id);
     return op;
 }
@@ -1157,8 +1155,8 @@ bool do_retrieve_lookup_op(chunk_ptr op) {
     ref_t vref, tref, eref;
     ref_deref(mgr, ref, &vref, &tref, &eref);
     chunk_ptr oper = msg_new_operand(dest, 3);
-    chunk_insert_word(oper, (word_t) tref, 1);
-    chunk_insert_word(oper, (word_t) eref, 2);
+    chunk_insert_word(oper, (word_t) tref, 0 + OPER_HEADER_CNT);
+    chunk_insert_word(oper, (word_t) eref, 1 + OPER_HEADER_CNT);
     if (verblevel >= 4) {
 	char tbuf[24], ebuf[24];
 	ref_show(tref, tbuf);
@@ -1253,39 +1251,39 @@ bool do_ite_lookup_op(chunk_ptr op) {
     /* Fill in any known fields, and spawn retrieve operations for others */
     if (ivar == var) {
 	if (ref_deref_local(iref, &nvref, &nhiref, &nloref)) {
-	    chunk_insert_word(rop, (word_t) nhiref, 2+OP_HEADER_CNT);
-	    chunk_insert_word(rop, (word_t) nloref, 3+OP_HEADER_CNT);
+	    op_insert_word(rop, (word_t) nhiref, 2+OP_HEADER_CNT);
+	    op_insert_word(rop, (word_t) nloref, 3+OP_HEADER_CNT);
 	} else {
 	    word_t ndest = msg_new_destination(rop, 2+OP_HEADER_CNT);
 	    ok = ok && send_retrieve(ndest, iref);
 	}
     } else {
-	chunk_insert_word(rop, (word_t) iref, 2+OP_HEADER_CNT);
-	chunk_insert_word(rop, (word_t) iref, 3+OP_HEADER_CNT);
+	op_insert_word(rop, (word_t) iref, 2+OP_HEADER_CNT);
+	op_insert_word(rop, (word_t) iref, 3+OP_HEADER_CNT);
     }
     if (tvar == var) {
 	if (ref_deref_local(tref, &nvref, &nhiref, &nloref)) {
-	    chunk_insert_word(rop, (word_t) nhiref, 4+OP_HEADER_CNT);
-	    chunk_insert_word(rop, (word_t) nloref, 5+OP_HEADER_CNT);
+	    op_insert_word(rop, (word_t) nhiref, 4+OP_HEADER_CNT);
+	    op_insert_word(rop, (word_t) nloref, 5+OP_HEADER_CNT);
 	} else {
 	    word_t ndest = msg_new_destination(rop, 4+OP_HEADER_CNT);
 	    ok = ok && send_retrieve(ndest, tref);
 	}
     } else {
-	chunk_insert_word(rop, (word_t) tref, 4+OP_HEADER_CNT);
-	chunk_insert_word(rop, (word_t) tref, 5+OP_HEADER_CNT);
+	op_insert_word(rop, (word_t) tref, 4+OP_HEADER_CNT);
+	op_insert_word(rop, (word_t) tref, 5+OP_HEADER_CNT);
     }
     if (evar == var) {
 	if (ref_deref_local(eref, &nvref, &nhiref, &nloref)) {
-	    chunk_insert_word(rop, (word_t) nhiref, 6+OP_HEADER_CNT);
-	    chunk_insert_word(rop, (word_t) nloref, 7+OP_HEADER_CNT);
+	    op_insert_word(rop, (word_t) nhiref, 6+OP_HEADER_CNT);
+	    op_insert_word(rop, (word_t) nloref, 7+OP_HEADER_CNT);
 	} else {
 	    word_t ndest = msg_new_destination(rop, 6+OP_HEADER_CNT);
 	    ok = ok && send_retrieve(ndest, eref);
 	}
     } else {
-	chunk_insert_word(rop, (word_t) eref, 6+OP_HEADER_CNT);
-	chunk_insert_word(rop, (word_t) eref, 7+OP_HEADER_CNT);
+	op_insert_word(rop, (word_t) eref, 6+OP_HEADER_CNT);
+	op_insert_word(rop, (word_t) eref, 7+OP_HEADER_CNT);
     }
     ok = ok && send_op(sop);
     ok = ok && send_op(rop);
@@ -1322,7 +1320,7 @@ bool do_ite_recurse_op(chunk_ptr op) {
 	chunk_free(hiucp);
 	chunk_free(sop);
     } else {
-	chunk_insert_word(cop, nhiref, 2+OP_HEADER_CNT);
+	op_insert_word(cop, nhiref, 2+OP_HEADER_CNT);
     }
     if (REF_IS_INVALID(nloref)) {
 	word_t lodest = msg_new_destination(cop, 3+OP_HEADER_CNT);
@@ -1335,7 +1333,7 @@ bool do_ite_recurse_op(chunk_ptr op) {
 	chunk_free(loucp);
 	chunk_free(sop);
     } else {
-	chunk_insert_word(cop, nloref, 3+OP_HEADER_CNT);
+	op_insert_word(cop, nloref, 3+OP_HEADER_CNT);
     }
     ok = ok && send_op(cop);
     chunk_free(cop);

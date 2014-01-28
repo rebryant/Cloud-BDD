@@ -151,8 +151,12 @@ size_t string_hash(word_t sp);
 bool string_equal(word_t sp, word_t tp);
 
 /* Hash array of words */
+#ifdef VMASK
 /* If submask nonzero, then it designates which words to hash */
 size_t wordarray_hash(word_t *a, size_t cnt, word_t submask);
+#else
+size_t wordarray_hash(word_t *a, size_t cnt);
+#endif
 
 /* Equality function for word arrays */
 bool wordarray_equal(word_t *a, word_t *b, size_t cnt, word_t submask);

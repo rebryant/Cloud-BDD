@@ -45,9 +45,11 @@ static void to_from_test(char *s, chunk_ptr cp) {
     } else {
 	report(2, "to_from success. '%s' --> '%s'", s, t);
     }
+#ifdef VMASK
     if (!chunk_filled(cp)) {
 	err(false, "Generating chunk from '%s' yielded incomplete chunk\n", s);
     }
+#endif
     free_string(t);
 }
 

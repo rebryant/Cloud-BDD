@@ -52,9 +52,15 @@ static chunk_ptr word2chunk(word_t v) {
 
 /* Get value stored as single-word chunk */
 static word_t chunk2word(chunk_ptr cp) {
+#ifdef VMASK
     if (cp == NULL || cp->length != 1 || (cp->vmask & 0x1) != 1) {
 	err(true, "Invalid single-word chunk");
     }
+#else
+    if (cp == NULL || cp->length != 1) {
+	err(true, "Invalid single-word chunk");
+    }
+#endif VMASK
     return cp->words[0];
 }
     

@@ -6,7 +6,7 @@
 
 
 /* Enumeration of different message types */
-typedef enum {
+enum {
     MSG_OPERATION,          /* Dataflow operation */
     MSG_OPERAND,            /* Dataflow operand */
     /* From client, router, or worker to controller */
@@ -25,7 +25,7 @@ typedef enum {
     MSG_KILL,
     /* Negative acknowledgement */
     MSG_NACK
-} msg_type_t;
+};
 
 /**********************************************************
  Fields and formats
@@ -55,8 +55,13 @@ Agent Map:   8.  Agent (2) + Node ID (6)
 **********************************************************/
 /** Constants **/
 
-/* How many words are in an operator header? */
-#define OP_HEADER_CNT 1
+/* Operator header has two words: one for control information and one for valid mask */
+#define OP_HEADER_CNT 2
+/* Use of bit vector for valid mask limits maximum operator length */
+#define OP_MAX_LENGTH WORD_BITS
+
+/* Operand header has one word for control information */
+#define OPER_HEADER_CNT 1
 
 /** Constructors **/
 
@@ -91,13 +96,13 @@ unsigned msg_get_dest_offset(word_t dest);
 /** Message builders **/
 
 /* Create an empty operator */
-/* len specifies total message size */
+/* len specifies total message size, including header */
 chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, unsigned operator_id, unsigned len);
 
-/* Create destination from operator */
+/* Create destination from operator.  Offset includes header size */
 word_t msg_new_destination(chunk_ptr operator, unsigned offset);
 
-/* Create empty operand */
+/* Create empty operand.  len specifies total message size, including header */
 chunk_ptr msg_new_operand(word_t dest, unsigned len);
 
 /* Create message to register client, router, worker, or agent */
