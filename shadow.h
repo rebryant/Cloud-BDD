@@ -57,3 +57,28 @@ ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref);
 
 bool shadow_equal(shadow_mgr mgr, ref_t aref, ref_t bref);
 
+/* Create key-value table mapping set of root nodes to their densities. */
+keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots);
+
+/* Compute set of variables (given by refs) in support of set of roots */
+set_ptr shadow_support(shadow_mgr mgr, set_ptr roots);
+
+/* Create key-value table mapping set of root nodes to their restrictions,
+   with respect to a set of literals (given as a set of refs)
+*/
+keyvalue_table_ptr shadow_restrict(shadow_mgr mgr, set_ptr roots, set_ptr lits);
+
+/* Create key-value table mapping set of root nodes to their
+   existential quantifications with respect to a set of variables
+   (given as a set of refs)
+*/
+keyvalue_table_ptr shadow_equant(shadow_mgr mgr, set_ptr roots, set_ptr vars);
+
+/* Create key-value table mapping set of root nodes to their shifted versions
+   with respect to a mapping from old variables to new ones 
+*/
+keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap);
+
+
+/* Garbage collection.  Find all nodes reachable from roots and keep only those in unique table */
+void shadow_collect(shadow_mgr mgr, set_ptr roots);

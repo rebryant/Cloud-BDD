@@ -1,7 +1,7 @@
 /* Implementation of a ref-based BDD package */
 
 /* Different classes of refs */
-typedef enum {BDD_NULL, BDD_CONSTANT, BDD_VARIABLE, BDD_FUNCTION, BDD_INVALID} ref_type_t;
+typedef enum {BDD_NULL, BDD_CONSTANT, BDD_VARIABLE, BDD_FUNCTION, BDD_RECURSE, BDD_INVALID} ref_type_t;
 
 typedef word_t ref_t;
 
@@ -50,6 +50,7 @@ typedef word_t ref_t;
 #define REF_IS_CONST(ref)   (REF_GET_TYPE(ref)==BDD_CONSTANT)
 #define REF_IS_VAR(ref)     (REF_GET_TYPE(ref)==BDD_VARIABLE)
 #define REF_IS_FUNCT(ref)   (REF_GET_TYPE(ref)==BDD_FUNCTION)
+#define REF_IS_RECURSE(ref) (REF_GET_TYPE(ref)==BDD_RECURSE)
 #define REF_IS_INVALID(ref) (REF_GET_TYPE(ref)==BDD_INVALID)
 
 /* Level of constant */
@@ -59,6 +60,7 @@ typedef word_t ref_t;
 #define REF_ONE                  PACK_REF(0, BDD_CONSTANT, CONST_VAR, 0, 0)
 #define REF_VAR(var)             PACK_REF(0, BDD_VARIABLE, var, 0, 0)
 #define REF_FUN(var, hash, uniq) PACK_REF(0, BDD_FUNCTION, var, hash, uniq)
+#define REF_RECURSE PACK_REF(0, BDD_RECURSE, 0, 0, 0)
 #define REF_INVALID PACK_REF(0, BDD_INVALID, 0, 0, 0)
 
 /* Negate a ref */
@@ -71,7 +73,8 @@ typedef word_t ref_t;
 /* These stats combine STATA's from agent with STATB's from here */
 enum {STATB_UNIQ_CURR = NSTATA, STATB_UNIQ_PEAK, STATB_UNIQ_TOTAL, STATB_UNIQ_COLLIDE,
       STATB_ITE_CNT, STATB_ITE_LOCAL_CNT, STATB_ITE_HIT_CNT, STATB_ITE_NEW_CNT,
-      STATB_ITEC_CURR, STATB_ITEC_PEAK, STATB_ITEC_TOTAL, NSTAT};
+      STATB_ITEC_CURR, STATB_ITEC_PEAK, STATB_ITEC_TOTAL,
+      STATB_UOP_CNT, STATB_UOP_HIT_CNT, STATB_UOP_STORE_CNT, NSTAT};
 
 typedef struct {
     int variable_cnt;
@@ -135,6 +138,11 @@ keyvalue_table_ptr ref_restrict(ref_mgr mgr, set_ptr roots, set_ptr lits);
 */
 keyvalue_table_ptr ref_equant(ref_mgr mgr, set_ptr roots, set_ptr vars);
 
+/* Create key-value table mapping set of root nodes to their shifted versions
+   with respect to a mapping from old variables to new ones 
+*/
+keyvalue_table_ptr ref_shift(ref_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap);
+
 /* Garbage collection.  Find all nodes reachable from roots and keep only those in unique table */
 void ref_collect(ref_mgr mgr, set_ptr roots);
 
@@ -181,13 +189,25 @@ Supported Operations
       Store result of ITE operation in operation cache
       Performed locally.
       Result (possibly) negated and sent to dest.
-      
+
+   UOPDown(dest, id, ref)
+      Outward propagation of unary operation.
+      Performed by worker #(hash % w), where hash is extracted from ref.
+
+   UOPUp(dest, id, ref, *hival, *loval)
+      Upward return of unary operation
+      Performed locally
+
+   UOPStore(dest, id, ref, *val)
+      Completion of upward unary operation when require
+      additional operations when moving upward
+      Performed locally
 
 **/
 
 
 typedef enum { OP_VAR, OP_CANONIZE, OP_CANONIZE_LOOKUP, OP_RETRIEVE_LOOKUP,
-	       OP_ITE_LOOKUP, OP_ITE_RECURSE, OP_ITE_STORE } opcode_t;
+	       OP_ITE_LOOKUP, OP_ITE_RECURSE, OP_ITE_STORE, OP_UOP_DOWN, OP_UOP_UP, OP_UOP_STORE } opcode_t;
 
 void init_dref_mgr();
 void free_dref_mgr();
@@ -207,6 +227,11 @@ chunk_ptr build_ite_recurse(word_t dest, ref_t vref);
 
 chunk_ptr build_ite_store(word_t dest, word_t iref, word_t tref, word_t eref, bool negate);
 
+chunk_ptr build_uop_down(word_t dest, unsigned uid, ref_t ref);
+
+chunk_ptr build_uop_up(word_t dest, unsigned uid, ref_t ref);
+
+chunk_ptr build_uop_store(word_t dest, unsigned uid, ref_t ref);
 
 bool do_var_op(chunk_ptr op);
 bool do_canonize_op(chunk_ptr op);
@@ -215,10 +240,39 @@ bool do_retrieve_lookup_op(chunk_ptr op);
 bool do_ite_lookup_op(chunk_ptr op);
 bool do_ite_recurse_op(chunk_ptr op);
 bool do_ite_store_op(chunk_ptr op);
+bool do_uop_down_op(chunk_ptr op);
+bool do_uop_up_op(chunk_ptr op);
+bool do_uop_store_op(chunk_ptr op);
 
 /* Operations available to client */
 ref_t dist_var(ref_mgr mgr);
 ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref);
+keyvalue_table_ptr dist_density(ref_mgr mgr, set_ptr roots);
+set_ptr dist_support(ref_mgr mgr, set_ptr roots);
+
+/* Create key-value table mapping set of root nodes to their restrictions,
+   with respect to a set of literals (given as a set of refs)
+*/
+keyvalue_table_ptr dist_restrict(ref_mgr mgr, set_ptr roots, set_ptr lits);
+
+/* Create key-value table mapping set of root nodes to their shifted versions
+   with respect to a mapping from old variables to new ones 
+*/
+keyvalue_table_ptr dist_shift(ref_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap);
+
+
+/* Create key-value table mapping set of root nodes to their
+   existential quantifications with respect to a set of variables
+   (given as a set of refs)
+*/
+keyvalue_table_ptr dist_equant(ref_mgr mgr, set_ptr roots, set_ptr vars);
+
 
 /* For processing summary statistics information */
 void do_summary_stat(chunk_ptr smsg);
+
+/* Distributed unary operations */
+
+/* Worker UOP functions */
+void uop_start(unsigned id, unsigned opcode, unsigned nword, word_t *data);
+void uop_finish(unsigned id);

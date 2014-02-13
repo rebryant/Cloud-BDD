@@ -4,8 +4,8 @@ CUDDINC= -I$(CUDDDIR)/cudd -I$(CUDDDIR)/mtr -I$(CUDDDIR)/epd -I$(CUDDDIR)/util
 CUDDLIBS = $(CUDDDIR)/cudd/libcudd.a  $(CUDDDIR)/mtr/libmtr.a  $(CUDDDIR)/st/libst.a $(CUDDDIR)/epd/libepd.a $(CUDDDIR)/util/libutil.a -lm
 
 CC=gcc
-#CFLAGS= -Wall -g
-CFLAGS = -Wall -O2
+CFLAGS= -Wall -g
+#CFLAGS = -Wall -O2
 
 # Optionally test version with very small hash signatures to stress aliasing code
 BDDFLAGS=
@@ -50,6 +50,9 @@ keyvalue_test: keyvalue_test.c dtype.h table.h report.h table.o report.o
 
 set_test: set_test.c dtype.h table.h report.h table.o report.o
 	$(CC) $(CFLAGS) -o set_test set_test.c table.o report.o
+
+word_set_test: word_set_test.c dtype.h table.h report.h table.o report.o
+	$(CC) $(CFLAGS) -o word_set_test word_set_test.c table.o report.o
 
 chunktable_test: chunktable_test.c dtype.h table.h chunk.h report.h chunk.o report.o table.o
 	$(CC) $(CFLAGS) -o chunktable_test chunktable_test.c chunk.o report.o table.o

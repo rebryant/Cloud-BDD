@@ -9,7 +9,8 @@ class Uniq:
     nextId = 0
     root = "n_t"
     
-    def __init(self, root = "t"):
+    def __init(self, root = "n_t"):
+        self.root = root
         self.nextId = 0
 
     def new(self):
@@ -41,7 +42,6 @@ class Node:
 
 # Represent signal as vector of names.
 # Should keep these immutable
-# Assume little-Endian ordering
 class Vec:
     # Represent as array of strings.
     nodes = []
@@ -70,6 +70,7 @@ class Vec:
     # Various ways of constructing new nodes
 
     # Create list of names of form root.i
+    # Use little-Endian ordering
     def nameVec(self, root, n):
         ls = [root + '.' + str(i) for i in range(n)]
         self.nodes = ls
@@ -347,6 +348,31 @@ class Circuit:
         if isTmp[0]:
             self.decRefs([argList[0]])
 
+    # Generate signals indicating whether have 0 or 1 elements of vector set.
+    # nv is negation of v
+    def count01(self, c0, c1, nv):
+        n = len(v.nodes)
+        self.andN(c0, [])
+        self.orN(c1, [])
+        for i in range(n):
+            name = v.nodes[i]
+            nname = nv.nodes[i]
+            self.iteN(c1, [name, c0, c1])
+            self.andN(c0, [c0, nname])
+
+    # Is at most one signal in vector equal to 1?
+    def exactly1(self, dest, v, nv):
+        c0 = self.tmpNode()
+        self.count01(c0, dest, v, nv)
+        self.decRefs([c0])
+
+    # Is at most one signal in vector equal to 1?
+    def atMost1(self, dest, v, nv):
+        c0 = self.tmpNode()
+        c1 = self.tmpNode()
+        self.count01(c0, c1, v, nv)
+        self.orN(dest, [c0, c1])
+        self.decRefs([c0, c1])
 
 ## Some benchmarks:
 # Show that addition is associative
@@ -409,3 +435,97 @@ def multAssociative(n, f = sys.stdout):
     # Could collect here but it's kind of a dull picture when you do
     # ckt.collect()
     ckt.write("time")
+
+# Functions related to n-queens
+def sq(r, c, negate = False):
+    return "nr-%d.c-%d" % (r, c) if negate else "r-%d.c-%d" % (r, c)
+
+def row(n, r, negate = False):
+    return Vec([sq(r, c) for c in range(n)])
+
+def col(n, c, negate = False):
+    return Vec([sq(r, c) for r in range(n)])
+
+# Principal diagonals numbered from -(n-1) to n-1
+def diag(n, i, negate = False):
+    if (i < 0):
+        # elements numbered from -i,0 to n-1,n+i-1
+        return Vec([sq(j-i,j) for j in range(n+i)])
+    else:
+        # elements numbered from 0,i to n-i-1,n-1
+        return Vec([sq(j,j+i) for j in range(n-i)])
+
+# Off diagonals numbered from -(n-1) to n-1
+def offDiag(n, i, negate = False):
+    if (i < 0):
+        # elements numbered from n-1+i,0 to 0,n-1+i
+        return Vec([sq(n-1+i-j,j) for j in range(n+i)])
+    else:
+        # elements numbered from n-i,i to i,n-1
+        return Vec([sq(n-i-j,i+j) for j in range(n-i)])
+
+# Test of subfunctions
+def tAtMost1(n, f = sys.stdout):
+    ckt = Circuit(f)
+    v = ckt.nameVec("a", n)
+    ckt.declare(v)
+    nv = ckt.nameVec("na", n)
+    ckt.notV(nv, v)
+    ok = Node("ok")
+    ckt.atMost1(ok, v, nv)
+    
+# Test of subfunctions
+def tExactly1(n, f = sys.stdout):
+    ckt = Circuit(f)
+    v = ckt.nameVec("a", n)
+    ckt.declare(v)
+    nv = ckt.nameVec("na", n)
+    ckt.notV(nv, v)
+    ok = Node("ok")
+    ckt.exactly1(ok, v, nv)
+
+# Generate constraints for n-queens problem
+def nQueens(n, f = sys.stdout):
+    ckt = Circuit(f)
+    # Generate variables for each square
+    snames = [sq(i/n, i%n) for i in range(n*n)]
+    nsnames = ["n%s" % name for name in snames]
+    sv = Vec(snames)
+    nsv = Vec(nsnames)
+    ckt.declare(sv)
+    ckt.notV(nsv, sv)
+    okr = ckt.nameVec("okr", n)
+    okR = Node("okR")
+    okc = ckt.nameVec("okc", n)
+    okC = Node("okC")
+    okd = ckt.nameVec("okd", n+n-1)
+    okD = Node("okD")
+    oko = ckt.nameVec("oko", n+n-1)
+    okO = Node("okO")
+    # Row constraints
+    for r in range(n):
+        ckt.exactly1(okr.nodes[r], row(n, r), row(n, r, True))
+    ckt.andN(okR, okr.nodes)
+    ckt.decRefs([okr])
+    # Column constraints
+    for c in range(n):
+        ckt.exactly1(okc.nodes[c], col(n, c), col(n, c, True))
+    ckt.andN(okC, okc.nodes)
+    ckt.decRefs([okc])
+    # Diagonal constraints:
+    for i in range(-n+1,n):
+        out = okd.nodes[i+n-1]
+        ckt.atMost1(out, diag(n,i), diag(n, i, True))
+    ckt.andN(okD, okd.nodes)
+    ckt.decRefs([okd])
+    # Off diagonal constraints
+    for i in range(-n+1,n):
+        out = oko.nodes[i+n-1]
+        ckt.atMost1(out, offDiag(n,i), offDiag(n, i, True))
+    ckt.andN(okO, oko.nodes)
+    ckt.decRefs([oko])
+    ok = Node("ok")
+    ckt.andN(ok, [okR, okC, okD, okO])
+    ckt.decRefs([okR, okC, okD, okO])
+    
+    

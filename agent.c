@@ -70,6 +70,10 @@ static stat_function stat_helper = NULL;
 /* Array of counters for accumulating statistics */
 size_t agent_stat_counter[NSTATA] = {0};
 
+/* Helper functions associated with global operations */
+static global_op_start_function gop_start_helper = NULL;
+static global_op_finish_function gop_finish_helper = NULL;
+
 /* Forward reference */
 bool quit_agent(int argc, char *argv[]);
 bool do_agent_kill(int argc, char *argv[]);
@@ -96,6 +100,13 @@ void set_agent_flush_helper(flush_function ff) {
 void set_agent_stat_helper(stat_function sf) {
     stat_helper = sf;
 }
+
+/* Provide handlers to perform global operation by worker */
+void set_agent_global_helpers(global_op_start_function gosf, global_op_finish_function goff) {
+    gop_start_helper = gosf;
+    gop_finish_helper = goff;
+}
+
 
 
 /* Add an operation */
@@ -353,8 +364,12 @@ bool send_op(chunk_ptr msg) {
 /* Insert word into operator, updating its valid mask.  Offset includes header size */
 void op_insert_word(chunk_ptr op, word_t wd, size_t offset) {
     word_t vmask = chunk_get_word(op, 1);
+    word_t idx = 0x1llu << offset;
+    if (vmask & idx) {
+	err(false, "Inserting into already filled position in operator.  Offset = %lu", offset);
+    }
     chunk_insert_word(op, wd, offset);
-    vmask |= (0x1llu << offset);
+    vmask |= idx;
     chunk_replace_word(op, vmask, 1);
 }
 
@@ -436,6 +451,7 @@ static bool check_fire(chunk_ptr op) {
     unsigned id = msg_get_header_op_id(h);
     op_ptr ls = op_list;
     op_handler opfun = NULL;
+    report(5, "Firing operation with id 0x%x", id);
     while (ls) {
 	if (ls->opcode == opcode) {
 	    opfun = ls->opfun;
@@ -447,9 +463,83 @@ static bool check_fire(chunk_ptr op) {
 	if (!opfun(op))
 	    err(false, "Error encountered firing operator with id 0x%x", id);
     } else
-	err(false, "Unkown opcode %u for operator with id 0x%x", opcode, id);	
+	err(false, "Unknown opcode %u for operator with id 0x%x", opcode, id);	
     return true;
 }
+
+/*
+  Initiate global operation from client.
+  Returns to client when all workers ready to perform their operations 
+*/
+bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
+    chunk_ptr rmsg = msg_new_cliop_data(own_agent, opcode, nword, data);
+    if (!chunk_write(controller_fd, rmsg)) {
+	err(false, "Could not send client operation message to controller");
+	chunk_free(rmsg);
+	return false;
+    }
+    chunk_free(rmsg);
+    /* Read ACK, as well as any other messages the controller might have */
+    bool done = false;
+    bool ok = true;
+    while (!done) {
+	bool eof = false;
+	chunk_ptr msg = chunk_read(controller_fd, &eof);
+	if (eof) {
+	    /* Unexpected EOF */
+	    err(false, "Unexpected EOF from controller (ignored)");
+	    close(controller_fd);
+	    done = true; ok = false;
+	}
+	word_t h = chunk_get_word(msg, 0);
+	unsigned code = msg_get_header_code(h);
+	switch (code) {
+	case MSG_DO_FLUSH:
+	    chunk_free(msg);
+	    report(5, "Received flush message from controller, superceding client global operation");
+	    if (flush_helper) {
+		flush_helper();
+	    }
+	    done = true; ok = false;
+	    break;
+	case MSG_STAT:
+	    report(5, "Received summary statistics from controller");
+	    if (stat_helper) {
+		/* Get a copy of the byte usage from memory allocator */
+		stat_helper(msg);
+	    }
+	    chunk_free(msg);
+	    break;
+	case MSG_KILL:
+	    chunk_free(msg);
+	    report(5, "Received kill message from controller, superceding client global operation");
+	    finish_cmd();
+	    done = true; ok = false;
+	    break;
+	case MSG_CLIOP_ACK:
+	    chunk_free(msg);
+	    report(5, "Received acknowledgement for client global operation");
+	    done = true; ok = true;
+	    break;
+	default:
+	    chunk_free(msg);
+	    err(false, "Unknown message code %u from controller (ignored)", code);
+	}
+    }
+    return ok;
+}
+
+/*
+  Client signals that it has completed the global operation
+*/
+bool finish_client_global() {
+    chunk_ptr msg = msg_new_cliop_ack(own_agent);
+    bool ok = chunk_write(controller_fd, msg);
+    chunk_free(msg);
+    return ok;
+}
+
+
 
 /* For workers, and possibly clients */
 /* Accept operation and either fire it or defer it */
@@ -457,6 +547,7 @@ static void receive_operation(chunk_ptr op) {
     word_t w;
     word_t h = chunk_get_word(op, 0);
     unsigned id = msg_get_header_op_id(h);
+    report(5, "Received operation.  id 0x%x", id);
     /* Check if there's already an outstanding operation with the same ID */
     if (keyvalue_find(operator_table, id, NULL)) {
 	err(false, "Operator ID collision encountered.  Op id = 0x%x", id);
@@ -543,6 +634,8 @@ void run_worker() {
 	    unsigned code = msg_get_header_code(h);
 	    if (fd == controller_fd) {
 		/* Message from controller */
+		word_t h;
+		unsigned agent;
 		switch(code) {
 		case MSG_KILL:
 		    chunk_free(msg);
@@ -563,6 +656,32 @@ void run_worker() {
 			}
 			chunk_free(msg);
 		    }
+		    break;
+		case MSG_CLIOP_DATA:
+		    h = chunk_get_word(msg, 0);
+		    agent = msg_get_header_agent(h);
+		    unsigned opcode = msg_get_header_opcode(h);
+		    report(5, "Received client operation data.  Id = %u", agent);
+		    word_t *data = &msg->words[1];
+		    unsigned nword = msg->length - 1;
+		    if (gop_start_helper)
+			gop_start_helper(agent, opcode, nword, data);
+		    chunk_free(msg);
+		    chunk_ptr rmsg = msg_new_cliop_ack(agent);
+		    if (chunk_write(controller_fd, rmsg)) {
+			report(5, "Acknowledged client operation data.  Id = %u", agent);
+		    } else {
+			err(false, "Failed to acknowledge client operation data.  Id = %u", agent);
+		    }
+		    chunk_free(rmsg);
+		    break;
+		case MSG_CLIOP_ACK:
+		    h = chunk_get_word(msg, 0);
+		    agent = msg_get_header_agent(h);
+		    report(5, "Received client operation ack.  Id = %u", agent);
+		    if (gop_finish_helper)
+			gop_finish_helper(agent);
+		    chunk_free(msg);
 		    break;
 		default:
 		    chunk_free(msg);

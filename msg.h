@@ -24,7 +24,14 @@ enum {
     MSG_DO_FLUSH,
     MSG_KILL,
     /* Negative acknowledgement */
-    MSG_NACK
+    MSG_NACK,
+    /* Global operations */
+    /* Initiated by client */
+    MSG_CLIOP_DATA,
+    MSG_CLIOP_ACK,
+    /* Initiated by controller */
+    MSG_CONOP_DATA,
+    MSG_CONOP_ACK
 };
 
 /**********************************************************
@@ -33,7 +40,7 @@ enum {
 Basic units (all sizes given in bytes)
 
 Agent: 2
-Message sequence number: 2
+Message sequence number: 2+
 Operation opcode: 1
 Message code: 2
 Port: 2
@@ -43,7 +50,7 @@ Worker count: 2
 
 Composite quantities.  All listed from MSB to least:
 
-Operator ID:  4.  Agent (2) + Sequence Number (2)
+Operator ID:  4.  Combines Agent + Sequence Number
 
 Operand ID:  5.  Operator ID (4) + Offset (1)
 
@@ -124,7 +131,18 @@ chunk_ptr msg_new_flush();
   Create a message containing worker statistics.
   Specify number of workers, number of values and provide pointer to array of values.
  */
-chunk_ptr msg_new_stat(int nworker, int nstat, size_t *vals);
+chunk_ptr msg_new_stat(unsigned nworker, unsigned nstat, size_t *vals);
+
+/*** Unary operations ***/
+
+/* Create message containing global operation data */
+/* nwords specifies number of data words (not including header) */
+chunk_ptr msg_new_cliop_data(unsigned agent, unsigned opcode, unsigned nword, word_t *data);
+
+chunk_ptr msg_new_cliop_ack(unsigned agent);
+chunk_ptr msg_new_conop_data(unsigned opcode, unsigned nword, word_t *data);
+chunk_ptr msg_new_conop_ack();
+
 
 /** Useful functions **/
 

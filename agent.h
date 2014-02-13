@@ -82,6 +82,40 @@ void set_agent_stat_helper(stat_function ff);
 /* Fire an operation and wait for returned operand */
 chunk_ptr fire_and_wait(chunk_ptr msg);
 
+/* Functions to handle global operations */
+/* Start function includes opcode to specify operation + application specific data */
+/* This function should NOT deallocate the array indicated by argument data */
+typedef void (*global_op_start_function)(unsigned id, unsigned opcode, unsigned nword, word_t *data);
+/* Finish function */
+typedef void (*global_op_finish_function)(unsigned id);
+
+/* Provide handlers to perform global operation by worker */
+void set_agent_global_helpers(global_op_start_function gosf, global_op_finish_function goff);
+
+/*
+  Initiate global operation from client.
+  Returns to client when all workers ready to perform their operations 
+*/
+bool start_client_global(unsigned opcode, unsigned nword, word_t *data);
+
+/*
+  Finalize global operation from client.
+*/
+bool finish_client_global();
+
+/*
+  Initiate global operation from controller.
+  Returns to controller when all workers ready to perform their operations 
+*/
+bool start_controller_global(unsigned opcode, unsigned nword, word_t *data);
+
+/*
+  Finalize global operation from controller.
+ */
+bool finish_controller_global();
+
+
+
 void run_client(char *infile_name);
 
 void run_worker();

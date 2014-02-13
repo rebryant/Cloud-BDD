@@ -28,6 +28,7 @@ static void init(char *controller_name, unsigned controller_port) {
     init_agent(false, controller_name, controller_port);
     init_dref_mgr();
     set_agent_flush_helper(flush_dref_mgr);
+    set_agent_global_helpers(uop_start, uop_finish);
     add_op_handler(OP_VAR, do_var_op);
     add_op_handler(OP_CANONIZE, do_canonize_op);
     add_op_handler(OP_CANONIZE_LOOKUP, do_canonize_lookup_op);
@@ -35,6 +36,9 @@ static void init(char *controller_name, unsigned controller_port) {
     add_op_handler(OP_ITE_LOOKUP, do_ite_lookup_op);
     add_op_handler(OP_ITE_RECURSE, do_ite_recurse_op);
     add_op_handler(OP_ITE_STORE, do_ite_store_op);
+    add_op_handler(OP_UOP_DOWN, do_uop_down_op);
+    add_op_handler(OP_UOP_UP, do_uop_up_op);
+    add_op_handler(OP_UOP_STORE, do_uop_store_op);
 }
 
 static void finish() {

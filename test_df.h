@@ -36,3 +36,7 @@ bool do_incr_op(chunk_ptr op);
 bool do_join_op(chunk_ptr op);
 
 chunk_ptr flush_worker();
+
+/* Global operations by workers */
+void start_global(unsigned id, unsigned opcode, unsigned nword, word_t *data);
+void finish_global(unsigned id);

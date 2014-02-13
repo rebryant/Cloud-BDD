@@ -304,3 +304,203 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
     keyvalue_remove(mgr->c2r_table, (word_t ) nn, NULL, NULL);
     keyvalue_remove(mgr->r2c_table, (word_t ) nr, NULL, NULL);
 }
+
+/*** Unary Operations ***/
+/* Create key-value table mapping set of root nodes to their densities. */
+keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots) {
+    keyvalue_table_ptr ldensity = NULL;
+    keyvalue_table_ptr ddensity = NULL;
+    if (mgr->do_local)
+	ldensity = ref_density(mgr->ref_mgr, roots);
+    if (mgr->do_dist) {
+	ddensity = dist_density(mgr->ref_mgr, roots);
+    }
+    if (ldensity && ddensity) {
+	set_iterstart(roots);
+	word_t wr;
+	double dl, dd;
+	while (set_iternext(roots, &wr)) {
+	    ref_t r = (ref_t) wr;
+	    dl = get_double(ldensity, r);
+	    dd = get_double(ddensity, r);
+	    if (dl != dd) {
+		char buf[24];
+		ref_show(r, buf);
+		err(false, "Density mismatch for %s.  local = %.2f, distance = %.2f",
+		    buf, dl, dd);
+	    }
+	}
+	keyvalue_free(ddensity);
+    }
+    if (ldensity)
+	return ldensity;
+    else
+	return ddensity;
+}
+
+/* Compute set of variables (given by refs) in support of set of roots */
+set_ptr shadow_support(shadow_mgr mgr, set_ptr roots) {
+    set_ptr lsupport = NULL;
+    set_ptr dsupport = NULL;
+    if (mgr->do_local)
+	lsupport = ref_support(mgr->ref_mgr, roots);
+    if (mgr->do_dist)
+	dsupport = dist_support(mgr->ref_mgr, roots);
+    if (lsupport && dsupport) {
+	word_t wr;
+	set_iterstart(lsupport);
+	while(set_iternext(lsupport, &wr)) {
+	    if (!set_member(dsupport, wr, true)) {
+		char buf[24];
+		ref_t r = (ref_t) wr;
+		ref_show(r, buf);
+		err(false, "Found %s in local support, but not in dist support");
+	    }
+	}
+	/* See if there are any remaining dist members */
+	set_iterstart(dsupport);
+	while (set_iternext(dsupport, &wr)) {
+	    char buf[24];
+	    ref_t r = (ref_t) wr;
+	    ref_show(r, buf);
+	    err(false, "Found %s in dist support, but not in local support");
+	}
+	set_free(dsupport);
+    }
+    if (lsupport)
+	return lsupport;
+    else
+	return dsupport;
+}
+
+
+
+/* Create key-value table mapping set of root nodes to their restrictions,
+   with respect to a set of literals (given as a set of refs)
+*/
+keyvalue_table_ptr shadow_restrict(shadow_mgr mgr, set_ptr roots, set_ptr lits) {
+    keyvalue_table_ptr lrmap = NULL;
+    keyvalue_table_ptr drmap = NULL;
+    if (mgr->do_local)
+	lrmap = ref_restrict(mgr->ref_mgr, roots, lits);
+    if (mgr->do_dist)
+	drmap = dist_restrict(mgr->ref_mgr, roots, lits);
+    if (lrmap && drmap) {
+	word_t wk, wv1, wv2;
+	keyvalue_iterstart(lrmap);
+	while(keyvalue_iternext(lrmap, &wk, &wv1)) {
+	    if (!keyvalue_remove(drmap, wk, NULL, &wv2)) {
+		char buf[24];
+		ref_t r = (ref_t) wk;
+		ref_show(r, buf);
+		err(false, "Found %s in local restriction, but not in dist restriction");
+	    }
+	    else if (wv1 != wv2) {
+		char buf[24], buf1[24], buf2[24];
+		ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
+		err(false, "Restriction of %s gives %s in local, but %s in dist", buf, buf1, buf2);
+	    }
+	}
+	/* See if there are any remaining dist members */
+	keyvalue_iterstart(drmap);
+	while (keyvalue_iternext(drmap, &wk, &wv1)) {
+	    char buf[24]; char buf1[24];
+	    ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1);
+	    err(false, "%s has restriction %s in dist map, but none in local map", buf, buf1);
+	}
+	keyvalue_free(drmap);
+    }
+    if (lrmap)
+	return lrmap;
+    else
+	return drmap;
+}
+
+/* Create key-value table mapping set of root nodes to their
+   existential quantifications with respect to a set of variables
+   (given as a set of refs)
+*/
+keyvalue_table_ptr shadow_equant(shadow_mgr mgr, set_ptr roots, set_ptr vars) {
+    keyvalue_table_ptr lmap = NULL;
+    keyvalue_table_ptr dmap = NULL;
+    if (mgr->do_local)
+	lmap = ref_equant(mgr->ref_mgr, roots, vars);
+    if (mgr->do_dist)
+	dmap = dist_equant(mgr->ref_mgr, roots, vars);
+    if (lmap && dmap) {
+	word_t wk, wv1, wv2;
+	keyvalue_iterstart(lmap);
+	while(keyvalue_iternext(lmap, &wk, &wv1)) {
+	    if (!keyvalue_remove(dmap, wk, NULL, &wv2)) {
+		char buf[24];
+		ref_t r = (ref_t) wk;
+		ref_show(r, buf);
+		err(false, "Found %s in local quantification, but not in dist quantification");
+	    }
+	    else if (wv1 != wv2) {
+		char buf[24], buf1[24], buf2[24];
+		ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
+		err(false, "Quantification of %s gives %s in local, but %s in dist", buf, buf1, buf2);
+	    }
+	}
+	/* See if there are any remaining dist members */
+	keyvalue_iterstart(dmap);
+	while (keyvalue_iternext(dmap, &wk, &wv1)) {
+	    char buf[24]; char buf1[24];
+	    ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1);
+	    err(false, "%s has quantification %s in dist map, but none in local map", buf, buf1);
+	}
+	keyvalue_free(dmap);
+    }
+    if (lmap)
+	return lmap;
+    else
+	return dmap;
+}
+
+/* Create key-value table mapping set of root nodes to their shifted versions
+   with respect to a mapping from old variables to new ones 
+*/
+keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap) {
+    keyvalue_table_ptr lmap = NULL;
+    keyvalue_table_ptr dmap = NULL;
+    if (mgr->do_local)
+	lmap = ref_shift(mgr->ref_mgr, roots, vmap);
+    if (mgr->do_dist)
+	dmap = dist_shift(mgr->ref_mgr, roots, vmap);
+    if (lmap && dmap) {
+	word_t wk, wv1, wv2;
+	keyvalue_iterstart(lmap);
+	while(keyvalue_iternext(lmap, &wk, &wv1)) {
+	    if (!keyvalue_remove(dmap, wk, NULL, &wv2)) {
+		char buf[24];
+		ref_t r = (ref_t) wk;
+		ref_show(r, buf);
+		err(false, "Found %s in local shift, but not in dist shift");
+	    }
+	    else if (wv1 != wv2) {
+		char buf[24], buf1[24], buf2[24];
+		ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
+		err(false, "Shift of %s gives %s in local, but %s in dist", buf, buf1, buf2);
+	    }
+	}
+	/* See if there are any remaining dist members */
+	keyvalue_iterstart(dmap);
+	while (keyvalue_iternext(dmap, &wk, &wv1)) {
+	    char buf[24]; char buf1[24];
+	    ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1);
+	    err(false, "%s has shift %s in dist map, but none in local map", buf, buf1);
+	}
+	keyvalue_free(dmap);
+    }
+    if (lmap)
+	return lmap;
+    else
+	return dmap;
+}
+
+
+/* Garbage collection.  Find all nodes reachable from roots and keep only those in unique table */
+void shadow_collect(shadow_mgr mgr, set_ptr roots) {
+
+}

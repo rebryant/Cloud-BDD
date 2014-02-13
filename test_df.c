@@ -219,3 +219,26 @@ void do_summary_stat(chunk_ptr smsg) {
     }
 }
 
+/* Global operations */
+/* Global operations by workers */
+void start_global(unsigned id, unsigned opcode, unsigned nword, word_t *data) {
+    int sum = 0;
+    if (nword > 0) {
+	/* Data should be set of ints */
+	set_ptr dset = word_set_new();
+	set_unmarshal(dset, data, nword);
+	set_iterstart(dset);
+	word_t w;
+	while (set_iternext(dset, &w)) {
+	    int v = (int) w;
+	    sum += v;
+	}
+	set_free(dset);
+    }
+    report(0, "Starting global operation with id %u, opcode %u.  Sum = %d", id, opcode, sum);
+}
+
+void finish_global(unsigned id) {
+    report(0, "Finishing global operation with id %u", id);
+}
+

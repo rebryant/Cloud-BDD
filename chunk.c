@@ -163,7 +163,8 @@ word_t chunk_get_word(chunk_ptr cp, size_t offset) {
 	chunk_error("Null Pointer", cp);
     }
     if (chunk_check_level >= 2 && offset >= cp->length) {
-	chunk_error("Out of bounds retrieval", cp);
+	err(false, "Out of bounds retrieval.  Length %lu, offset %lu",
+	    cp->length, offset);
     }
 #ifdef VMASK
     if (chunk_check_level >= 3 && !CHUNK_WORD_VALID(cp, offset)) {

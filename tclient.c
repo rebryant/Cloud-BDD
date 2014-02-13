@@ -29,7 +29,7 @@ bool do_incr_cmd(int argc, char *argv[]);
 bool do_fork_cmd(int argc, char *argv[]);
 bool do_join_cmd(int argc, char *argv[]);
 bool do_status_cmd(int argc, char *argv[]);
-
+bool do_global_cmd(int argc, char *argv[]);
 
 static void init(char *controller_name, unsigned controller_port) {
     init_cmd();
@@ -38,7 +38,8 @@ static void init(char *controller_name, unsigned controller_port) {
     add_cmd("incr", do_incr_cmd,               " val cnt      | Increment val cnt times");
     add_cmd("fork", do_fork_cmd,               " wdth val cnt | Perform width incrs and join results");
     add_cmd("join", do_join_cmd,               " v1 v2        | Compute v1+v2");
-    add_cmd("status", do_status_cmd,               "              | Print statistics");
+    add_cmd("status", do_status_cmd,           "              | Print statistics");
+    add_cmd("global", do_global_cmd,           "              | Perform test of global command capability");
 }
 
 static void usage(char *cmd) {
@@ -186,4 +187,28 @@ int main(int argc, char *argv[]) {
 bool do_status_cmd(int argc, char *argv[]) {
     agent_show_stat();
     return true;
+}
+
+bool do_global_cmd(int argc, char *argv[]) {
+    report(1, "Starting global command");
+    set_ptr dset = word_set_new();
+    size_t i;
+    int sum = 0;
+    for (i = 1; i < argc; i++) {
+	int v = atoi(argv[i]);
+	word_t w = (word_t) v;
+	set_insert(dset, w);
+	sum += v;
+    }
+    report(0, "Sum = %d", sum);
+    size_t nword = set_marshal_size(dset);
+    word_t *data = calloc_or_fail(nword, sizeof(word_t), "do_global_cmd");
+    set_marshal(dset, data);
+    start_client_global(0, nword, data);
+    free_array(data, nword, sizeof(word_t));
+    set_free(dset);
+    report(1, "Global connection established");
+    bool ok = finish_client_global();
+    report(1, "Global command completed");
+    return ok;
 }

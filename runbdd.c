@@ -34,6 +34,9 @@ shadow_mgr smgr;
 
 /* Mapping from string names to shadow pointers */
 keyvalue_table_ptr nametable;
+/* Mapping from string names to vectors (represented as chunks) */
+keyvalue_table_ptr vectable;
+
 /*
   Maintain reference count for each ref reachable from nametable.
   Index by absolute values of refs
@@ -45,27 +48,35 @@ keyvalue_table_ptr reftable;
 bool do_and(int argc, char *argv[]);
 bool do_collect(int argc, char *argv[]);
 bool do_delete(int argc, char *argv[]);
-bool do_density(int argc, char *argv[]);
+bool do_cofactor(int argc, char *argv[]);
+bool do_count(int argc, char *argv[]);
 bool do_equal(int argc, char *argv[]);
+bool do_equant(int argc, char *argv[]);
 bool do_local_flush(int argc, char *argv[]);
 bool do_information(int argc, char *argv[]);
 bool do_ite(int argc, char *argv[]);
 bool do_nothing(int argc, char *argv[]);
 bool do_or(int argc, char *argv[]);
+bool do_shift(int argc, char *argv[]);
 bool do_size(int argc, char *argv[]);
 bool do_status(int argc, char *argv[]);
+bool do_uquant(int argc, char *argv[]);
 bool do_var(int argc, char *argv[]);
 bool do_xor(int argc, char *argv[]);
+bool do_vector(int argc, char *argv[]);
+
 
 chunk_ptr run_flush();
 
-static ref_t get_ref();
+static ref_t get_ref(char *name);
+static set_ptr get_refs(int cnt, char *names[]);
 static void assign_ref(char *name, ref_t r, bool saturate);
 
 
 static void bdd_init() {
     smgr = new_shadow_mgr(do_cudd, do_local, do_dist);
     nametable = keyvalue_new(string_hash, string_equal);
+    vectable = keyvalue_new(string_hash, string_equal);
     reftable = word_keyvalue_new();
     ref_t rzero = shadow_zero(smgr);
     ref_t rone = shadow_one(smgr);
@@ -74,31 +85,43 @@ static void bdd_init() {
 }
 
 static void console_init(bool do_dist) {
-    add_cmd("and", do_and,                 " fd f1 f2 ... | fd <- f1 & f2 & ...");
-    add_cmd("collect", do_collect,         "              | Perform garbage collection");
-    add_cmd("delete", do_delete,           " f1 f2 ...    | Delete functions");
-    add_cmd("density", do_density,         " f1 f2 ...    | Display function densities");
-    add_cmd("equal", do_equal,             " f1 f2        | Test for equality");
+    add_cmd("and", do_and,                 " fd f1 f2 ...   | fd <- f1 & f2 & ...");
+    add_cmd("cofactor", do_cofactor,       " fd f l1 ...    | fd <- cofactor(f, l1, ...");
+    add_cmd("collect", do_collect,         "                | Perform garbage collection");
+    add_cmd("count", do_count,             " f1 f2 ...      | Display function counts");
+    add_cmd("delete", do_delete,           " f1 f2 ...      | Delete functions");
+    add_cmd("equal", do_equal,             " f1 f2          | Test for equality");
+    add_cmd("equant", do_equant,           " fd f v1 ...    | Existential quantification");
     if (!do_dist)
-	add_cmd("flush", do_local_flush,   "              | Flush local state");
-    add_cmd("ite", do_ite,                 " fd fi ft fe  | fd <- ITE(fi, ft, fe)");
-    add_cmd("or", do_or,                   " fd f1 f2 ... | fd <- f1 | f2 | ...");
-    add_cmd("info", do_information,        " f1 ..        | Display combined information about functions");
-    add_cmd("size", do_nothing,            "              | Show number of nodes for each variable"); 
-    add_cmd("status", do_status,           "              | Print statistics");
-    add_cmd("var", do_var,                 " v1 v2 ...    | Create variables");
-    add_cmd("xor", do_xor,                 " fd f1 f2 ... | fd <- f1 ^ f2 ^ ...");
+	add_cmd("flush", do_local_flush,   "                | Flush local state");
+    add_cmd("ite", do_ite,                 " fd fi ft fe    | fd <- ITE(fi, ft, fe)");
+    add_cmd("or", do_or,                   " fd f1 f2 ...   | fd <- f1 | f2 | ...");
+    add_cmd("info", do_information,        " f1 ..          | Display combined information about functions");
+    add_cmd("shift", do_shift,             " fd f v1' v1 ...| Variable shift");
+    add_cmd("size", do_nothing,            "                | Show number of nodes for each variable"); 
+    add_cmd("status", do_status,           "                | Print statistics");
+    add_cmd("uquant", do_uquant,           " fd f v1 ...    | Universal quantification");
+    add_cmd("var", do_var,                 " v1 v2 ...      | Create variables");
+    add_cmd("xor", do_xor,                 " fd f1 f2 ...   | fd <- f1 ^ f2 ^ ...");
     add_param("collect", &enable_collect, "Enable garbage collection");
 }
 
 static bool bdd_quit(int argc, char *argv[]) {
-    word_t wk;
+    word_t wk, wv;
     while (keyvalue_removenext(nametable, &wk, NULL)) {
 	char *s = (char *) wk;
 	report(5, "Freeing string '%s' from name table", s);
 	free_string(s);
     }
     keyvalue_free(nametable);
+    while (keyvalue_removenext(vectable, &wk, &wv)) {
+	char *s = (char *) wk;
+	report(5, "Freeing string '%s' from vector table", s);
+	free_string(s);
+	chunk_ptr cp = (chunk_ptr) wv;
+	chunk_free(cp);
+    }
+    keyvalue_free(vectable);
     keyvalue_free(reftable);
     if (do_ref(smgr)) {
 	ref_show_stat(smgr->ref_mgr);
@@ -209,6 +232,8 @@ static void root_addref(ref_t r, bool saturate) {
 /* Decrement reference count for ref */
 static void root_deref(ref_t r) {
     int cnt = 0;
+    if (REF_IS_INVALID(r))
+	return;
     ref_t ar = shadow_absval(smgr, r);
     /* Decrement reference count */
     word_t wv;
@@ -258,15 +283,44 @@ static void assign_ref(char *name, ref_t r, bool saturate) {
 
 
 /* Command implementations */
+/* Retrieve reference, given its name. */
+/* Can prefix name with '!' to indicate negation */
 static ref_t get_ref(char *name) {
     ref_t r;
     word_t wv;
+    bool negate = (*name == '!');
+    if (negate)
+	name++;
     if (keyvalue_find(nametable, (word_t) name, &wv)) {
 	r = (ref_t) wv;
+	if (negate)
+	    r = shadow_negate(smgr, r);
 	return r;
     } else {
 	report(0, "Function '%s' undefined", name);
 	return REF_INVALID;
+    }
+}
+
+/* Create set of refs from collection of names */
+static set_ptr get_refs(int cnt, char *names[]) {
+    set_ptr rset = word_set_new();
+    int i;
+    bool ok = true;
+    for (i = 0; i < cnt; i++) {
+	ref_t r = get_ref(names[i]);
+	if (r == REF_INVALID) {
+	    err(false, "Name '%s' invalid", names[i]);
+	    ok = false;
+	} else {
+	    set_insert(rset, (word_t) r);
+	}
+    }
+    if (ok)
+	return rset;
+    else {
+	set_free(rset);
+	return NULL;
     }
 }
 
@@ -410,25 +464,38 @@ bool do_delete(int argc, char *argv[]) {
     return true;
 }
 
-bool do_density(int argc, char *argv[]) {
+bool do_count(int argc, char *argv[]) {
     if (!do_ref(smgr)) {
 	report(0, "Cannot compute densities without refs");
 	return false;
     }
-    set_ptr roots = word_set_new();
-    size_t i;
-    for (i = 1; i < argc; i++) {
-	ref_t r = get_ref(argv[i]);
-	if (r == REF_INVALID) {
-	    set_free(roots);
-	    return false;
+    set_ptr roots = get_refs(argc-1, argv+1);
+    if (!roots)
+	return false;
+    keyvalue_table_ptr map = shadow_density(smgr, roots);
+    set_ptr supset = shadow_support(smgr, roots);
+    report_noreturn(0, "Support:");
+    size_t idx;
+    for (idx = 0; idx < smgr->ref_mgr->variable_cnt; idx++) {
+	ref_t r = REF_VAR(idx);
+	if (set_member(supset, (word_t) r, false)) {
+	    char *name = name_find(r);	    
+	    if (name)
+		report_noreturn(0, " %s", name);
+	    else {
+		char buf[24];
+		ref_show(r, buf);
+		report_noreturn(0, " %s", buf);
+	    }
 	}
-	set_insert(roots, (word_t) r);
     }
-    keyvalue_table_ptr map = ref_density(smgr->ref_mgr, roots);
+    report(0, "");
+    word_t wt = ((word_t) 1) << supset->nelements;
+    int i;
     for (i = 1; i < argc; i++)
-	report(1, "%s:\t%.4f", argv[i], get_double(map, get_ref(argv[i])));
+	report(1, "%s:\t%.0f", argv[i], wt * get_double(map, get_ref(argv[i])));
     set_free(roots);
+    set_free(supset);
     keyvalue_free(map);
     return true;
 }
@@ -466,22 +533,140 @@ chunk_ptr run_flush() {
 }
 
 
+bool do_cofactor(int argc, char *argv[]) {
+    char buf[24];
+    ref_t rold = get_ref(argv[2]);
+    if (rold == REF_INVALID)
+	return false;
+    set_ptr litset = get_refs(argc-3, argv+3);
+    if (!litset)
+	return false;
+    set_ptr roots = word_set_new();
+    set_insert(roots, (word_t) rold);
+    keyvalue_table_ptr map = shadow_restrict(smgr, roots, litset);
+    set_free(litset);
+    set_free(roots);
+    word_t wr;
+    bool ok = keyvalue_find(map, (word_t) rold, &wr);
+    if (ok) {
+	ref_t rnew = (ref_t) wr;
+	assign_ref(argv[1], rnew, false);
+	shadow_show(smgr, rnew, buf);
+	report(1, "RESULT.  %s = %s", argv[1], buf);
+    }
+    keyvalue_free(map);
+    return ok;
+}
+
+bool do_equant(int argc, char *argv[]) {
+    char buf[24];
+    ref_t rold = get_ref(argv[2]);
+    if (rold == REF_INVALID)
+	return false;
+    set_ptr vset = get_refs(argc-3, argv+3);
+    if (!vset)
+	return false;
+    set_ptr roots = word_set_new();
+    set_insert(roots, (word_t) rold);
+    keyvalue_table_ptr map = shadow_equant(smgr, roots, vset);
+    set_free(vset);
+    set_free(roots);
+    word_t wr;
+    bool ok = keyvalue_find(map, (word_t) rold, &wr);
+    if (ok) {
+	ref_t rnew = (ref_t) wr;
+	assign_ref(argv[1], rnew, false);
+	shadow_show(smgr, rnew, buf);
+	report(1, "RESULT.  %s = %s", argv[1], buf);
+    }
+    keyvalue_free(map);
+    return ok;
+}
+
+bool do_uquant(int argc, char *argv[]) {
+    char buf[24];
+    ref_t rold = get_ref(argv[2]);
+    /* Get universal through negation */
+    rold = REF_NEGATE(rold);
+    if (rold == REF_INVALID)
+	return false;
+    set_ptr vset = get_refs(argc-3, argv+3);
+    if (!vset)
+	return false;
+    set_ptr roots = word_set_new();
+    set_insert(roots, (word_t) rold);
+    keyvalue_table_ptr map = shadow_equant(smgr, roots, vset);
+    set_free(vset);
+    set_free(roots);
+    word_t wr;
+    bool ok = keyvalue_find(map, (word_t) rold, &wr);
+    if (ok) {
+	ref_t rnew = (ref_t) wr;
+	rnew = REF_NEGATE(rnew);
+	assign_ref(argv[1], rnew, false);
+	shadow_show(smgr, rnew, buf);
+	report(1, "RESULT.  %s = %s", argv[1], buf);
+    }
+    keyvalue_free(map);
+    return ok;
+}
+
+
+bool do_shift(int argc, char *argv[]) {
+    char buf[24];
+    if (argc <= 3 || (argc-3) % 2 != 0) {
+	err(false, "Invalid number of arguments");
+	return false;
+    }
+    ref_t rold = get_ref(argv[2]);
+    if (rold == REF_INVALID)
+	return false;
+    keyvalue_table_ptr vmap = word_keyvalue_new();
+    size_t i;
+    bool ok = true;
+    for (i = 3; i < argc; i+=2) {
+	ref_t vnew = get_ref(argv[i]);
+	if (vnew == REF_INVALID || REF_VAR(REF_GET_VAR(vnew)) != vnew) {
+	    err(false, "Invalid variable: %s", argv[i]);
+	    ok = false;
+	}
+	ref_t vold = get_ref(argv[i+1]);
+	if (vold == REF_INVALID || REF_VAR(REF_GET_VAR(vold)) != vold) {
+	    err(false, "Invalid variable: %s", argv[i+1]);
+	    ok = false;
+	}
+	keyvalue_insert(vmap, (word_t) vold, (word_t) vnew);
+    }
+    if (!ok) {
+	keyvalue_free(vmap);
+	return false;
+    }
+    set_ptr roots = word_set_new();
+    set_insert(roots, (word_t) rold);
+    keyvalue_table_ptr map = shadow_shift(smgr, roots, vmap);
+    keyvalue_free(vmap);
+    set_free(roots);
+    word_t wr;
+    ok = keyvalue_find(map, (word_t) rold, &wr);
+    if (ok) {
+	ref_t rnew = (ref_t) wr;
+	assign_ref(argv[1], rnew, false);
+	shadow_show(smgr, rnew, buf);
+	report(1, "RESULT.  %s = %s", argv[1], buf);
+    }
+    keyvalue_free(map);
+    return ok;
+}
+
 bool do_information(int argc, char *argv[]) {
     if (!smgr->do_local) {
 	report(0, "Cannot compute information without local refs");
 	return false;
     }
     ref_t r;
-    set_ptr roots = word_set_new();
-    size_t i;
-    for (i = 1; i < argc; i++) {
-	r = get_ref(argv[i]);
-	if (r == REF_INVALID) {
-	    set_free(roots);
-	    return false;
-	}
-	set_insert(roots, (word_t) r);
-    }
+    set_ptr roots = get_refs(argc-1, argv+1);
+    if (!roots)
+	return false;
     set_ptr supset = ref_support(smgr->ref_mgr, roots);
     report_noreturn(0, "Support:");
     size_t idx;
@@ -513,17 +698,10 @@ bool do_support(int argc, char *argv[]) {
 	report(0, "Cannot compute support without refs");
 	return false;
     }
-    set_ptr roots = word_set_new();
-    size_t i;
-    for (i = 1; i < argc; i++) {
-	ref_t r = get_ref(argv[i]);
-	if (r == REF_INVALID) {
-	    set_free(roots);
-	    return false;
-	}
-	set_insert(roots, (word_t) r);
-    }
-    set_ptr supset = ref_support(smgr->ref_mgr, roots);
+    set_ptr roots = get_refs(argc-1, argv+1);
+    if (!roots)
+	return NULL;
+    set_ptr supset = shadow_support(smgr, roots);
     word_t w;
     while (set_removenext(supset, &w)) {
 	ref_t r = (ref_t) w;

@@ -293,6 +293,37 @@ bool keyvalue_iternext(keyvalue_table_ptr kvt, word_t *keyp, word_t *valp) {
 }
 
 
+/* Table marshaling by simply writing out key / value pairs as words */
+
+/* How many words are required to hold this table? */
+size_t keyvalue_marshal_size(keyvalue_table_ptr kvt) {
+    return 2 * kvt->nelements;
+}
+
+/* Write out table as series of words */
+void keyvalue_marshal(keyvalue_table_ptr kvt, word_t *dest) {
+    keyvalue_iterstart(kvt);
+    word_t wk, wv;
+    while (keyvalue_iternext(kvt, &wk, &wv)) {
+	*dest++ = wk;
+	*dest++ = wv;
+    }
+}
+
+/*
+  Read marshaled table data that has been stored as len words and add to table.
+*/
+void keyvalue_unmarshal(keyvalue_table_ptr kvt, word_t *dest, size_t len) {
+    while (len) {
+	word_t wk = *dest++;
+	word_t wv = *dest++;
+	keyvalue_insert(kvt, wk, wv);
+	len -= 2;
+    }
+}
+
+
+
 /****** Set implementation *******/
 
 
@@ -527,6 +558,34 @@ word_t set_choose_random(set_ptr set) {
     }
     /* Shouldn't get here */
     return 0;
+}
+
+
+/* Set marshaling by simply writing out elements as words */
+
+/* How many words are required to hold this table? */
+size_t set_marshal_size(set_ptr set) {
+    return set->nelements;
+}
+
+/* Write out table as series of words */
+void set_marshal(set_ptr set, word_t *dest) {
+    set_iterstart(set);
+    word_t w;
+    while (set_iternext(set, &w)) {
+	*dest++ = w;
+    }
+}
+
+/*
+  Read marshaled table data that has been stored as len words and add to table.
+*/
+void set_unmarshal(set_ptr set, word_t *dest, size_t len) {
+    while (len) {
+	word_t w = *dest++;
+	set_insert(set, w);
+	len--;
+    }
 }
 
 /****** Utility functions ******/

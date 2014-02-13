@@ -64,6 +64,71 @@ static chunk_ptr *stat_messages = NULL;
 /* File descriptor of client that requested flush */
 static int flush_requestor_fd = -1;
 
+/* Information about outstanding global operation */
+typedef struct GELE global_op_ele, *global_op_ptr;
+
+struct GELE {
+    unsigned id;         /* Identity */
+    int worker_ack_cnt;  /* How many workers have acknowledged initial request */
+    int client_fd;
+    global_op_ptr next;
+};
+
+static global_op_ptr global_ops = NULL;
+
+static void add_global_op(unsigned id, int fd) {
+    global_op_ptr ele = malloc_or_fail(sizeof(global_op_ele), "add_global_op");
+    ele->id = id;
+    ele->client_fd = fd;
+    ele->worker_ack_cnt = 0;
+    ele->next = global_ops;
+    global_ops = ele;
+}
+
+static global_op_ptr find_global_op(unsigned id) {
+    global_op_ptr ele = global_ops;
+    while (ele && ele->id != id)
+	ele = ele->next;
+    return ele;
+}
+
+static void free_global_ops() {
+    global_op_ptr ls = global_ops;
+    while (ls) {
+	global_op_ptr ele = ls;
+	ls = ls->next;
+	free_block(ele, sizeof(global_op_ele));
+    }
+    global_ops = NULL;
+}
+
+/* Called receive ACK for global operation from worker */
+/* Return client fd if all acks received (-1 otherwise).  Remove list entry when that's the case */
+static int receive_global_op_worker_ack(unsigned id) {
+    global_op_ptr prev = NULL;
+    global_op_ptr ele = global_ops;
+    while (ele && ele->id != id) {
+	prev = ele;
+	ele = ele->next;
+    }
+    if (ele) {
+	ele->worker_ack_cnt++;
+	if (ele->worker_ack_cnt >= worker_cnt) {
+	    /* Remove entry */
+	    if (prev)
+		prev->next = ele->next;
+	    else
+		global_ops = ele->next;
+	    free_block(ele, sizeof(global_op_ele));
+	    return ele->client_fd;
+	}
+    } else {
+	err(false, "Failed to find entry for global operation with id %u", id);
+    }
+    return -1;
+}
+
+
 /* Forward declarations */
 bool quit_controller(int argc, char *argv[]);
 bool do_controller_flush_cmd(int argc, char *argv[]);
@@ -105,7 +170,7 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     stat_message_cnt = 0;
     flush_requestor_fd = -1;
     stat_messages = calloc_or_fail(worker_cnt, sizeof(chunk_ptr), "init_controller");
-
+    //    global_ops = NULL:
 }
     
 bool do_controller_flush_cmd(int argc, char *argv[]) {
@@ -130,6 +195,7 @@ bool do_controller_flush_cmd(int argc, char *argv[]) {
 	}
     }
     chunk_free(msg);
+    free_global_ops();
     return ok;
 }
 
@@ -175,9 +241,9 @@ bool quit_controller(int argc, char *argv[]) {
 	chunk_free(stat_messages[--stat_message_cnt]);
     }
     free_array(stat_messages, sizeof(chunk_ptr), worker_cnt);
+    free_global_ops();
     return true;
 }
-
 
 static fd_set set;
 static int maxfd = 0;
@@ -412,6 +478,7 @@ static void run_controller(char *infile_name) {
 	    } else if (set_member(worker_fd_set, (word_t) fd, false)) {
 		/* Message from worker */
 		switch (code) {
+		    unsigned agent;
 		case MSG_READY_WORKER:
 		    chunk_free(msg);
 		    if (need_workers == 0) {
@@ -435,23 +502,76 @@ static void run_controller(char *infile_name) {
 		    /* Message gets stashed away.  Don't free it */
 		    add_stat_message(msg);
 		    break;
+		case MSG_CLIOP_ACK:
+		    /* Worker acknowledging receipt of global operation information */
+		    agent = msg_get_header_agent(h);
+		    int client_fd = receive_global_op_worker_ack(agent);
+		    if (client_fd >= 0) {
+			/* Have received complete set of acknowledgements. */
+			/* Send ack to client */
+			if (chunk_write(client_fd, msg)) {
+			    report(6, "Sent ack to client for global operation with id %u", agent);
+			} else {
+			    err(false, "Failed to send ack to client for global operation with id %u.  Fd %d", agent, client_fd);
+			}
+		    }
+		    chunk_free(msg);
+		    break;
 		default:
 		    chunk_free(msg);
 		    err(false, "Unexpected message code %u from worker", code);
 		}
 	    } else if (set_member(client_fd_set, (word_t) fd, false)) {
 		/* Message from client */
-		chunk_free(msg);
 		switch(code){
+		    unsigned agent;
+		    word_t w;
 		case MSG_KILL:
 		    /* Shutdown entire system */
+		    chunk_free(msg);
 		    report(2, "Remote request to kill system");
 		    finish_cmd();
 		    return;
 		case MSG_DO_FLUSH:
 		    /* Iniitiate a flush operation */
+		    chunk_free(msg);
 		    flush_requestor_fd = fd;
 		    do_controller_flush_cmd(0, NULL);
+		    break;
+		case MSG_CLIOP_DATA:
+		    /* Request for global operation from client */
+		    agent = msg_get_header_agent(h);
+		    add_global_op(agent, fd);
+		    /* Send message to all workers */
+		    set_iterstart(worker_fd_set);
+		    while (set_iternext(worker_fd_set, &w)) {
+			int worker_fd = (int) w;
+			if (chunk_write(worker_fd, msg)) {
+			    report(6, "Sent global operation information with id %u to worker with fd %d",
+				   agent, worker_fd);
+			} else {
+			    err(false, "Failed to send global operation information with id %u to worker with fd %d",
+				agent, worker_fd);
+			}
+		    }
+		    chunk_free(msg);
+		    break;
+		case MSG_CLIOP_ACK:
+		    /* Completion of global operation by client */
+		    agent = msg_get_header_agent(h);
+		    /* Send message to all workers */
+		    set_iterstart(worker_fd_set);
+		    while (set_iternext(worker_fd_set, &w)) {
+			int worker_fd = (int) w;
+			if (chunk_write(worker_fd, msg)) {
+			    report(6, "Sent global operation acknowledgement with id %u to worker with fd %d",
+				   agent, worker_fd);
+			} else {
+			    err(false, "Failed to send global operation acknowledgement with id %u to worker with fd %d",
+				agent, worker_fd);
+			}
+		    }
+		    chunk_free(msg);
 		    break;
 		default:
 		    err(false, "Unexpected message code %u from client", code);

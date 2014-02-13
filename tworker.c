@@ -30,6 +30,7 @@ static void init(char *controller_name, unsigned controller_port) {
     add_op_handler(OP_IFORK, do_ifork_op);
     add_op_handler(OP_INCR, do_incr_op);
     add_op_handler(OP_JOIN, do_join_op);
+    set_agent_global_helpers(start_global, finish_global);
 }
 
 static void usage(char *cmd) {

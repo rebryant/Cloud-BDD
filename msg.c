@@ -213,11 +213,11 @@ chunk_ptr msg_new_kill() {
   Create a message containing worker statistics.
   Specify number of values and provide pointer to array of them.
  */
-chunk_ptr msg_new_stat(int nworker, int nstat, size_t *vals) {
+chunk_ptr msg_new_stat(unsigned nworker, unsigned nstat, size_t *vals) {
     chunk_ptr msg = chunk_new(nstat+1);
     word_t h = ((nworker & MASK16) << 16) | MSG_STAT;
     chunk_insert_word(msg, h, 0);
-    int i;
+    unsigned i;
     for (i = 0; i < nstat; i++)
 	chunk_insert_word(msg, vals[i], i+1);
     return msg;
@@ -225,6 +225,40 @@ chunk_ptr msg_new_stat(int nworker, int nstat, size_t *vals) {
 
 chunk_ptr msg_new_flush() {
     return msg_new_op(MSG_DO_FLUSH);
+}
+
+/* Create message containing global operation data */
+/* nwords specifies number of data words (not including header) */
+chunk_ptr msg_new_cliop_data(unsigned agent, unsigned opcode, unsigned nword, word_t *data) {
+    chunk_ptr msg = chunk_new(nword+1);
+    word_t h = ((word_t) agent << 48) | opcode << 8 | MSG_CLIOP_DATA;
+    chunk_insert_word(msg, h, 0);
+    unsigned i;
+    for (i = 0; i < nword; i++)
+	chunk_insert_word(msg, data[i], i+1);
+    return msg;
+}
+
+chunk_ptr msg_new_cliop_ack(unsigned agent) {
+    chunk_ptr msg = chunk_new(1);
+    word_t h = ((word_t) agent << 48) | MSG_CLIOP_ACK;
+    chunk_insert_word(msg, h, 0);
+    return msg;
+}
+
+/* nwords specifies number of data words (not including header) */
+chunk_ptr msg_new_conop_data(unsigned opcode, unsigned nword, word_t *data) {
+    chunk_ptr msg = chunk_new(nword+1);
+    word_t h = (opcode << 8) | MSG_CONOP_DATA;
+    chunk_insert_word(msg, h, 0);
+    unsigned i;
+    for (i = 0; i < nword; i++)
+	chunk_insert_word(msg, data[i], i+1);
+    return msg;
+}
+
+chunk_ptr msg_new_conop_ack() {
+    return msg_new_op(MSG_CONOP_ACK);
 }
 
 /* Create listening socket.

@@ -77,6 +77,21 @@ void keyvalue_iterstart(keyvalue_table_ptr kvt);
 
 bool keyvalue_iternext(keyvalue_table_ptr kvt, word_t *keyp, word_t *valp);
 
+/*
+  Marshaling & unmarshaling.
+  This is not done recursively, and so only works when keys and values are simple words
+*/
+
+/* How many words are required to hold this table? */
+size_t keyvalue_marshal_size(keyvalue_table_ptr kvt);
+
+/* Write out table as series of words */
+void keyvalue_marshal(keyvalue_table_ptr kvt, word_t *dest);
+
+/*
+  Read marshaled table data that has been stored as len words and add to table.
+*/
+void keyvalue_unmarshal(keyvalue_table_ptr kvt, word_t *dest, size_t len);
 
 /** Sets **/
 
@@ -139,6 +154,22 @@ void set_iterstart(set_ptr set);
 bool set_iternext(set_ptr set, word_t *valp);
 
 word_t set_choose_random(set_ptr set);
+
+/*
+  Marshaling & unmarshaling.
+  This is not done recursively, and so only works when keys and values are simple words
+*/
+
+/* How many words are required to hold this table? */
+size_t set_marshal_size(set_ptr set);
+
+/* Write out table as series of words */
+void set_marshal(set_ptr set, word_t *dest);
+
+/*
+  Read marshaled set data that has been stored as len words and add to set.
+*/
+void set_unmarshal(set_ptr set, word_t *dest, size_t len);
 
 /** Utility functions **/
 

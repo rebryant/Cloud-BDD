@@ -12,8 +12,8 @@ Data structure for representing data as a sequence of 64-bit words
 unsigned chunk_check_level;
 
 
-/* Chunk represents data as a sequence of words, with a maximum length of 64 words.
-   Some of these words are valid, while others are not.  These are indicated by a mask
+/*
+  Chunk represents data as a sequence of words.
 */
 
 typedef struct {
@@ -21,7 +21,7 @@ typedef struct {
 #ifdef VMASK
     word_t vmask;    /* Bit vector indicating which words of this chunk are valid */
 #endif
-    word_t words[1]; /* First data word.  Chunks can have up to 64 words */
+    word_t words[1]; /* First data word. */
 } chunk_t, *chunk_ptr;
 
 /* Set parameter limiting maximum allowable chunk length. */
