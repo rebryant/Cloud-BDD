@@ -78,6 +78,12 @@ void keyvalue_iterstart(keyvalue_table_ptr kvt);
 bool keyvalue_iternext(keyvalue_table_ptr kvt, word_t *keyp, word_t *valp);
 
 /*
+  Remove (k,v) values from kvt that match entries in okvt.
+  Provide function to test whether value in kvt matches that in okvt.
+ */
+void keyvalue_diff(keyvalue_table_ptr kvt, keyvalue_table_ptr okvt, eq_fun val_equal);
+
+/*
   Marshaling & unmarshaling.
   This is not done recursively, and so only works when keys and values are simple words
 */
@@ -154,6 +160,12 @@ void set_iterstart(set_ptr set);
 bool set_iternext(set_ptr set, word_t *valp);
 
 word_t set_choose_random(set_ptr set);
+
+/*
+  Remove values from set that match entries in oset.
+ */
+void set_diff(set_ptr set, set_ptr oset);
+
 
 /*
   Marshaling & unmarshaling.

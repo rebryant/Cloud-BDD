@@ -247,18 +247,15 @@ chunk_ptr msg_new_cliop_ack(unsigned agent) {
 }
 
 /* nwords specifies number of data words (not including header) */
-chunk_ptr msg_new_conop_data(unsigned opcode, unsigned nword, word_t *data) {
-    chunk_ptr msg = chunk_new(nword+1);
-    word_t h = (opcode << 8) | MSG_CONOP_DATA;
+chunk_ptr msg_new_conop_start(unsigned opcode) {
+    chunk_ptr msg = chunk_new(1);
+    word_t h = (opcode << 8) | MSG_CONOP_START;
     chunk_insert_word(msg, h, 0);
-    unsigned i;
-    for (i = 0; i < nword; i++)
-	chunk_insert_word(msg, data[i], i+1);
     return msg;
 }
 
-chunk_ptr msg_new_conop_ack() {
-    return msg_new_op(MSG_CONOP_ACK);
+chunk_ptr msg_new_conop_finish() {
+    return msg_new_op(MSG_CONOP_FINISH);
 }
 
 /* Create listening socket.

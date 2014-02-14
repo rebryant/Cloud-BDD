@@ -30,8 +30,8 @@ enum {
     MSG_CLIOP_DATA,
     MSG_CLIOP_ACK,
     /* Initiated by controller */
-    MSG_CONOP_DATA,
-    MSG_CONOP_ACK
+    MSG_CONOP_START,
+    MSG_CONOP_FINISH
 };
 
 /**********************************************************
@@ -140,8 +140,8 @@ chunk_ptr msg_new_stat(unsigned nworker, unsigned nstat, size_t *vals);
 chunk_ptr msg_new_cliop_data(unsigned agent, unsigned opcode, unsigned nword, word_t *data);
 
 chunk_ptr msg_new_cliop_ack(unsigned agent);
-chunk_ptr msg_new_conop_data(unsigned opcode, unsigned nword, word_t *data);
-chunk_ptr msg_new_conop_ack();
+chunk_ptr msg_new_conop_start(unsigned opcode);
+chunk_ptr msg_new_conop_finish();
 
 
 /** Useful functions **/

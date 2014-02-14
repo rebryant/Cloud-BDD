@@ -34,6 +34,8 @@ typedef struct {
     bool do_cudd;
     bool do_local;
     bool do_dist;
+    /* Total number of variables created */
+    size_t nvars;
 } shadow_ele, *shadow_mgr;
 
 shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist);
@@ -42,6 +44,7 @@ void free_shadow_mgr(shadow_mgr mgr);
 ref_t shadow_one(shadow_mgr mgr);
 ref_t shadow_zero(shadow_mgr mgr);
 ref_t shadow_new_variable(shadow_mgr mgr);
+ref_t shadow_get_variable(shadow_mgr mgr, size_t index);
 void shadow_deref(shadow_mgr mgr, ref_t r);
 void shadow_show(shadow_mgr mgr, ref_t r, char *buf);
 

@@ -309,7 +309,7 @@ static set_ptr get_refs(int cnt, char *names[]) {
     bool ok = true;
     for (i = 0; i < cnt; i++) {
 	ref_t r = get_ref(names[i]);
-	if (r == REF_INVALID) {
+	if (REF_IS_INVALID(r)) {
 	    err(false, "Name '%s' invalid", names[i]);
 	    ok = false;
 	} else {
@@ -350,7 +350,7 @@ bool do_and(int argc, char *argv[]) {
     }
     for (i = 2; i < argc; i++) {
 	ref_t rarg = get_ref(argv[i]);
-	if (rarg == REF_INVALID)
+	if (REF_IS_INVALID(rarg))
 	    return false;
 	rval = shadow_and(smgr, rval, rarg);
     }
@@ -370,7 +370,7 @@ bool do_or(int argc, char *argv[]) {
     }
     for (i = 2; i < argc; i++) {
 	ref_t rarg = get_ref(argv[i]);
-	if (rarg == REF_INVALID)
+	if (REF_IS_INVALID(rarg))
 	    return false;
 	rval = shadow_or(smgr, rval, rarg);
     }
@@ -409,10 +409,10 @@ bool do_ite(int argc, char *argv[]) {
     ref_t ri = get_ref(argv[2]);
     ref_t rt = get_ref(argv[3]);
     ref_t re = get_ref(argv[4]);
-    if (ri == REF_INVALID || rt == REF_INVALID || re == REF_INVALID)
+    if (do_ref(smgr) && (REF_IS_INVALID(ri) || REF_IS_INVALID(rt) || REF_IS_INVALID(re)))
 	return false;
     ref_t rval = shadow_ite(smgr, ri, rt, re);
-    if (REF_IS_INVALID(rval))
+    if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
     assign_ref(argv[1], rval, false);
     shadow_show(smgr, rval, buf);
@@ -509,7 +509,7 @@ bool do_equal(int argc, char *argv[]) {
     char bufa[24], bufb[24];
     ra = get_ref(argv[1]);
     rb = get_ref(argv[2]);
-    if (ra == REF_INVALID || rb == REF_INVALID)
+    if (do_ref(smgr) && (REF_IS_INVALID(ra) || REF_IS_INVALID(rb)))
 	return false;
     shadow_show(smgr, ra, bufa);
     shadow_show(smgr, rb, bufb);
@@ -536,7 +536,7 @@ chunk_ptr run_flush() {
 bool do_cofactor(int argc, char *argv[]) {
     char buf[24];
     ref_t rold = get_ref(argv[2]);
-    if (rold == REF_INVALID)
+    if (do_ref(smgr) && REF_IS_INVALID(rold))
 	return false;
     set_ptr litset = get_refs(argc-3, argv+3);
     if (!litset)
@@ -555,13 +555,13 @@ bool do_cofactor(int argc, char *argv[]) {
 	report(1, "RESULT.  %s = %s", argv[1], buf);
     }
     keyvalue_free(map);
-    return ok;
+   return ok;
 }
 
 bool do_equant(int argc, char *argv[]) {
     char buf[24];
     ref_t rold = get_ref(argv[2]);
-    if (rold == REF_INVALID)
+    if (do_ref(smgr) && REF_IS_INVALID(rold))
 	return false;
     set_ptr vset = get_refs(argc-3, argv+3);
     if (!vset)
@@ -588,7 +588,7 @@ bool do_uquant(int argc, char *argv[]) {
     ref_t rold = get_ref(argv[2]);
     /* Get universal through negation */
     rold = REF_NEGATE(rold);
-    if (rold == REF_INVALID)
+    if (do_ref(smgr) && REF_IS_INVALID(rold))
 	return false;
     set_ptr vset = get_refs(argc-3, argv+3);
     if (!vset)
@@ -619,19 +619,19 @@ bool do_shift(int argc, char *argv[]) {
 	return false;
     }
     ref_t rold = get_ref(argv[2]);
-    if (rold == REF_INVALID)
+    if (REF_IS_INVALID(rold))
 	return false;
     keyvalue_table_ptr vmap = word_keyvalue_new();
     size_t i;
     bool ok = true;
     for (i = 3; i < argc; i+=2) {
 	ref_t vnew = get_ref(argv[i]);
-	if (vnew == REF_INVALID || REF_VAR(REF_GET_VAR(vnew)) != vnew) {
+	if (do_ref(smgr) && (REF_IS_INVALID(vnew) || REF_VAR(REF_GET_VAR(vnew)) != vnew)) {
 	    err(false, "Invalid variable: %s", argv[i]);
 	    ok = false;
 	}
 	ref_t vold = get_ref(argv[i+1]);
-	if (vold == REF_INVALID || REF_VAR(REF_GET_VAR(vold)) != vold) {
+	if (do_ref(smgr) && (REF_IS_INVALID(vold) || REF_VAR(REF_GET_VAR(vold)) != vold)) {
 	    err(false, "Invalid variable: %s", argv[i+1]);
 	    ok = false;
 	}

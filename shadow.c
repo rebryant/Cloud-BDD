@@ -25,7 +25,7 @@
    When not running CUDD, use refs as DdNode *values
 */
 
-bool fatal = true;
+bool fatal = false;
 
 bool do_ref(shadow_mgr mgr) {
     return mgr->do_local || mgr->do_dist;
@@ -43,17 +43,25 @@ static DdNode *get_ddnode(shadow_mgr mgr, ref_t r) {
     DdNode *n;
     if (!do_ref(mgr)) {
 	n = (DdNode *) r;
+    } else if (REF_IS_INVALID(r)) {
+	err(fatal, "No node associated with invalid ref");
+	n = Cudd_ReadLogicZero(mgr->bdd_manager);
     } else if (!keyvalue_find(mgr->r2c_table, (word_t ) r, (word_t *) &n)) {
 	char buf[24];
 	shadow_show(mgr, r, buf);
 	err(fatal, "No node associated with ref %s (0x%llx)", buf, r);
-    }
+	n = Cudd_ReadLogicZero(mgr->bdd_manager);
+    } 
     return n;
 }
 
 static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
     ref_t rother;
     DdNode *nother;
+    if (do_ref(mgr) && REF_IS_INVALID(r)) {
+	/* Don't record matches with invalid refs */
+	return;
+    }
     if (!do_ref(mgr))
 	r = (ref_t) n;
     if (!mgr->do_cudd)
@@ -149,6 +157,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist) {
     mgr->c2r_table = word_keyvalue_new();
     mgr->r2c_table = word_keyvalue_new();
     add_ref(mgr, r, n);
+    mgr->nvars = 0;
     return mgr;
 }
 
@@ -200,6 +209,22 @@ ref_t shadow_new_variable(shadow_mgr mgr) {
     if (!do_ref(mgr)) 
 	r = (ref_t) n;
     add_ref(mgr, r, n);
+    mgr->nvars++;
+    return r;
+}
+
+ref_t shadow_get_variable(shadow_mgr mgr, size_t index) {
+    if (index >= mgr->nvars) {
+	err(fatal, "Invalid variable index %lu", index);
+	index = 0;
+    }
+    ref_t r = 0;
+    if (do_ref(mgr)) {
+	r = REF_VAR(index);
+    } else {
+	DdNode *n = Cudd_bddIthVar(mgr->bdd_manager, index);
+	r = (ref_t) n;
+    }
     return r;
 }
 
@@ -306,36 +331,99 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
 }
 
 /*** Unary Operations ***/
+
+static word_t d2w(double d) {
+    union {
+	double d;
+	word_t w;
+    } x;
+    x.d = d;
+    return x.w;
+}
+
+static double w2d(word_t w) {
+    union {
+	double d;
+	word_t w;
+    } x;
+    x.w = w;
+    return x.d;
+}
+
+/* Implementations of operations in CUDD */
+static keyvalue_table_ptr cudd_density(shadow_mgr mgr, set_ptr roots) {
+    keyvalue_table_ptr dtable = word_keyvalue_new();
+    set_iterstart(roots);
+    word_t wr;
+    while (set_iternext(roots, &wr)) {
+	ref_t r = (ref_t) wr;
+	DdNode *n = get_ddnode(mgr, r);
+	double *vdensity = Cudd_CofMinterm(mgr->bdd_manager, n);
+	double density = vdensity[mgr->nvars];
+	free(vdensity);
+	keyvalue_insert(dtable, wr, d2w(density));
+    }
+    return dtable;
+}
+
 /* Create key-value table mapping set of root nodes to their densities. */
 keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots) {
     keyvalue_table_ptr ldensity = NULL;
     keyvalue_table_ptr ddensity = NULL;
-    if (mgr->do_local)
+    keyvalue_table_ptr cdensity = NULL;
+    keyvalue_table_ptr density = NULL;
+    word_t wk, wv1, wv2;
+    if (mgr->do_local) {
 	ldensity = ref_density(mgr->ref_mgr, roots);
+	density = ldensity;
+    }
     if (mgr->do_dist) {
 	ddensity = dist_density(mgr->ref_mgr, roots);
+	if (!density)
+	    density = ddensity;
     }
-    if (ldensity && ddensity) {
-	set_iterstart(roots);
-	word_t wr;
-	double dl, dd;
-	while (set_iternext(roots, &wr)) {
-	    ref_t r = (ref_t) wr;
-	    dl = get_double(ldensity, r);
-	    dd = get_double(ddensity, r);
-	    if (dl != dd) {
-		char buf[24];
-		ref_show(r, buf);
+    if (mgr->do_cudd) {
+	cdensity = cudd_density(mgr, roots);
+	if (!density)
+	    density = cdensity;
+    }
+    if (ddensity && ddensity != density) {
+	/* Have both local and dist versions */
+	keyvalue_diff(ddensity, density, word_equal);
+	while (keyvalue_removenext(ddensity, &wk, &wv1)) {
+	    ref_t r = (ref_t) wk;
+	    char buf[24];
+	    double d1 = w2d(wv1);
+	    shadow_show(mgr, r, buf);
+	    if (keyvalue_find(density, wk, &wv2)) {
+		double d2 = w2d(wv2);
 		err(false, "Density mismatch for %s.  local = %.2f, distance = %.2f",
-		    buf, dl, dd);
+		    buf, d2, d1);
+	    } else {
+		err(false, "Density error for %s.  No local entry", buf);
 	    }
 	}
 	keyvalue_free(ddensity);
     }
-    if (ldensity)
-	return ldensity;
-    else
-	return ddensity;
+    if (cdensity && cdensity != density) {
+	/* Have local or dist, plus cudd */
+	keyvalue_diff(cdensity, density, word_equal);
+	while (keyvalue_removenext(cdensity, &wk, &wv1)) {
+	    ref_t r = (ref_t) wk;
+	    char buf[24];
+	    double d1 = w2d(wv1);
+	    shadow_show(mgr, r, buf);
+	    if (keyvalue_find(density, wk, &wv2)) {
+		double d2 = w2d(wv2);
+		err(false, "Density mismatch for %s.  ref = %.2f, cudd = %.2f",
+		    buf, d2, d1);
+	    } else {
+		err(false, "Density error for %s.  No local entry", buf);
+	    }
+	}
+	keyvalue_free(cdensity);
+    }
+    return density;
 }
 
 /* Compute set of variables (given by refs) in support of set of roots */
@@ -373,7 +461,48 @@ set_ptr shadow_support(shadow_mgr mgr, set_ptr roots) {
 	return dsupport;
 }
 
+/* Convert a set of literals into a CUDD cube */
+static DdNode *cudd_lit_cube(shadow_mgr mgr, set_ptr lits) {
+    size_t nele = lits->nelements;
+    DdNode **vars = calloc_or_fail(nele, sizeof(DdNode *), "cudd_lit_cube");
+    int *phase = calloc_or_fail(nele, sizeof(int), "cudd_lit_cube");
+    word_t wr;
+    int i = 0;
+    set_iterstart(lits);
+    while (set_iternext(lits, &wr)) {
+	ref_t r = (ref_t) wr;
+	int pos = 1;
+	if (REF_GET_NEG(r)) {
+	    r = REF_NEGATE(r);
+	    pos = 0;
+	}
+	DdNode *n = get_ddnode(mgr, r);
+	vars[i] = n;
+	phase[i] = pos;
+	i++;
+    }
+    DdNode *cube = Cudd_bddComputeCube(mgr->bdd_manager, vars, phase, nele);
+    Cudd_Ref(cube);
+    free_array(vars, nele, sizeof(DdNode *));
+    free_array(phase, nele, sizeof(int));
+    return cube;
+}
 
+static keyvalue_table_ptr cudd_restrict(shadow_mgr mgr, set_ptr roots, set_ptr lits) {
+    DdNode *cube = cudd_lit_cube(mgr, lits);
+    keyvalue_table_ptr rtable = word_keyvalue_new();
+    word_t w;
+    set_iterstart(roots);
+    while (set_iternext(roots, &w)) {
+	ref_t r = (ref_t) w;
+	DdNode *n = get_ddnode(mgr, r);
+	DdNode *nr = Cudd_Cofactor(mgr->bdd_manager, n, cube);
+	Cudd_Ref(nr);
+	keyvalue_insert(rtable, w, (word_t) nr);
+    }
+    Cudd_RecursiveDeref(mgr->bdd_manager, cube);
+    return rtable;
+}
 
 /* Create key-value table mapping set of root nodes to their restrictions,
    with respect to a set of literals (given as a set of refs)
@@ -381,40 +510,82 @@ set_ptr shadow_support(shadow_mgr mgr, set_ptr roots) {
 keyvalue_table_ptr shadow_restrict(shadow_mgr mgr, set_ptr roots, set_ptr lits) {
     keyvalue_table_ptr lrmap = NULL;
     keyvalue_table_ptr drmap = NULL;
-    if (mgr->do_local)
+    keyvalue_table_ptr crmap = NULL;
+    keyvalue_table_ptr map = NULL;
+    if (mgr->do_local) {
 	lrmap = ref_restrict(mgr->ref_mgr, roots, lits);
-    if (mgr->do_dist)
+	map = lrmap;
+    }
+    if (mgr->do_dist) {
 	drmap = dist_restrict(mgr->ref_mgr, roots, lits);
-    if (lrmap && drmap) {
+	if (!map)
+	    map = drmap;
+    }
+    if (mgr->do_cudd) {
+	crmap = cudd_restrict(mgr, roots, lits);
+    }
+    if (drmap && map != drmap) {
+	/* Have both local and dist results */
 	word_t wk, wv1, wv2;
-	keyvalue_iterstart(lrmap);
-	while(keyvalue_iternext(lrmap, &wk, &wv1)) {
-	    if (!keyvalue_remove(drmap, wk, NULL, &wv2)) {
-		char buf[24];
-		ref_t r = (ref_t) wk;
-		ref_show(r, buf);
-		err(false, "Found %s in local restriction, but not in dist restriction");
+	keyvalue_diff(drmap, map, word_equal);
+	while (keyvalue_removenext(drmap, &wk, &wv1)) {
+	    char buf[24];
+	    ref_t r = (ref_t) wk;
+	    ref_show(r, buf);
+	    if (keyvalue_find(map, wk, &wv2)) {
+		char buf1[24], buf2[24];
+		ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
+		err(false, "Restriction of %s gives %s in local, but %s in dist", buf, buf2, buf1);
+	    } else {
+		err(false, "Could not find %s in local restriction", buf);
 	    }
-	    else if (wv1 != wv2) {
-		char buf[24], buf1[24], buf2[24];
-		ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
-		err(false, "Restriction of %s gives %s in local, but %s in dist", buf, buf1, buf2);
-	    }
-	}
-	/* See if there are any remaining dist members */
-	keyvalue_iterstart(drmap);
-	while (keyvalue_iternext(drmap, &wk, &wv1)) {
-	    char buf[24]; char buf1[24];
-	    ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1);
-	    err(false, "%s has restriction %s in dist map, but none in local map", buf, buf1);
 	}
 	keyvalue_free(drmap);
     }
-    if (lrmap)
-	return lrmap;
-    else
-	return drmap;
+    if (crmap) {
+	if (map) {
+	    /* Have ref & cudd versions */
+	    word_t wk, wv1, wv2;
+	    DdNode *n = NULL;
+	    keyvalue_iterstart(map);
+	    while (keyvalue_iternext(map, &wk, &wv1)) {
+		ref_t rr = (ref_t) wv1;
+		if (keyvalue_find(crmap, wk, &wv2)) {
+		    n = (DdNode *) wv2;
+		    add_ref(mgr, rr, n);
+		}
+	    }
+	    keyvalue_free(crmap);
+	} else {
+	    /* Only doing CUDD */
+	    word_t wk, wv;
+	    keyvalue_iterstart(crmap);
+	    while (keyvalue_iternext(crmap, &wk, &wv)) {
+		DdNode *n = (DdNode *) wv;
+		add_ref(mgr, 0, n);
+	    }
+	    map = crmap;
+	}
+    }
+    return map;
 }
+
+static keyvalue_table_ptr cudd_equant(shadow_mgr mgr, set_ptr roots, set_ptr vars) {
+    DdNode *cube = cudd_lit_cube(mgr, vars);
+    keyvalue_table_ptr etable = word_keyvalue_new();
+    word_t w;
+    set_iterstart(roots);
+    while (set_iternext(roots, &w)) {
+	ref_t r = (ref_t) w;
+	DdNode *n = get_ddnode(mgr, r);
+	DdNode *nr = Cudd_bddExistAbstract(mgr->bdd_manager, n, cube);
+	Cudd_Ref(nr);
+	keyvalue_insert(etable, w, (word_t) nr);
+    }
+    Cudd_RecursiveDeref(mgr->bdd_manager, cube);
+    return etable;
+}
+
 
 /* Create key-value table mapping set of root nodes to their
    existential quantifications with respect to a set of variables
@@ -423,40 +594,93 @@ keyvalue_table_ptr shadow_restrict(shadow_mgr mgr, set_ptr roots, set_ptr lits) 
 keyvalue_table_ptr shadow_equant(shadow_mgr mgr, set_ptr roots, set_ptr vars) {
     keyvalue_table_ptr lmap = NULL;
     keyvalue_table_ptr dmap = NULL;
-    if (mgr->do_local)
+    keyvalue_table_ptr cmap = NULL;
+    keyvalue_table_ptr map = NULL;
+    if (mgr->do_local) {
 	lmap = ref_equant(mgr->ref_mgr, roots, vars);
-    if (mgr->do_dist)
+	map = lmap;
+    }
+    if (mgr->do_dist) {
 	dmap = dist_equant(mgr->ref_mgr, roots, vars);
-    if (lmap && dmap) {
+	if (!map)
+	    map = dmap;
+    }
+    if (mgr->do_cudd) {
+	cmap = cudd_equant(mgr, roots, vars);
+    }
+    if (dmap && map != dmap) {
+	/* Have both local and dist results */
 	word_t wk, wv1, wv2;
-	keyvalue_iterstart(lmap);
-	while(keyvalue_iternext(lmap, &wk, &wv1)) {
-	    if (!keyvalue_remove(dmap, wk, NULL, &wv2)) {
-		char buf[24];
-		ref_t r = (ref_t) wk;
-		ref_show(r, buf);
-		err(false, "Found %s in local quantification, but not in dist quantification");
+	keyvalue_diff(dmap, map, word_equal);
+	while (keyvalue_removenext(dmap, &wk, &wv1)) {
+	    char buf[24];
+	    ref_t r = (ref_t) wk;
+	    ref_show(r, buf);
+	    if (keyvalue_find(map, wk, &wv2)) {
+		char buf1[24], buf2[24];
+		ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
+		err(false, "Quantification of %s gives %s in local, but %s in dist", buf, buf2, buf1);
+	    } else {
+		err(false, "Could not find %s in local quantification", buf);
 	    }
-	    else if (wv1 != wv2) {
-		char buf[24], buf1[24], buf2[24];
-		ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
-		err(false, "Quantification of %s gives %s in local, but %s in dist", buf, buf1, buf2);
-	    }
-	}
-	/* See if there are any remaining dist members */
-	keyvalue_iterstart(dmap);
-	while (keyvalue_iternext(dmap, &wk, &wv1)) {
-	    char buf[24]; char buf1[24];
-	    ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1);
-	    err(false, "%s has quantification %s in dist map, but none in local map", buf, buf1);
 	}
 	keyvalue_free(dmap);
     }
-    if (lmap)
-	return lmap;
-    else
-	return dmap;
+    if (cmap) {
+	if (map) {
+	    /* Have ref & cudd versions */
+	    word_t wk, wv1, wv2;
+	    DdNode *n = NULL;
+	    keyvalue_iterstart(map);
+	    while (keyvalue_iternext(map, &wk, &wv1)) {
+		ref_t rr = (ref_t) wv1;
+		if (keyvalue_find(cmap, wk, &wv2)) {
+		    n = (DdNode *) wv2;
+		    add_ref(mgr, rr, n);
+		}
+	    }
+	    keyvalue_free(cmap);
+	} else {
+	    /* Only doing CUDD */
+	    word_t wk, wv;
+	    keyvalue_iterstart(cmap);
+	    while (keyvalue_iternext(cmap, &wk, &wv)) {
+		DdNode *n = (DdNode *) wv;
+		add_ref(mgr, 0, n);
+	    }
+	    map = cmap;
+	}
+    }
+    return map;
 }
+
+static keyvalue_table_ptr cudd_shift(shadow_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap) {
+    DdNode **vector = calloc_or_fail(mgr->nvars, sizeof(DdNode *), "cudd_shift");
+    size_t i;
+    /* Must build up vector of composition functions */
+    for (i = 0; i < mgr->nvars; i++) {
+	ref_t vref = shadow_get_variable(mgr, i);
+	word_t wv;
+	ref_t nvref = vref;
+	if (keyvalue_find(vmap, (word_t) vref, &wv))
+	    nvref = (ref_t) wv;
+	DdNode *nv = get_ddnode(mgr, nvref);
+	vector[i] = nv;
+    }
+    keyvalue_table_ptr stable = word_keyvalue_new();
+    word_t w;
+    set_iterstart(roots);
+    while (set_iternext(roots, &w)) {
+	ref_t r = (ref_t) w;
+	DdNode *n = get_ddnode(mgr, r);
+	DdNode *ns = Cudd_bddVectorCompose(mgr->bdd_manager, n, vector);
+	Cudd_Ref(ns);
+	keyvalue_insert(stable, w, (word_t) ns);
+    }
+    free_array(vector, mgr->nvars, sizeof(DdNode *));
+    return stable;
+}
+
 
 /* Create key-value table mapping set of root nodes to their shifted versions
    with respect to a mapping from old variables to new ones 
@@ -464,39 +688,64 @@ keyvalue_table_ptr shadow_equant(shadow_mgr mgr, set_ptr roots, set_ptr vars) {
 keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap) {
     keyvalue_table_ptr lmap = NULL;
     keyvalue_table_ptr dmap = NULL;
-    if (mgr->do_local)
+    keyvalue_table_ptr cmap = NULL;
+    keyvalue_table_ptr map = NULL;
+    if (mgr->do_local) {
 	lmap = ref_shift(mgr->ref_mgr, roots, vmap);
-    if (mgr->do_dist)
+	map = lmap;
+    }
+    if (mgr->do_dist) {
 	dmap = dist_shift(mgr->ref_mgr, roots, vmap);
-    if (lmap && dmap) {
+	if (!map)
+	    map = dmap;
+    }
+    if (mgr->do_cudd) {
+	cmap = cudd_shift(mgr, roots, vmap);
+    }
+    if (dmap && map != dmap) {
+	/* Have both local and dist results */
 	word_t wk, wv1, wv2;
-	keyvalue_iterstart(lmap);
-	while(keyvalue_iternext(lmap, &wk, &wv1)) {
-	    if (!keyvalue_remove(dmap, wk, NULL, &wv2)) {
-		char buf[24];
-		ref_t r = (ref_t) wk;
-		ref_show(r, buf);
-		err(false, "Found %s in local shift, but not in dist shift");
+	keyvalue_diff(dmap, map, word_equal);
+	while (keyvalue_removenext(dmap, &wk, &wv1)) {
+	    char buf[24];
+	    ref_t r = (ref_t) wk;
+	    ref_show(r, buf);
+	    if (keyvalue_find(map, wk, &wv2)) {
+		char buf1[24], buf2[24];
+		ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
+		err(false, "Shift of %s gives %s in local, but %s in dist", buf, buf2, buf1);
+	    } else {
+		err(false, "Could not find %s in local shift", buf);
 	    }
-	    else if (wv1 != wv2) {
-		char buf[24], buf1[24], buf2[24];
-		ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
-		err(false, "Shift of %s gives %s in local, but %s in dist", buf, buf1, buf2);
-	    }
-	}
-	/* See if there are any remaining dist members */
-	keyvalue_iterstart(dmap);
-	while (keyvalue_iternext(dmap, &wk, &wv1)) {
-	    char buf[24]; char buf1[24];
-	    ref_show((ref_t) wk, buf); ref_show((ref_t) wv1, buf1);
-	    err(false, "%s has shift %s in dist map, but none in local map", buf, buf1);
 	}
 	keyvalue_free(dmap);
     }
-    if (lmap)
-	return lmap;
-    else
-	return dmap;
+    if (cmap) {
+	if (map) {
+	    /* Have ref & cudd versions */
+	    word_t wk, wv1, wv2;
+	    DdNode *n = NULL;
+	    keyvalue_iterstart(map);
+	    while (keyvalue_iternext(map, &wk, &wv1)) {
+		ref_t rr = (ref_t) wv1;
+		if (keyvalue_find(cmap, wk, &wv2)) {
+		    n = (DdNode *) wv2;
+		    add_ref(mgr, rr, n);
+		}
+	    }
+	    keyvalue_free(cmap);
+	} else {
+	    /* Only doing CUDD */
+	    word_t wk, wv;
+	    keyvalue_iterstart(cmap);
+	    while (keyvalue_iternext(cmap, &wk, &wv)) {
+		DdNode *n = (DdNode *) wv;
+		add_ref(mgr, 0, n);
+	    }
+	    map = cmap;
+	}
+    }
+    return map;
 }
 
 

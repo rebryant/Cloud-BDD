@@ -292,6 +292,19 @@ bool keyvalue_iternext(keyvalue_table_ptr kvt, word_t *keyp, word_t *valp) {
     return true;
 }
 
+/* Remove (k,v) values from kvt that match entries in okvt */
+void keyvalue_diff(keyvalue_table_ptr kvt, keyvalue_table_ptr okvt, eq_fun val_equal) {
+    word_t wk, wv, xwk, xwv;
+    keyvalue_iterstart(okvt);
+    while (keyvalue_iternext(okvt, &wk, &wv)) {
+	if (keyvalue_remove(kvt, wk, &xwk, &xwv)) {
+	    if (!val_equal(wv, xwv)) {
+		/* Put it back in */
+		keyvalue_insert(kvt, xwk, xwv);
+	    }
+	}
+    }
+}
 
 /* Table marshaling by simply writing out key / value pairs as words */
 
@@ -558,6 +571,18 @@ word_t set_choose_random(set_ptr set) {
     }
     /* Shouldn't get here */
     return 0;
+}
+
+
+/*
+  Remove values from set that match entries in oset.
+ */
+void set_diff(set_ptr set, set_ptr oset) {
+    word_t w;
+    set_iterstart(oset);
+    while (set_iternext(oset, &w)) {
+	set_member(set, w, true);
+    }
 }
 
 
