@@ -426,39 +426,98 @@ keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots) {
     return density;
 }
 
+/* Uses CUDD to determine refs for all variable in support set of root functions */
+static set_ptr cudd_support(shadow_mgr mgr, set_ptr roots) {
+    /* Create vector of nodes */
+    DdNode **vector = calloc_or_fail(roots->nelements, sizeof(DdNode *), "cudd_support");
+    size_t i = 0;
+    word_t w;
+    set_iterstart(roots);
+    while (set_iternext(roots, &w)) {
+	ref_t r = (ref_t) w;
+	vector[i++] = get_ddnode(mgr, r);
+    }
+    int *indices = NULL;
+    int cnt = Cudd_VectorSupportIndices(mgr->bdd_manager, vector, roots->nelements, &indices);
+    set_ptr sset = word_set_new();
+    for (i = 0; i < cnt; i++) {
+	ref_t rv = shadow_get_variable(mgr, indices[i]);
+	set_insert(sset, (word_t) rv);
+    }
+    if (indices)
+	free(indices);
+    free_array(vector, roots->nelements, sizeof(DdNode *));
+    return sset;
+}
+
+
 /* Compute set of variables (given by refs) in support of set of roots */
 set_ptr shadow_support(shadow_mgr mgr, set_ptr roots) {
     set_ptr lsupport = NULL;
     set_ptr dsupport = NULL;
-    if (mgr->do_local)
+    set_ptr csupport = NULL;
+    set_ptr support = NULL;
+    if (mgr->do_local) {
 	lsupport = ref_support(mgr->ref_mgr, roots);
-    if (mgr->do_dist)
+	support = lsupport;
+    }
+    if (mgr->do_dist) {
 	dsupport = dist_support(mgr->ref_mgr, roots);
-    if (lsupport && dsupport) {
-	word_t wr;
-	set_iterstart(lsupport);
-	while(set_iternext(lsupport, &wr)) {
-	    if (!set_member(dsupport, wr, true)) {
+	if (!support)
+	    support = dsupport;
+    }
+    if (mgr->do_cudd) {
+	csupport = cudd_support(mgr, roots);
+	if (!support)
+	    support = csupport;
+    }
+    if (dsupport && support != dsupport) {
+	/* Have both local and dist results */
+	word_t w;
+	set_iterstart(support);
+	while (set_iternext(support, &w)) {
+	    if (!set_member(dsupport, w, false)) {
 		char buf[24];
-		ref_t r = (ref_t) wr;
+		ref_t r = (ref_t) w;
 		ref_show(r, buf);
-		err(false, "Found %s in local support, but not in dist support");
+		err(false, "Found %s in local support, but not in dist", buf);
 	    }
 	}
-	/* See if there are any remaining dist members */
 	set_iterstart(dsupport);
-	while (set_iternext(dsupport, &wr)) {
-	    char buf[24];
-	    ref_t r = (ref_t) wr;
-	    ref_show(r, buf);
-	    err(false, "Found %s in dist support, but not in local support");
+	while (set_iternext(dsupport, &w)) {
+	    if (!set_member(support, w, false)) {
+		char buf[24];
+		ref_t r = (ref_t) w;
+		ref_show(r, buf);
+		err(false, "Found %s in dist support, but not in local", buf);
+	    }
 	}
 	set_free(dsupport);
     }
-    if (lsupport)
-	return lsupport;
-    else
-	return dsupport;
+    if (csupport && support != csupport) {
+	/* Have both ref and cudd results */
+	word_t w;
+	set_iterstart(support);
+	while (set_iternext(support, &w)) {
+	    if (!set_member(csupport, w, false)) {
+		char buf[24];
+		ref_t r = (ref_t) w;
+		ref_show(r, buf);
+		err(false, "Found %s in ref support, but not in cudd", buf);
+	    }
+	}
+	set_iterstart(csupport);
+	while (set_iternext(csupport, &w)) {
+	    if (!set_member(support, w, false)) {
+		char buf[24];
+		ref_t r = (ref_t) w;
+		ref_show(r, buf);
+		err(false, "Found %s in cudd support, but not in ref", buf);
+	    }
+	}
+	set_free(csupport);
+    }
+    return support;
 }
 
 /* Convert a set of literals into a CUDD cube */

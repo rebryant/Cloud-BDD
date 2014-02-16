@@ -465,10 +465,6 @@ bool do_delete(int argc, char *argv[]) {
 }
 
 bool do_count(int argc, char *argv[]) {
-    if (!do_ref(smgr)) {
-	report(0, "Cannot compute densities without refs");
-	return false;
-    }
     set_ptr roots = get_refs(argc-1, argv+1);
     if (!roots)
 	return false;
@@ -476,8 +472,8 @@ bool do_count(int argc, char *argv[]) {
     set_ptr supset = shadow_support(smgr, roots);
     report_noreturn(0, "Support:");
     size_t idx;
-    for (idx = 0; idx < smgr->ref_mgr->variable_cnt; idx++) {
-	ref_t r = REF_VAR(idx);
+    for (idx = 0; idx < smgr->nvars; idx++) {
+	ref_t r = shadow_get_variable(smgr, idx);
 	if (set_member(supset, (word_t) r, false)) {
 	    char *name = name_find(r);	    
 	    if (name)
@@ -659,19 +655,15 @@ bool do_shift(int argc, char *argv[]) {
 }
 
 bool do_information(int argc, char *argv[]) {
-    if (!smgr->do_local) {
-	report(0, "Cannot compute information without local refs");
-	return false;
-    }
     ref_t r;
     set_ptr roots = get_refs(argc-1, argv+1);
     if (!roots)
 	return false;
-    set_ptr supset = ref_support(smgr->ref_mgr, roots);
+    set_ptr supset = shadow_support(smgr, roots);
     report_noreturn(0, "Support:");
     size_t idx;
-    for (idx = 0; idx < smgr->ref_mgr->variable_cnt; idx++) {
-	r = REF_VAR(idx);
+    for (idx = 0; idx < smgr->nvars; idx++) {
+	r = shadow_get_variable(smgr, idx);
 	if (set_member(supset, (word_t) r, false)) {
 	    char *name = name_find(r);	    
 	    if (name)
@@ -685,19 +677,17 @@ bool do_information(int argc, char *argv[]) {
     }
     report_noreturn(0, "\n");
     set_free(supset);
-    set_ptr rset = ref_reach(smgr->ref_mgr, roots);
-    report(0, "Size: %lu nodes", rset->nelements);
+    if (smgr->do_local) {
+	set_ptr rset = ref_reach(smgr->ref_mgr, roots);
+	report(0, "Size: %lu nodes", rset->nelements);
+	set_free(rset);
+    }
     set_free(roots);
-    set_free(rset);
     return true;
 }
 
 
 bool do_support(int argc, char *argv[]) {
-    if (!do_ref(smgr)) {
-	report(0, "Cannot compute support without refs");
-	return false;
-    }
     set_ptr roots = get_refs(argc-1, argv+1);
     if (!roots)
 	return NULL;
