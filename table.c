@@ -445,6 +445,7 @@ set_ptr set_clone(set_ptr set, copy_fun_t cfun) {
 	while (list) {
 	    word_t nvalue = cfun ? cfun(list->value) : list->value;
 	    set_insert(rset, nvalue);
+	    list = list->next;
 	}
     }
     return rset;

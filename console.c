@@ -21,6 +21,8 @@
 static cmd_ptr cmd_list = NULL;
 static param_ptr param_list = NULL;
 static bool block_flag = false;
+static bool prompt_flag = true;
+
 /* Am I timing a command that has the console blocked? */
 static bool block_timing = false;
 
@@ -527,6 +529,7 @@ int cmd_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
     while (!block_flag && read_ready()) {
 	cmdline = readline();
 	interpret_cmd(cmdline);
+	prompt_flag = true;
     }
     if (!block_flag) {
 	/* Process any commands in input buffer */
@@ -535,9 +538,10 @@ int cmd_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
 	/* Add input fd to readset for select */
 	infd = buf_stack->fd;
 	FD_SET(infd, readfds);
-	if (infd == STDIN_FILENO) {
+	if (infd == STDIN_FILENO && prompt_flag) {
 	    printf("%s", prompt);
 	    fflush(stdout);
+	    prompt_flag = true;
 	}
 	if (infd >= nfds) {
 	    nfds = infd+1;

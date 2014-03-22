@@ -81,6 +81,7 @@ typedef struct {
     keyvalue_table_ptr unique_table;
     keyvalue_table_ptr ite_table;
     size_t stat_counter[NSTAT];
+    size_t last_nelements;
 } ref_mgr_ele, *ref_mgr;
 
 /* Create a new manager */
@@ -109,6 +110,8 @@ ref_t ref_and(ref_mgr mgr, ref_t aref, ref_t bref);
 ref_t ref_or(ref_mgr mgr, ref_t aref, ref_t bref);
 ref_t ref_xor(ref_mgr mgr, ref_t aref, ref_t bref);
 
+/* Check whether have accumulated enough state to perform GC */
+bool ref_gc_check(ref_mgr mgr);
 
 /*** Unary operations ***/
 
@@ -233,6 +236,7 @@ chunk_ptr build_uop_up(word_t dest, unsigned uid, ref_t ref);
 
 chunk_ptr build_uop_store(word_t dest, unsigned uid, ref_t ref);
 
+
 bool do_var_op(chunk_ptr op);
 bool do_canonize_op(chunk_ptr op);
 bool do_canonize_lookup_op(chunk_ptr op);
@@ -244,10 +248,12 @@ bool do_uop_down_op(chunk_ptr op);
 bool do_uop_up_op(chunk_ptr op);
 bool do_uop_store_op(chunk_ptr op);
 
-/* Operations available to client */
+/* Distance operations available to client */
+
 ref_t dist_var(ref_mgr mgr);
 ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref);
 keyvalue_table_ptr dist_density(ref_mgr mgr, set_ptr roots);
+void dist_mark(ref_mgr mgr, set_ptr roots);
 set_ptr dist_support(ref_mgr mgr, set_ptr roots);
 
 /* Create key-value table mapping set of root nodes to their restrictions,
@@ -276,3 +282,7 @@ void do_summary_stat(chunk_ptr smsg);
 /* Worker UOP functions */
 void uop_start(unsigned id, unsigned opcode, unsigned nword, word_t *data);
 void uop_finish(unsigned id);
+
+/* GC operarations */
+void worker_gc_start();
+void worker_gc_finish();

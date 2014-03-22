@@ -24,6 +24,11 @@
 #include "agent.h"
 #include "test_df.h"
 
+/* Forward declarations */
+void gc_start();
+void gc_finish();
+
+
 static void init(char *controller_name, unsigned controller_port) {
     init_agent(false, controller_name, controller_port);
     set_agent_flush_helper(flush_worker);
@@ -31,6 +36,7 @@ static void init(char *controller_name, unsigned controller_port) {
     add_op_handler(OP_INCR, do_incr_op);
     add_op_handler(OP_JOIN, do_join_op);
     set_agent_global_helpers(start_global, finish_global);
+    set_gc_handlers(gc_start, gc_finish);
 }
 
 static void usage(char *cmd) {
@@ -75,4 +81,14 @@ int main(int argc, char *argv[]) {
     run_worker();
     mem_status(stdout);
     return 0;
+}
+
+void gc_start() {
+    report(1, "Starting Worker GC");
+    sleep(3);
+}
+
+void gc_finish() {
+    sleep(1);
+    report(3, "Finishing Worker GC");
 }

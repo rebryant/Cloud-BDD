@@ -28,6 +28,7 @@ unsigned new_operator_id();
 /* Get agent ID for worker based on some hashed value */
 unsigned choose_hashed_worker(word_t hash);
 
+
 /* Get agent ID for arbitary worker (Policy determines how chosen) */
 unsigned choose_some_worker();
 
@@ -79,8 +80,28 @@ typedef void (*stat_function)(chunk_ptr smsg);
 /* Provide handler to support flush operation. */
 void set_agent_stat_helper(stat_function ff);
 
-/* Fire an operation and wait for returned operand */
+/* Fire an operation and wait for returned operand.  Starts any deferred GC */
 chunk_ptr fire_and_wait(chunk_ptr msg);
+
+/* Fire an operation and wait for returned operand.  Does not start any deferred GC */
+chunk_ptr fire_and_wait_defer(chunk_ptr msg);
+
+/* Enable a deferred garbage collection */
+void undefer();
+
+/* Function to perform GC on either client or worker */
+typedef void (*gc_handler)();
+
+void set_gc_handlers(gc_handler start_handler, gc_handler finish_handler);
+
+/* Function for requesting a GC by a worker */
+void request_gc();
+
+void run_client(char *infile_name);
+
+void run_worker();
+
+
 
 /* Functions to handle global operations */
 /* Start function includes opcode to specify operation + application specific data */
@@ -103,20 +124,8 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data);
 */
 bool finish_client_global();
 
-/*
-  Initiate global operation from controller.
-  Returns to controller when all workers ready to perform their operations 
-*/
-bool start_controller_global(unsigned opcode, unsigned nword, word_t *data);
-
-/*
-  Finalize global operation from controller.
- */
-bool finish_controller_global();
 
 
 
-void run_client(char *infile_name);
 
-void run_worker();
 

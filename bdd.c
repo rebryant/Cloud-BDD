@@ -19,6 +19,16 @@
 #include "agent.h"
 #include "bdd.h"
 
+/*
+  Parameters controlling garbage collection
+ */
+
+/* Max ratio between current number of unique nodes & number at end of previous GC */
+#define GC_RATIO 2
+
+/* Minimum node count below which will not trigger GC */
+#define GC_THRESHOLD 100000
+
 /* Unique table uses a linked list for each possible hash value. */
 
 /*
@@ -88,6 +98,7 @@ ref_mgr new_ref_mgr() {
     size_t i;
     for (i = 0; i < NSTAT; i++)
 	mgr->stat_counter[i] = 0;
+    mgr->last_nelements = 0;
     return mgr;
 }
 
@@ -588,6 +599,16 @@ ref_t ref_xor(ref_mgr mgr, ref_t aref, ref_t bref) {
     return ref_ite(mgr, aref, REF_NEGATE(bref), bref);
 }
 
+/* See if it's time to perform a GC */
+bool ref_gc_check(ref_mgr mgr) {
+    size_t n = mgr->stat_counter[STATB_UNIQ_CURR];
+    if (n <= GC_THRESHOLD)
+	return false;
+    if (n <= GC_RATIO * mgr->last_nelements)
+	return false;
+    return true;
+}
+
 /*** Implementation of unary operations ****/
 
 /* Supported operations */
@@ -763,7 +784,7 @@ static word_t vset2bv(set_ptr set) {
     while (set_iternext(set, &wr)) {
 	ref_t r = (ref_t) wr;
 	unsigned idx = REF_GET_VAR(r);
-	vset |= (1<<idx);
+	vset |= ((word_t) 1<<idx);
     }
     return vset;
 }
@@ -783,15 +804,19 @@ static set_ptr bv2vset(word_t vset) {
 }
 
 static word_t uop_node_support(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
+    /* Result is bit vector encoding local and downward support */
     /* Aux info is a set indicating already found support members */
     if (REF_IS_CONST(r))
-	return (word_t) 1;
+	return (word_t) 0;
+    /* Set form */
     set_ptr supset = (set_ptr) auxinfo;
     ref_t vr = REF_VAR(REF_GET_VAR(r));
     if (!set_member(supset, (word_t) vr, false)) {
 	set_insert(supset, (word_t) vr);
     }
-    return vset2bv(supset);
+    /* Bit vector form */
+    word_t lbv = (word_t) 1 << REF_GET_VAR(r);
+    return lbv | hival | loval;
 }
 
 static word_t d2w(double d) {
@@ -1018,11 +1043,12 @@ static void complete_collection(ref_mgr mgr, set_ptr rset) {
     mgr->unique_table = new_uniq;
     clear_ite_table(mgr);
     mgr->stat_counter[STATB_UNIQ_CURR] = end_cnt;
+    mgr->last_nelements = end_cnt;
     report(1, "Garbage Collection: %lu --> %lu function refs", start_cnt, end_cnt);
 }
 
 
-/* Garbage collection.  Find all nodes reachable from roots and keep only those in unique table */
+/* Local garbage collection.  Find all nodes reachable from roots and keep only those in unique table */
 void ref_collect(ref_mgr mgr, set_ptr roots) {
     set_ptr rset = ref_reach(mgr, roots);
     complete_collection(mgr, rset);
@@ -1115,6 +1141,18 @@ chunk_ptr flush_dref_mgr() {
     mem_status(stdout);
     init_dref_mgr();
     return msg;
+}
+
+/* Initiate global operation and retrieve ref result */
+static ref_t fire_wait_and_get(ref_mgr mgr, chunk_ptr msg) {
+    chunk_ptr rmsg = fire_and_wait_defer(msg);
+    if (!rmsg) {
+	err(false, "Attempt to perform operation failed");
+	return REF_ZERO;
+    }
+    ref_t r = (ref_t) chunk_get_word(rmsg, 1);
+    chunk_free(rmsg);
+    return r;
 }
 
 chunk_ptr build_var(word_t dest) {
@@ -1292,6 +1330,9 @@ bool do_canonize_lookup_op(chunk_ptr op) {
     if (negate)
 	r = REF_NEGATE(r);
     bool ok = send_ref_as_operand(dest, r);
+    if (ref_gc_check(mgr))
+	/* Request a GC */
+	request_gc();
     return ok;
 }
 
@@ -1630,8 +1671,9 @@ static bool up_store(uop_mgr_ptr umgr, word_t dest, word_t ref, word_t val) {
     word_t w;
     if (keyvalue_remove(umgr->deferred_uop_table, (word_t) ref, NULL, &w)) {
 	ilist_ptr ilist = (ilist_ptr) w;
-	while (ilist) {
-	    word_t ndest = ilist->dest;
+	ilist_ptr ele = ilist;
+	while (ele) {
+	    word_t ndest = ele->dest;
 	    ok = ok && send_as_operand(ndest, val);
 	    if (verblevel >= 4) {
 		unsigned op_id = msg_get_dest_op_id(ndest);
@@ -1639,7 +1681,7 @@ static bool up_store(uop_mgr_ptr umgr, word_t dest, word_t ref, word_t val) {
 		report(4, "\tSent deferred result.  Agent %u, Op Id 0x%x",
 		       agent, op_id);
 	    }
-	    ilist = ilist->next;
+	    ele = ele->next;
 	}
 	ilist_free(ilist);
     }
@@ -1836,14 +1878,8 @@ bool do_uop_store_op(chunk_ptr op) {
 ref_t dist_var(ref_mgr mgr) {
     word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
     chunk_ptr msg = build_var(dest);
-    chunk_ptr rmsg = fire_and_wait(msg);
+    ref_t r = fire_wait_and_get(mgr, msg);
     chunk_free(msg);
-    if (!rmsg) {
-	err(false, "Attempt to create variable failed");
-	return REF_ZERO;
-    }
-    ref_t r = (ref_t) chunk_get_word(rmsg, 1);
-    chunk_free(rmsg);
     return r;
 }
 
@@ -1863,14 +1899,8 @@ ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 	bool negate = REF_GET_NEG(rlocal);
 	word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
 	chunk_ptr msg = build_ite_lookup(dest, niref, ntref, neref, negate);
-	chunk_ptr rmsg = fire_and_wait(msg);
+	ref_t r = fire_wait_and_get(mgr, msg);
 	chunk_free(msg);
-	if (!rmsg) {
-	    err(false, "Attempt to perform distant ITE failed");
-	    return REF_ZERO;
-	}
-	ref_t r = (ref_t) chunk_get_word(rmsg, 1);
-	chunk_free(rmsg);
 	return r;
     } else {
 	return rlocal;
@@ -1891,6 +1921,7 @@ keyvalue_table_ptr dist_density(ref_mgr mgr, set_ptr roots) {
 	ref_t r = (ref_t) w;
 	word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
 	chunk_ptr msg = build_uop_down(dest, own_agent, r);
+
 	chunk_ptr rmsg = fire_and_wait(msg);
 	chunk_free(msg);
 	if (rmsg) {
@@ -1907,6 +1938,26 @@ keyvalue_table_ptr dist_density(ref_mgr mgr, set_ptr roots) {
     return dtable;
 }
 
+void dist_mark(ref_mgr mgr, set_ptr roots) {
+    set_iterstart(roots);
+    word_t w;
+    while (set_iternext(roots, &w)) {
+	ref_t r = (ref_t) w;
+	word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
+	/* Controller uses uid 0 */
+	if (verblevel >= 5) {
+	    char buf[24];
+	    ref_show(r, buf);
+	    report(5, "Starting mark at root %s", buf);
+	}
+	chunk_ptr msg = build_uop_down(dest, 0, r);
+	chunk_ptr rmsg = fire_and_wait(msg);
+	chunk_free(msg);
+	if (rmsg)
+	    chunk_free(rmsg);
+    }
+}
+
 set_ptr dist_support(ref_mgr mgr, set_ptr roots) {
     /* Implement using bit vector representation of variable set */
     word_t vset = 0;
@@ -1914,7 +1965,7 @@ set_ptr dist_support(ref_mgr mgr, set_ptr roots) {
 	report(5, "Started support operation");
     } else {
 	err(false, "Couldn't start global operation");
-	return false;
+	return NULL;
     }
     set_iterstart(roots);
     word_t w;
@@ -1959,17 +2010,9 @@ keyvalue_table_ptr dist_restrict(ref_mgr mgr, set_ptr roots, set_ptr lits) {
 	ref_t r = (ref_t) w;
 	word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
 	chunk_ptr msg = build_uop_down(dest, own_agent, r);
-	chunk_ptr rmsg = fire_and_wait(msg);
+	ref_t nr = fire_wait_and_get(mgr, msg);
 	chunk_free(msg);
-	if (rmsg) {
-	    word_t v = chunk_get_word(rmsg, 1);
-	    chunk_free(rmsg);
-	    keyvalue_insert(dtable, (word_t) r, v);
-	} else {
-	    char buf[24];
-	    ref_show(r, buf);
-	    err(false, "Could not get restriction for %s", buf);
-	}
+	keyvalue_insert(dtable, (word_t) r, (word_t) nr);
     }
     finish_client_global(own_agent);
     free_array(data, nword, sizeof(word_t));
@@ -1998,17 +2041,9 @@ keyvalue_table_ptr dist_equant(ref_mgr mgr, set_ptr roots, set_ptr vars) {
 	ref_t r = (ref_t) w;
 	word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
 	chunk_ptr msg = build_uop_down(dest, own_agent, r);
-	chunk_ptr rmsg = fire_and_wait(msg);
+	ref_t nr = fire_wait_and_get(mgr, msg);
 	chunk_free(msg);
-	if (rmsg) {
-	    word_t v = chunk_get_word(rmsg, 1);
-	    chunk_free(rmsg);
-	    keyvalue_insert(dtable, (word_t) r, v);
-	} else {
-	    char buf[24];
-	    ref_show(r, buf);
-	    err(false, "Could not get quantification for %s", buf);
-	}
+	keyvalue_insert(dtable, (word_t) r, (word_t) nr);
     }
     finish_client_global(own_agent);
     free_array(data, nword, sizeof(word_t));
@@ -2035,23 +2070,14 @@ keyvalue_table_ptr dist_shift(ref_mgr mgr, set_ptr roots, keyvalue_table_ptr vma
 	ref_t r = (ref_t) w;
 	word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
 	chunk_ptr msg = build_uop_down(dest, own_agent, r);
-	chunk_ptr rmsg = fire_and_wait(msg);
+	ref_t nr = fire_wait_and_get(mgr, msg);
 	chunk_free(msg);
-	if (rmsg) {
-	    word_t v = chunk_get_word(rmsg, 1);
-	    chunk_free(rmsg);
-	    keyvalue_insert(dtable, (word_t) r, v);
-	} else {
-	    char buf[24];
-	    ref_show(r, buf);
-	    err(false, "Could not get shift for %s", buf);
-	}
+	keyvalue_insert(dtable, (word_t) r, (word_t) nr);
     }
     finish_client_global(own_agent);
     free_array(data, nword, sizeof(word_t));
     return dtable;
 }
-
 
 /* Worker UOP functions */
 void uop_start(unsigned id, unsigned opcode, unsigned nword, word_t *data) {
@@ -2101,10 +2127,10 @@ void uop_finish(unsigned id) {
 	complete_collection(mgr, aset);
 	set_free(aset);
 	break;
-    case UOP_SUPPORT:
     case UOP_DENSITY:
 	/* Don't have auxinfo */
 	break;
+    case UOP_SUPPORT:
     case UOP_COFACTOR:
     case UOP_EQUANT:
 	aset = (set_ptr) umgr->auxinfo;
@@ -2169,3 +2195,10 @@ void do_summary_stat(chunk_ptr smsg) {
     }
 }
 
+void worker_gc_start() {
+    uop_start(0, UOP_MARK, 0, NULL);
+}
+
+void worker_gc_finish() {
+    uop_finish(0);
+}

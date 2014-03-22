@@ -30,11 +30,14 @@ bool do_fork_cmd(int argc, char *argv[]);
 bool do_join_cmd(int argc, char *argv[]);
 bool do_status_cmd(int argc, char *argv[]);
 bool do_global_cmd(int argc, char *argv[]);
+void gc_start();
+void gc_finish();
 
 static void init(char *controller_name, unsigned controller_port) {
     init_cmd();
     init_agent(true, controller_name, controller_port);
     set_agent_stat_helper(do_summary_stat);
+    set_gc_handlers(gc_start, gc_finish);
     add_cmd("incr", do_incr_cmd,               " val cnt      | Increment val cnt times");
     add_cmd("fork", do_fork_cmd,               " wdth val cnt | Perform width incrs and join results");
     add_cmd("join", do_join_cmd,               " v1 v2        | Compute v1+v2");
@@ -211,4 +214,14 @@ bool do_global_cmd(int argc, char *argv[]) {
     bool ok = finish_client_global();
     report(1, "Global command completed");
     return ok;
+}
+
+void gc_start() {
+    sleep(2);
+    report(1, "Starting Client GC");
+}
+
+void gc_finish() {
+    sleep(2);
+    report(1, "Finishing Client GC");
 }

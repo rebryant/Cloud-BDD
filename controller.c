@@ -76,6 +76,57 @@ struct GELE {
 
 static global_op_ptr global_ops = NULL;
 
+/* Related to garbage collection */
+
+/* GC proceeds asynchronously as follows: 
+   0: Start in GC_READY state
+   1: Notify all workers that want to start GC.
+      Messge type MSG_GC_START
+      Enter GC_WAIT_WORKER_START state
+   2: Workers will notify that they are ready.
+      Message type MSG_GC_START
+   3: When all workers have responded, notify all clients to start GC.
+      Message type MSG_GC_START
+      Enter GC_WAIT_CLIENT state
+   4: Clients will notify when they have completed marking
+      Message type MSG_GC_FINISH
+   5: When all clients have responded, notify all workers to finish GC
+      Message type MSG_GC_FINISH
+      Enter GC_WAIT_WORKER_FINISH state
+   6: Workers will notify when they are done.
+      Message type MSG_GC_FINISH
+   7: When all workers have responded, notify all clients to finish GC
+      Message type MSG_GC_FINISH
+      Enter GC_READY state
+
+Other events:
+   - Flush or kill will cause GC to abort.  Return to GC_READY state
+   - Client may request unary operation before it is notified by step #3.
+     Allow this operation to proceed to completion.
+ */
+
+/* GC states */
+typedef enum {
+    GC_READY,
+    GC_WAIT_WORKER_START,
+    GC_WAIT_CLIENT,
+    GC_WAIT_WORKER_FINISH
+} gc_state_t;
+
+/* GC status information */
+static gc_state_t gc_state = GC_READY;
+/* Can simply count down as workers respond */
+static size_t need_worker_cnt = 0;
+/* Must explicitly track client responses, since clients can connect/disconnect dynamically */
+static set_ptr need_client_fd_set = NULL;
+/* Clients that have attempted to connect while GC underway */
+static set_ptr defer_client_fd_set = NULL;
+/* Garbage collector generation */
+static unsigned gc_generation = 0;
+
+/***** End of global state *****/
+
+
 static void add_global_op(unsigned id, int fd) {
     global_op_ptr ele = malloc_or_fail(sizeof(global_op_ele), "add_global_op");
     ele->id = id;
@@ -132,13 +183,11 @@ static int receive_global_op_worker_ack(unsigned id) {
 /* Forward declarations */
 bool quit_controller(int argc, char *argv[]);
 bool do_controller_flush_cmd(int argc, char *argv[]);
+bool do_controller_collect_cmd(int argc, char *argv[]);
+bool do_controller_status_cmd(int argc, char *argv[]);
 
-bool do_controller_status_cmd(int argc, char *argv[]) {
-    report(0, "Connections: %u routers, %u workers, %u clients",
-	   router_fd_set->nelements, worker_fd_set->nelements, client_fd_set->nelements);
-    report(0, "%d/%u worker stat messages received", stat_message_cnt, worker_fd_set->nelements);
-    return true;
-}
+static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient);
+
 
 /* Find power of two bigger than given number */
 unsigned biglog2(unsigned v) {
@@ -161,6 +210,7 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     init_cmd();
     add_cmd("status", do_controller_status_cmd,       "              | Determine status of connected nodes");
     add_cmd("flush", do_controller_flush_cmd,         "              | Flush state of all agents");
+    add_cmd("collect", do_controller_collect_cmd,     "              | Initiate garbage collection");
     add_quit_helper(quit_controller);
     need_routers = nrouters;
     need_workers = nworkers;
@@ -170,9 +220,20 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     stat_message_cnt = 0;
     flush_requestor_fd = -1;
     stat_messages = calloc_or_fail(worker_cnt, sizeof(chunk_ptr), "init_controller");
-    //    global_ops = NULL:
+    gc_state = GC_READY;
+    need_worker_cnt = 0;
+    need_client_fd_set = NULL;
+    defer_client_fd_set = NULL;
+    gc_generation = 0;
 }
     
+bool do_controller_status_cmd(int argc, char *argv[]) {
+    report(0, "Connections: %u routers, %u workers, %u clients",
+	   router_fd_set->nelements, worker_fd_set->nelements, client_fd_set->nelements);
+    report(0, "%d/%u worker stat messages received", stat_message_cnt, worker_fd_set->nelements);
+    return true;
+}
+
 bool do_controller_flush_cmd(int argc, char *argv[]) {
     chunk_ptr msg = msg_new_flush();
     word_t w;
@@ -196,8 +257,41 @@ bool do_controller_flush_cmd(int argc, char *argv[]) {
     }
     chunk_free(msg);
     free_global_ops();
+    gc_state = GC_READY;
+    need_worker_cnt = 0;
+    if (need_client_fd_set != NULL)
+	set_free(need_client_fd_set);
+    need_client_fd_set = NULL;
+    if (defer_client_fd_set != NULL)
+	set_free(defer_client_fd_set);
+    defer_client_fd_set = NULL;
     return ok;
 }
+
+bool do_controller_collect_cmd(int argc, char *argv[]) {
+    word_t w;
+    bool ok = true;
+    if (gc_state != GC_READY) {
+	err(false, "Cannot initiate garbage collection while one is still underway");
+	return false;
+    }
+    gc_generation++;
+    chunk_ptr msg = msg_new_gc_start();
+    set_iterstart(worker_fd_set);
+    while (set_iternext(worker_fd_set, &w)) {
+	int fd = (int) w;
+	if (!chunk_write(fd, msg)) {
+	    err(false, "Failed to send gc start message to worker with descriptor %d", fd);
+	    ok = false;
+	}
+    }
+    chunk_free(msg);
+    report(3, "GC waiting for workers to start");
+    gc_state = GC_WAIT_WORKER_START;
+    need_worker_cnt = worker_fd_set->nelements;
+    return ok;
+}
+
 
 bool quit_controller(int argc, char *argv[]) {
     /* Send kill messages to other nodes and close file connections */
@@ -242,6 +336,12 @@ bool quit_controller(int argc, char *argv[]) {
     }
     free_array(stat_messages, sizeof(chunk_ptr), worker_cnt);
     free_global_ops();
+    if (need_client_fd_set != NULL)
+	set_free(need_client_fd_set);
+    need_client_fd_set = NULL;
+    if (defer_client_fd_set != NULL)
+	set_free(defer_client_fd_set);
+    defer_client_fd_set = NULL;
     return true;
 }
 
@@ -413,6 +513,10 @@ static void run_controller(char *infile_name) {
 		    err(false, "Unexpected EOF from connected worker, fd %d", fd);
 		} else if (set_member(client_fd_set, (word_t) fd, true)) {
 		    report(3, "Disconnection from client (fd %d)", fd);
+		    if (need_client_fd_set && set_member(need_client_fd_set, (word_t) fd, false)) {
+			report(3, "Removing client from GC activities");
+			handle_gc_msg(MSG_GC_FINISH, 0, fd, true);
+		    }
 		} else {
 		    err(false, "Unexpected EOF from unknown source, fd %d", fd);
 		}
@@ -466,10 +570,18 @@ static void run_controller(char *infile_name) {
 			add_agent(fd, false);
 		    break;
 		case MSG_REGISTER_CLIENT:
-		    set_insert(client_fd_set, (word_t) fd);
-		    report(4, "Added router with fd %d", fd);
-		    if (need_workers == 0)
-			add_agent(fd, true);
+		    if (gc_state == GC_READY) {
+			set_insert(client_fd_set, (word_t) fd);
+			report(4, "Added client with fd %d", fd);
+			if (need_workers == 0)
+			    add_agent(fd, true);
+		    } else {
+			if (!defer_client_fd_set) {
+			    defer_client_fd_set = word_set_new();
+			}
+			set_insert(defer_client_fd_set, (word_t) fd);
+			report(3, "Deferring client with fd %d until GC completed", fd);
+		    }
 		    break;
 		default:
 		    err(false, "Unexpected message code %u from new connection", code);
@@ -479,6 +591,7 @@ static void run_controller(char *infile_name) {
 		/* Message from worker */
 		switch (code) {
 		    unsigned agent;
+		    unsigned gen;
 		case MSG_READY_WORKER:
 		    chunk_free(msg);
 		    if (need_workers == 0) {
@@ -516,6 +629,16 @@ static void run_controller(char *infile_name) {
 			}
 		    }
 		    chunk_free(msg);
+		    break;
+		case MSG_GC_START:
+		case MSG_GC_FINISH:
+		    handle_gc_msg(code, 0, fd, false);
+		    chunk_free(msg);
+		    break;
+		case MSG_GC_REQUEST:
+		    gen = msg_get_header_generation(h);
+		    chunk_free(msg);
+		    handle_gc_msg(code, gen, fd, false);
 		    break;
 		default:
 		    chunk_free(msg);
@@ -573,6 +696,11 @@ static void run_controller(char *infile_name) {
 		    }
 		    chunk_free(msg);
 		    break;
+		case MSG_GC_START:
+		case MSG_GC_FINISH:
+		    handle_gc_msg(code, 0, fd, true);
+		    chunk_free(msg);
+		    break;
 		default:
 		    err(false, "Unexpected message code %u from client", code);
 		}
@@ -582,6 +710,122 @@ static void run_controller(char *infile_name) {
 		err(false, "Unexpected message on fd %d (Ignored)", fd);
 	    }
 	}
+    }
+}
+
+
+static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
+    char *source = isclient ? "client" : "worker";
+    word_t w;
+    report(5, "Received GC message with code %u from fd %d (%s), while in state %u",
+	   code, fd, source, gc_state);
+    switch (gc_state) {
+    case GC_READY:
+	if (isclient && code == MSG_GC_START) {
+	    /* Garbage collection initiated by client */
+	    report(4, "GC request by client");
+	    do_controller_collect_cmd(0, NULL);
+	} else if (!isclient && code == MSG_GC_REQUEST) {
+	    if (gen == gc_generation+1) {
+		report(4, "GC request by worker");
+		do_controller_collect_cmd(0, NULL);
+	    } else
+		report(4, "Outdated (gen = %u, current generation = %u) GC request by worker",
+		       gen, gc_generation);
+	} else {
+	    err(false, "Unexpected GC message.  Code %u.  In GC_READY state", code);
+	}
+	break;
+    case GC_WAIT_WORKER_START:
+	if (code == MSG_GC_START && !isclient) {
+	    need_worker_cnt--;
+	    if (need_worker_cnt == 0) {
+		chunk_ptr msg = msg_new_gc_start();
+		set_iterstart(client_fd_set);
+		while (set_iternext(client_fd_set, &w)) {
+		    int cfd = (int) w;
+		    if (!chunk_write(cfd, msg)) {
+			err(false, "Failed to send GC start message to client with fd %d", cfd);
+		    }
+		}
+		chunk_free(msg);
+		need_client_fd_set = set_clone(client_fd_set, NULL);
+		gc_state = GC_WAIT_CLIENT;
+		report(3, "GC waiting for clients to finish");
+	    }
+	} else if (code == MSG_GC_REQUEST) {
+	    report(4, "GC request by worker while waiting for workers to start.  Ignored.");
+	} else {
+	    err(false, "Unexpected code %u from %s while waiting for workers to start",
+		code, source);
+	}
+	break;
+    case GC_WAIT_CLIENT:
+	if (code == MSG_GC_FINISH && isclient) {
+	    if (set_member(need_client_fd_set, (word_t) fd, true)) {
+		if (need_client_fd_set->nelements == 0) {
+		    set_free(need_client_fd_set);
+		    need_client_fd_set = NULL;
+		    chunk_ptr msg = msg_new_gc_finish();
+		    set_iterstart(worker_fd_set);
+		    while (set_iternext(worker_fd_set, &w)) {
+			int wfd = (int) w;
+			if (!chunk_write(wfd, msg)) {
+			    err(false, "Failed to send GC Finish message to worker with fd %d", wfd);
+			}
+		    }
+		    chunk_free(msg);
+		    gc_state = GC_WAIT_WORKER_FINISH;
+		    report(3, "GC waiting for workers to finish");
+		    need_worker_cnt = worker_fd_set->nelements;
+		}
+	    } else {
+		err(false, "Got unexpected GC_FINISH message from client with fd %d", fd);
+	    }
+	} else if (code == MSG_GC_REQUEST) {
+	    report(4, "GC request by worker while waiting for client.  Ignored.");
+	} else {
+	    err(false, "Unexpected code %u from %s while waiting for clients to finish",
+		code, source);
+	}
+	break;
+    case GC_WAIT_WORKER_FINISH:
+	if (code == MSG_GC_FINISH && !isclient) {
+	    need_worker_cnt--;
+	    if (need_worker_cnt == 0) {
+		chunk_ptr msg = msg_new_gc_finish();
+		set_iterstart(client_fd_set);
+		while (set_iternext(client_fd_set, &w)) {
+		    int cfd = (int) w;
+		    if (!chunk_write(cfd, msg))
+			err(false, "Failed to send GC finish message to client with fd %d", fd);
+		}
+		chunk_free(msg);
+		/* See if there are deferred client connections */
+		if (defer_client_fd_set != NULL) {
+		    set_iterstart(defer_client_fd_set);
+		    while (set_iternext(defer_client_fd_set, &w)) {
+			int cfd = (int) w;
+			set_insert(client_fd_set, (word_t) cfd);
+			report(4, "Added deferred client with fd %d", cfd);
+			if (need_workers == 0)
+			    add_agent(cfd, true);
+		    }
+		    set_free(defer_client_fd_set);
+		    defer_client_fd_set = NULL;
+		}
+		gc_state = GC_READY;
+		report(3, "GC completed");
+	    }
+	} else if (code == MSG_GC_REQUEST) {
+	    report(4, "GC request by worker while waiting for workers to finish.  Ignored.");
+	} else {
+	    err(false, "Unexpected code %u from %s while waiting for workers to finish",
+		code, source);
+	}
+	break;
+    default:
+	err(false, "GC in unexpected state %u", gc_state);
     }
 }
 
@@ -637,3 +881,4 @@ int main(int argc, char *argv[]) {
     mem_status(stdout);
     return 0;
 }
+

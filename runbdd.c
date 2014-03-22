@@ -46,7 +46,7 @@ keyvalue_table_ptr reftable;
 
 /* Forward declarations */
 bool do_and(int argc, char *argv[]);
-bool do_collect(int argc, char *argv[]);
+bool do_local_collect(int argc, char *argv[]);
 bool do_delete(int argc, char *argv[]);
 bool do_cofactor(int argc, char *argv[]);
 bool do_count(int argc, char *argv[]);
@@ -72,6 +72,9 @@ static ref_t get_ref(char *name);
 static set_ptr get_refs(int cnt, char *names[]);
 static void assign_ref(char *name, ref_t r, bool saturate);
 
+static void client_gc_start();
+static void client_gc_finish();
+
 
 static void bdd_init() {
     smgr = new_shadow_mgr(do_cudd, do_local, do_dist);
@@ -82,12 +85,14 @@ static void bdd_init() {
     ref_t rone = shadow_one(smgr);
     assign_ref("zero", rzero, true);
     assign_ref("one", rone, true);
+    set_gc_handlers(client_gc_start, client_gc_finish);
 }
 
 static void console_init(bool do_dist) {
     add_cmd("and", do_and,                 " fd f1 f2 ...   | fd <- f1 & f2 & ...");
     add_cmd("cofactor", do_cofactor,       " fd f l1 ...    | fd <- cofactor(f, l1, ...");
-    add_cmd("collect", do_collect,         "                | Perform garbage collection");
+    if (!do_dist)
+	add_cmd("collect", do_local_collect,         "                | Perform garbage collection");
     add_cmd("count", do_count,             " f1 f2 ...      | Display function counts");
     add_cmd("delete", do_delete,           " f1 f2 ...      | Delete functions");
     add_cmd("equal", do_equal,             " f1 f2          | Test for equality");
@@ -352,9 +357,16 @@ bool do_and(int argc, char *argv[]) {
 	ref_t rarg = get_ref(argv[i]);
 	if (REF_IS_INVALID(rarg))
 	    return false;
-	rval = shadow_and(smgr, rval, rarg);
+	ref_t nval = shadow_and(smgr, rval, rarg);
+	rval = nval;
     }
     assign_ref(argv[1], rval, false);
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_local_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
     shadow_show(smgr, rval, buf);
     report(1, "RESULT.  %s = %s", argv[1], buf);
     return true;
@@ -372,9 +384,16 @@ bool do_or(int argc, char *argv[]) {
 	ref_t rarg = get_ref(argv[i]);
 	if (REF_IS_INVALID(rarg))
 	    return false;
-	rval = shadow_or(smgr, rval, rarg);
+	ref_t nval = shadow_or(smgr, rval, rarg);
+	rval = nval;
     }
     assign_ref(argv[1], rval, false);
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_local_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
     shadow_show(smgr, rval, buf);
     report(1, "RESULT.  %s = %s", argv[1], buf);
     return true;
@@ -392,9 +411,16 @@ bool do_xor(int argc, char *argv[]) {
 	ref_t rarg = get_ref(argv[i]);
 	if (REF_IS_INVALID(rarg))
 	    return false;
-	rval = shadow_xor(smgr, rval, rarg);
+	ref_t nval = shadow_xor(smgr, rval, rarg);
+	rval = nval;
     }
     assign_ref(argv[1], rval, false);
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_local_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
     shadow_show(smgr, rval, buf);
     report(1, "RESULT.  %s = %s", argv[1], buf);
     return true;
@@ -415,29 +441,67 @@ bool do_ite(int argc, char *argv[]) {
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
     assign_ref(argv[1], rval, false);
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_local_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
     shadow_show(smgr, rval, buf);
     report(1, "RESULT.  %s = %s", argv[1], buf);
     return true;
 }
 
-bool do_collect(int argc, char *argv[]) {
-    if (!smgr->do_local)
-	return true;
+bool do_local_collect(int argc, char *argv[]) {
+    bool ok = true;
     if (!enable_collect) {
 	report(1, "Garbage collection disabled");
-	return true;
+	return ok;
     }
+    if (smgr->do_local) {
+	set_ptr roots = word_set_new();
+	word_t wk, wv;
+	keyvalue_iterstart(nametable);
+	while (keyvalue_iternext(nametable, &wk, &wv)) {
+	    ref_t r = (ref_t) wv;
+	    set_insert(roots, (word_t) r);
+	}
+	ref_collect(smgr->ref_mgr, roots);
+	set_free(roots);
+    }
+    return ok;
+}
+
+static void client_gc_start() {
     set_ptr roots = word_set_new();
     word_t wk, wv;
     keyvalue_iterstart(nametable);
     while (keyvalue_iternext(nametable, &wk, &wv)) {
+	char *name = (char *) wk;
 	ref_t r = (ref_t) wv;
-	set_insert(roots, (word_t) r);
+	if (!set_member(roots, wv, false)  && REF_IS_FUNCT(r)) {
+	    set_insert(roots, wv);
+	    if (verblevel >= 5) {
+		char buf[24];
+		ref_show(r, buf);
+		report(5, "Using root %s = %s", name, buf);
+	    }
+	}
     }
-    ref_collect(smgr->ref_mgr, roots);
+    if (smgr->do_local) {
+	report(4, "Performing local garbage collection");
+	ref_collect(smgr->ref_mgr, roots);
+    }
+    if (smgr->do_dist) {
+	dist_mark(smgr->ref_mgr, roots);
+    }
     set_free(roots);
-    return true;
 }
+
+static void client_gc_finish() {
+    report(4, "GC completed");
+}
+
 
 bool do_delete(int argc, char *argv[]) {
     size_t i;
@@ -550,6 +614,12 @@ bool do_cofactor(int argc, char *argv[]) {
 	shadow_show(smgr, rnew, buf);
 	report(1, "RESULT.  %s = %s", argv[1], buf);
     }
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_local_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
     keyvalue_free(map);
    return ok;
 }
@@ -575,6 +645,12 @@ bool do_equant(int argc, char *argv[]) {
 	shadow_show(smgr, rnew, buf);
 	report(1, "RESULT.  %s = %s", argv[1], buf);
     }
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_local_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
     keyvalue_free(map);
     return ok;
 }
@@ -603,6 +679,12 @@ bool do_uquant(int argc, char *argv[]) {
 	shadow_show(smgr, rnew, buf);
 	report(1, "RESULT.  %s = %s", argv[1], buf);
     }
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_local_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
     keyvalue_free(map);
     return ok;
 }
@@ -650,6 +732,12 @@ bool do_shift(int argc, char *argv[]) {
 	shadow_show(smgr, rnew, buf);
 	report(1, "RESULT.  %s = %s", argv[1], buf);
     }
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_local_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
     keyvalue_free(map);
     return ok;
 }

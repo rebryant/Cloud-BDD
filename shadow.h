@@ -60,6 +60,9 @@ ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref);
 
 bool shadow_equal(shadow_mgr mgr, ref_t aref, ref_t bref);
 
+bool shadow_gc_check(shadow_mgr mgr);
+
+
 /* Create key-value table mapping set of root nodes to their densities. */
 keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots);
 

@@ -388,7 +388,6 @@ def addAssociative(n, f = sys.stdout):
 
     # Add them together
     ckt.addV(s, [a, b, c])
-    ckt.collect()
     ckt.addV(t, [c, b, a])
     ckt.decRefs([a, b, c])
     ckt.information(t)
@@ -415,15 +414,11 @@ def multAssociative(n, f = sys.stdout):
     # Mult them together
     ckt.multV(s, [a, b, c])
     ckt.size()
-    ckt.collect()
     ckt.size()
 
     ckt.multV(t, [c, b, a])
     ckt.decRefs([a, b, c])
     ckt.information(t)
-    ckt.size()
-    # Could collect here but it's kind of a dull picture when you do
-    # ckt.collect()
     # ckt.size()
 
     # Generate comparator
@@ -432,8 +427,6 @@ def multAssociative(n, f = sys.stdout):
     ckt.orN(e, [ckt.node(name) for name in x.nodes])
     ckt.decRefs([x])
     ckt.write("equal zero e")
-    # Could collect here but it's kind of a dull picture when you do
-    # ckt.collect()
     ckt.write("time")
 
 # Functions related to n-queens

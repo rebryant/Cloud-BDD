@@ -29,9 +29,10 @@ enum {
     /* Initiated by client */
     MSG_CLIOP_DATA,
     MSG_CLIOP_ACK,
-    /* Initiated by controller */
-    MSG_CONOP_START,
-    MSG_CONOP_FINISH
+    /* Intiated by controller */
+    MSG_GC_REQUEST,
+    MSG_GC_START,
+    MSG_GC_FINISH
 };
 
 /**********************************************************
@@ -47,6 +48,7 @@ Port: 2
 IP Address: 4
 Word count: 2
 Worker count: 2
+Generation count: 4
 
 Composite quantities.  All listed from MSB to least:
 
@@ -94,6 +96,7 @@ unsigned msg_get_header_ip(word_t header);
 unsigned msg_get_header_wordcount(word_t header);
 unsigned msg_get_header_workercount(word_t header);
 unsigned msg_get_header_snb(word_t header);
+unsigned msg_get_header_generation(word_t header);
 
 /* Extracting information from destination */
 unsigned msg_get_dest_agent(word_t dest);
@@ -140,8 +143,9 @@ chunk_ptr msg_new_stat(unsigned nworker, unsigned nstat, size_t *vals);
 chunk_ptr msg_new_cliop_data(unsigned agent, unsigned opcode, unsigned nword, word_t *data);
 
 chunk_ptr msg_new_cliop_ack(unsigned agent);
-chunk_ptr msg_new_conop_start(unsigned opcode);
-chunk_ptr msg_new_conop_finish();
+chunk_ptr msg_new_gc_request(unsigned gen);
+chunk_ptr msg_new_gc_start();
+chunk_ptr msg_new_gc_finish();
 
 
 /** Useful functions **/

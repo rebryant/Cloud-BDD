@@ -115,6 +115,10 @@ unsigned msg_get_header_snb(word_t header) {
     return (unsigned) (header >> 8) & MASK8;
 }
 
+unsigned msg_get_header_generation(word_t header) {
+    return (unsigned) (header >> 8) & MASK32;
+}
+
 /** Message builders **/
 
 /* Create an empty operator */
@@ -246,16 +250,19 @@ chunk_ptr msg_new_cliop_ack(unsigned agent) {
     return msg;
 }
 
-/* nwords specifies number of data words (not including header) */
-chunk_ptr msg_new_conop_start(unsigned opcode) {
+chunk_ptr msg_new_gc_request(unsigned gen) {
     chunk_ptr msg = chunk_new(1);
-    word_t h = (opcode << 8) | MSG_CONOP_START;
+    word_t h = ((word_t) gen << 8) | MSG_GC_REQUEST;
     chunk_insert_word(msg, h, 0);
     return msg;
 }
 
-chunk_ptr msg_new_conop_finish() {
-    return msg_new_op(MSG_CONOP_FINISH);
+chunk_ptr msg_new_gc_start() {
+    return msg_new_op(MSG_GC_START);
+}
+
+chunk_ptr msg_new_gc_finish() {
+    return msg_new_op(MSG_GC_FINISH);
 }
 
 /* Create listening socket.

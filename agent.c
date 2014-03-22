@@ -74,10 +74,18 @@ size_t agent_stat_counter[NSTATA] = {0};
 static global_op_start_function gop_start_helper = NULL;
 static global_op_finish_function gop_finish_helper = NULL;
 
+/* Helper functions for garbage collection */
+gc_handler start_gc_handler = NULL;
+gc_handler finish_gc_handler = NULL;
+
 /* Forward reference */
 bool quit_agent(int argc, char *argv[]);
 bool do_agent_kill(int argc, char *argv[]);
 bool do_agent_flush(int argc, char *argv[]);
+bool do_agent_gc(int arg, char *argv[]);
+
+static void gc_start(unsigned code);
+static void gc_finish(unsigned code);
 
 /* Represent set of operations as linked list */
 typedef struct OELE op_ele, *op_ptr;
@@ -107,7 +115,23 @@ void set_agent_global_helpers(global_op_start_function gosf, global_op_finish_fu
     gop_finish_helper = goff;
 }
 
+/* Handlers to start & finish GC */
+void set_gc_handlers(gc_handler start_handler, gc_handler finish_handler) {
+    start_gc_handler = start_handler;
+    finish_gc_handler = finish_handler;
+}
 
+typedef enum {
+    GC_IDLE,
+    GC_REQUESTED,
+    GC_DEFER,
+    GC_ACTIVE
+} gc_state_t;
+
+gc_state_t gc_state = GC_IDLE;
+
+/* Sequence number for garbage collection phases */
+unsigned gc_generation = 0;
 
 /* Add an operation */
 void add_op_handler(unsigned opcode, op_handler h) {
@@ -169,6 +193,7 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
 		word_t h = chunk_get_word(msg, i);
 		int fd;
 		unsigned ip = msg_get_header_ip(h);
+
 		unsigned port = msg_get_header_port(h);
 		fd = open_clientfd_ip(ip, port);
 		if (fd < 0) {
@@ -198,6 +223,7 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
 	add_quit_helper(quit_agent);
 	add_cmd("kill", do_agent_kill,     "              | Shutdown system");
 	add_cmd("flush", do_agent_flush,   "              | Flush system");
+	add_cmd("collect", do_agent_gc,    "              | Initiate garbage collection");
     } else {
 	/* Worker must notify controller that it's ready */
 	chunk_ptr rmsg = msg_new_worker_ready(own_agent);
@@ -267,13 +293,26 @@ bool do_agent_kill(int argc, char *argv[]) {
 
 bool do_agent_flush(int argc, char *argv[]) {
     chunk_ptr msg = msg_new_flush();
-    if (chunk_write(controller_fd, msg)) {
+    bool ok = chunk_write(controller_fd, msg);
+    if (ok)
 	report(3, "Notified controller that want to flush system");
-    } else {
+    else 
 	err(false, "Couldn't notify controller that want to flush system");
-    }
     chunk_free(msg);
-    return true;
+    gc_state = GC_IDLE;
+    gc_generation = 0;
+   return ok;
+}
+
+bool do_agent_gc(int argc, char *argv[]) {
+    chunk_ptr msg = msg_new_gc_start();
+    bool ok = chunk_write(controller_fd, msg);
+    chunk_free(msg);
+    if (ok)
+	report(4, "Notified controller that want to run garbage collection");
+    else
+	err(false, "Couldn't notify controller that want to run garbage collection");
+    return ok;
 }
 
 /* Create a new operator id */
@@ -521,6 +560,13 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
 	    report(5, "Received acknowledgement for client global operation");
 	    done = true; ok = true;
 	    break;
+	case MSG_GC_START:
+	    /* Got notice that should initiate garbage collection.
+	       Defer until current operation done */
+	    report(3, "Deferring GC start");
+	    chunk_free(msg);
+	    gc_state = GC_DEFER;
+	    break;
 	default:
 	    chunk_free(msg);
 	    err(false, "Unknown message code %u from controller (ignored)", code);
@@ -683,6 +729,14 @@ void run_worker() {
 			gop_finish_helper(agent);
 		    chunk_free(msg);
 		    break;
+		case MSG_GC_START:
+		    chunk_free(msg);
+		    gc_start(code);
+		    break;
+		case MSG_GC_FINISH:
+		    chunk_free(msg);
+		    gc_finish(code);
+		    break;
 		default:
 		    chunk_free(msg);
 		    err(false, "Unknown message code %u from controller (ignored)", code);
@@ -706,13 +760,22 @@ void run_worker() {
     quit_agent(0, NULL);
 }
 
+/* Enable deferred GC operation */
+void undefer() {
+    /* Fire off any deferred garbage collection */
+    if (gc_state == GC_DEFER)
+	gc_start(MSG_GC_START);
+}
+
 /* Fire an operation and wait for returned operand */
-chunk_ptr fire_and_wait(chunk_ptr msg) {
+chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
+    chunk_ptr rval = NULL;
     if (!send_op(msg)) {
 	err(false, "Failed to send message");
 	return NULL;
     }
-    while (!cmd_done()) {
+    bool local_done = false;
+    while (!(local_done || cmd_done())) {
 	/* Select among controller port, and connections to routers.  Do not accept console input */
 	FD_ZERO(&rset);
 	maxrfd = 0;
@@ -760,6 +823,16 @@ chunk_ptr fire_and_wait(chunk_ptr msg) {
 			flush_helper(0, NULL);
 		    }
 		    break;
+		case MSG_GC_START:
+		    /* Got notice that should initiate garbage collection.
+		       Defer until current operation done */
+		    report(3, "Deferring GC start");
+		    chunk_free(msg);
+		    gc_state = GC_DEFER;
+		    break;
+		case MSG_GC_FINISH:
+		    err(false, "Unexpected GC_FINISH message from controller when waiting for result (ignored)");
+		    break;
 		default:
 		    chunk_free(msg);
 		    err(false, "Unknown message code %u from controller (ignored)", code);
@@ -770,19 +843,43 @@ chunk_ptr fire_and_wait(chunk_ptr msg) {
 		case MSG_OPERATION:
 		    chunk_free(msg);
 		    err(false, "Received unexpected operation.  Ignored.");
-		    return NULL;
+		    local_done = true;
+		    break;
 		case MSG_OPERAND:
 		    report(5, "Received operand with id 0x%x", id);
-		    return msg;
+		    rval = msg;
+		    local_done = true;
+		    break;
 		default:
 		    chunk_free(msg);
 		    err(false, "Received message with unknown code %u (ignored)", code);
-		    return NULL;
+		    local_done = true;
 		}
 	    }
 	}
     }
-    return NULL;
+    return rval;
+}
+
+chunk_ptr fire_and_wait(chunk_ptr msg) {
+    chunk_ptr result = fire_and_wait_defer(msg);
+    undefer();
+    return result;
+}
+
+void request_gc() {
+    if (gc_state != GC_IDLE) {
+	report(4, "GC request when not in GC_IDLE state");
+	return;
+    }
+    unsigned gen = gc_generation+1;
+    chunk_ptr msg = msg_new_gc_request(gen);
+    if (chunk_write(controller_fd, msg))
+	report(4, "Requested garbage collection with generation %u", gen);
+    else
+	err(false, "Failed to request garbage collection with generation %u", gen);
+    chunk_free(msg);
+    gc_state = GC_REQUESTED;
 }
 
 /* Client command loop only considers console inputs + controller messages */
@@ -840,6 +937,14 @@ void run_client(char *infile_name) {
 		    report(5, "Received kill message from controller");
 		    finish_cmd();
 		    break;
+		case MSG_GC_START:
+		    chunk_free(msg);
+		    gc_start(code);
+		    break;
+		case MSG_GC_FINISH:
+		    chunk_free(msg);
+		    gc_finish(code);
+		    break;
 		default:
 		    chunk_free(msg);
 		    err(false, "Unknown message code %u from controller (ignored)", code);
@@ -853,3 +958,42 @@ void run_client(char *infile_name) {
     }
 }
 
+static void gc_start(unsigned code) {
+    block_console();
+    gc_state = GC_ACTIVE;
+    report(3, "Starting GC");
+    if (isclient) {
+	/* Client */
+	if (start_gc_handler)
+	    start_gc_handler();
+	chunk_ptr msg = msg_new_gc_finish();
+	if (!chunk_write(controller_fd, msg))
+	    err(false, "Failed to send GC Finish message to controller");
+	chunk_free(msg);
+    } else {
+	/* Worker */
+	if (start_gc_handler)
+	    start_gc_handler();
+	chunk_ptr msg = msg_new_gc_start();
+	if (!chunk_write(controller_fd, msg))
+	    err(false, "Failed to send GC Start message to controller");
+	chunk_free(msg);
+    }
+}
+
+static void gc_finish(unsigned code) {
+    report(3, "Finishing GC");
+    if (isclient) {
+	if (finish_gc_handler)
+	    finish_gc_handler();
+    } else {
+	if (finish_gc_handler)
+	    finish_gc_handler();
+	chunk_ptr msg = msg_new_gc_finish();
+	chunk_write(controller_fd, msg);
+	chunk_free(msg);
+    }
+    gc_state = GC_IDLE;
+    gc_generation++;
+    unblock_console();
+}

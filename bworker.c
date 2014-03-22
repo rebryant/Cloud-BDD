@@ -24,11 +24,13 @@
 #include "agent.h"
 #include "bdd.h"
 
+
 static void init(char *controller_name, unsigned controller_port) {
     init_agent(false, controller_name, controller_port);
     init_dref_mgr();
     set_agent_flush_helper(flush_dref_mgr);
     set_agent_global_helpers(uop_start, uop_finish);
+    set_gc_handlers(worker_gc_start, worker_gc_finish);
     add_op_handler(OP_VAR, do_var_op);
     add_op_handler(OP_CANONIZE, do_canonize_op);
     add_op_handler(OP_CANONIZE_LOOKUP, do_canonize_lookup_op);

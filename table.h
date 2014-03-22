@@ -1,6 +1,7 @@
 /* Implementation of a very general hash tables to implement a key-value package and set packages.
    keyvalue: Hashes word indicating key to store & retrieve words representing values.
-   set: Hashes word indicating element
+   set: Hashes word indicating element.
+   set insertion does not check for duplicates, and therefore can use to represent multisets
 */
 
 /* Entries in key/value table are a word key and a word value. */
@@ -160,6 +161,8 @@ void set_iterstart(set_ptr set);
 bool set_iternext(set_ptr set, word_t *valp);
 
 word_t set_choose_random(set_ptr set);
+
+set_ptr set_clone(set_ptr set, copy_fun_t cfun);
 
 /*
   Remove values from set that match entries in oset.
