@@ -28,6 +28,9 @@ int enable_collect = 1;
 int do_cudd = 0;
 int do_local = 0;
 int do_dist = 0;
+/* When counting solutions,
+   should I assume all variables are in support of function? */
+int all_vars = 1;
 
 /* Data structures */
 shadow_mgr smgr;
@@ -109,6 +112,7 @@ static void console_init(bool do_dist) {
     add_cmd("var", do_var,                 " v1 v2 ...      | Create variables");
     add_cmd("xor", do_xor,                 " fd f1 f2 ...   | fd <- f1 ^ f2 ^ ...");
     add_param("collect", &enable_collect, "Enable garbage collection");
+    add_param("allvars", &all_vars, "Count all variables in support");
 }
 
 static bool bdd_quit(int argc, char *argv[]) {
@@ -530,33 +534,47 @@ bool do_delete(int argc, char *argv[]) {
 
 bool do_count(int argc, char *argv[]) {
     set_ptr roots = get_refs(argc-1, argv+1);
+    int i;
     if (!roots)
 	return false;
-    keyvalue_table_ptr map = shadow_density(smgr, roots);
-    set_ptr supset = shadow_support(smgr, roots);
-    report_noreturn(0, "Support:");
-    size_t idx;
-    for (idx = 0; idx < smgr->nvars; idx++) {
-	ref_t r = shadow_get_variable(smgr, idx);
-	if (set_member(supset, (word_t) r, false)) {
-	    char *name = name_find(r);	    
-	    if (name)
-		report_noreturn(0, " %s", name);
-	    else {
-		char buf[24];
-		ref_show(r, buf);
-		report_noreturn(0, " %s", buf);
+    if (all_vars) {
+	keyvalue_table_ptr map = shadow_count(smgr, roots);
+	for (i = 1; i < argc; i++) {
+	    ref_t r = get_ref(argv[i]);
+	    word_t w;
+	    if (keyvalue_find(map, (word_t) r, &w)) {
+		report(1, "%s:\t%lu", argv[i], w);
+	    } else {
+		report(1, "%s:\t??", argv[i]);
 	    }
 	}
+    } else {
+	keyvalue_table_ptr map = shadow_density(smgr, roots);
+	set_ptr supset = shadow_support(smgr, roots);
+	report_noreturn(0, "Support:");
+	size_t idx;
+	for (idx = 0; idx < smgr->nvars; idx++) {
+	    ref_t r = shadow_get_variable(smgr, idx);
+	    if (set_member(supset, (word_t) r, false)) {
+		char *name = name_find(r);	    
+		if (name)
+		    report_noreturn(0, " %s", name);
+		else {
+		    char buf[24];
+		    ref_show(r, buf);
+		    report_noreturn(0, " %s", buf);
+		}
+	    }
+	}
+	report(0, "");
+	word_t wt = ((word_t) 1) << supset->nelements;
+	for (i = 1; i < argc; i++)
+	    report(1, "%s:\t%.0f", argv[i], wt * get_double(map, get_ref(argv[i])));
+	keyvalue_free(map);
+	set_free(supset);
     }
-    report(0, "");
-    word_t wt = ((word_t) 1) << supset->nelements;
-    int i;
-    for (i = 1; i < argc; i++)
-	report(1, "%s:\t%.0f", argv[i], wt * get_double(map, get_ref(argv[i])));
     set_free(roots);
-    set_free(supset);
-    keyvalue_free(map);
+
     return true;
 }
 

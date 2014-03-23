@@ -616,6 +616,7 @@ typedef enum {
     UOP_MARK,
     UOP_SUPPORT,
     UOP_DENSITY,
+    UOP_PCOUNT,
     UOP_COFACTOR,
     UOP_EQUANT,
     UOP_SHIFT
@@ -643,6 +644,7 @@ typedef word_t (*uop_node_fun)(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t l
 static word_t uop_node_mark(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
 static word_t uop_node_support(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
 static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
+static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
 static word_t uop_node_cofactor(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
 static word_t uop_node_equant(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
 static word_t uop_node_shift(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
@@ -650,6 +652,7 @@ static word_t uop_node_shift(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t lov
 
 static uop_node_fun uop_node_functions[] = {
     uop_node_mark, uop_node_support, uop_node_density,
+    uop_node_pcount,
     uop_node_cofactor, uop_node_equant, uop_node_shift
 };
 
@@ -852,6 +855,47 @@ static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t l
     return d2w(val);
 }
 
+/* Uop counting packs index and count (relative to that index) into single word */
+static word_t pack_count(unsigned idx, word_t cnt) {
+    return ((word_t) idx << 48) | cnt;
+}
+
+static unsigned unpack_index(word_t pval) {
+    return pval >> 48;
+}
+
+static word_t unpack_val(word_t pval) {
+    return pval & ~((~0L) << 48);    
+}
+
+/* Unpack packed value and weight according to specified index */
+word_t pval2cnt(word_t pval, unsigned idx) {
+    unsigned pidx = unpack_index(pval);
+    word_t pcnt = unpack_val(pval);
+    word_t wt = 1L << (pidx-idx);
+    return wt * pcnt;
+}
+
+static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
+    /* Aux info is count of number of variables */
+    /* Compute count relative to top-level index.  Pack index into high-order 16 bits */
+    word_t nvars = (size_t) auxinfo;
+    word_t cnt;
+    word_t idx = REF_GET_VAR(r);
+    if (idx > nvars)
+	idx = nvars;
+    if (r == REF_ONE) {
+	cnt = 1;
+    } else if (r == REF_ZERO) {
+	cnt = 0;
+    } else {
+	word_t hcnt = pval2cnt(hival, idx+1);
+	word_t lcnt = pval2cnt(loval, idx+1);
+	cnt = hcnt + lcnt;
+    }
+    return pack_count(idx, cnt);
+}
+
 static word_t uop_node_cofactor(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
     if (REF_IS_CONST(r))
 	return (word_t) r;
@@ -941,6 +985,25 @@ static keyvalue_table_ptr map_subset(keyvalue_table_ptr map, set_ptr roots) {
 	} else
 	    keyvalue_insert(result, wr, wv);
     }
+    return result;
+}
+
+/*
+  Create key-value table mapping set of root nodes to their counts.
+*/
+keyvalue_table_ptr ref_count(ref_mgr mgr, set_ptr roots) {
+    word_t nvars = mgr->variable_cnt;
+    uop_mgr_ptr umgr = new_uop(mgr, 0, UOP_PCOUNT, (void *) nvars, false);
+    uop_go(umgr, roots);
+    keyvalue_table_ptr pcnts = map_subset(umgr->map, roots);
+    keyvalue_table_ptr result = word_keyvalue_new();
+    word_t wk, wv;
+    while (keyvalue_removenext(pcnts, &wk, &wv)) {
+	word_t cnt = pval2cnt(wv, 0);
+	keyvalue_insert(result, wk, cnt);
+    }
+    keyvalue_free(pcnts);
+    free_uop(umgr);
     return result;
 }
 
@@ -1913,7 +1976,7 @@ keyvalue_table_ptr dist_density(ref_mgr mgr, set_ptr roots) {
 	report(5, "Started density operation");
     } else {
 	err(false, "Couldn't start global operations");
-	return false;
+	return NULL;
     }
     set_iterstart(roots);
     word_t w;
@@ -1936,6 +1999,39 @@ keyvalue_table_ptr dist_density(ref_mgr mgr, set_ptr roots) {
     }
     finish_client_global(own_agent);
     return dtable;
+}
+
+keyvalue_table_ptr dist_count(ref_mgr mgr, set_ptr roots) {
+    keyvalue_table_ptr ctable = word_keyvalue_new();
+    word_t nvars = mgr->variable_cnt;
+    if (start_client_global(UOP_DENSITY, 0, (void *) nvars)) {
+	report(5, "Started count operation");
+    } else {
+	err(false, "Couldn't start global count operations");
+	return NULL;
+    }
+    set_iterstart(roots);
+    word_t w;
+    while (set_iternext(roots, &w)) {
+	ref_t r = (ref_t) w;
+	word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
+	chunk_ptr msg = build_uop_down(dest, own_agent, r);
+
+	chunk_ptr rmsg = fire_and_wait(msg);
+	chunk_free(msg);
+	if (rmsg) {
+	    word_t v = chunk_get_word(rmsg, 1);
+	    word_t cnt = pval2cnt(v, 0);
+	    chunk_free(rmsg);
+	    keyvalue_insert(ctable, (word_t) r, cnt);
+	} else {
+	    char buf[24];
+	    ref_show(r, buf);
+	    err(false, "Could not get count for %s", buf);
+	}
+    }
+    finish_client_global(own_agent);
+    return ctable;
 }
 
 void dist_mark(ref_mgr mgr, set_ptr roots) {

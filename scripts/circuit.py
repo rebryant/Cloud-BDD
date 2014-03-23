@@ -187,6 +187,9 @@ class Circuit:
     def write(self, line):
         self.outfile.write(line + "\n")
 
+    def comment(self, line):
+        self.write("# " + line)
+
     # Generate single line command
     # Obj can be single node or vector, or list of nodes/vectors
     def cmdLine(self, cmd, obj):
@@ -350,7 +353,7 @@ class Circuit:
 
     # Generate signals indicating whether have 0 or 1 elements of vector set.
     # nv is negation of v
-    def count01(self, c0, c1, nv):
+    def count01(self, c0, c1, v, nv):
         n = len(v.nodes)
         self.andN(c0, [])
         self.orN(c1, [])
@@ -430,40 +433,40 @@ def multAssociative(n, f = sys.stdout):
     ckt.write("time")
 
 # Functions related to n-queens
+# Literal representing value at position r,c
 def sq(r, c, negate = False):
-    return "nr-%d.c-%d" % (r, c) if negate else "r-%d.c-%d" % (r, c)
+    return "!r-%d.c-%d" % (r, c) if negate else "r-%d.c-%d" % (r, c)
 
 def row(n, r, negate = False):
-    return Vec([sq(r, c) for c in range(n)])
+    return Vec([sq(r, c, negate) for c in range(n)])
 
 def col(n, c, negate = False):
-    return Vec([sq(r, c) for r in range(n)])
+    return Vec([sq(r, c, negate) for r in range(n)])
 
 # Principal diagonals numbered from -(n-1) to n-1
 def diag(n, i, negate = False):
     if (i < 0):
         # elements numbered from -i,0 to n-1,n+i-1
-        return Vec([sq(j-i,j) for j in range(n+i)])
+        return Vec([sq(j-i, j, negate) for j in range(n+i)])
     else:
         # elements numbered from 0,i to n-i-1,n-1
-        return Vec([sq(j,j+i) for j in range(n-i)])
+        return Vec([sq(j, j+i, negate) for j in range(n-i)])
 
 # Off diagonals numbered from -(n-1) to n-1
 def offDiag(n, i, negate = False):
     if (i < 0):
         # elements numbered from n-1+i,0 to 0,n-1+i
-        return Vec([sq(n-1+i-j,j) for j in range(n+i)])
+        return Vec([sq(n-1+i-j, j, negate) for j in range(n+i)])
     else:
         # elements numbered from n-i,i to i,n-1
-        return Vec([sq(n-i-j,i+j) for j in range(n-i)])
+        return Vec([sq(n-1-j, i+j, negate) for j in range(n-i)])
 
 # Test of subfunctions
 def tAtMost1(n, f = sys.stdout):
     ckt = Circuit(f)
     v = ckt.nameVec("a", n)
     ckt.declare(v)
-    nv = ckt.nameVec("na", n)
-    ckt.notV(nv, v)
+    nv = ckt.nameVec("!a", n)
     ok = Node("ok")
     ckt.atMost1(ok, v, nv)
     
@@ -472,8 +475,8 @@ def tExactly1(n, f = sys.stdout):
     ckt = Circuit(f)
     v = ckt.nameVec("a", n)
     ckt.declare(v)
-    nv = ckt.nameVec("na", n)
-    ckt.notV(nv, v)
+    nv = ckt.nameVec("!a", n)
+#    ckt.notV(nv, v)
     ok = Node("ok")
     ckt.exactly1(ok, v, nv)
 
@@ -482,11 +485,11 @@ def nQueens(n, f = sys.stdout):
     ckt = Circuit(f)
     # Generate variables for each square
     snames = [sq(i/n, i%n) for i in range(n*n)]
-    nsnames = ["n%s" % name for name in snames]
+    nsnames = ["!%s" % name for name in snames]
     sv = Vec(snames)
     nsv = Vec(nsnames)
+    ckt.write("time")
     ckt.declare(sv)
-    ckt.notV(nsv, sv)
     okr = ckt.nameVec("okr", n)
     okR = Node("okR")
     okc = ckt.nameVec("okc", n)
@@ -495,30 +498,40 @@ def nQueens(n, f = sys.stdout):
     okD = Node("okD")
     oko = ckt.nameVec("oko", n+n-1)
     okO = Node("okO")
+    ckt.comment("Row Constraints")
     # Row constraints
     for r in range(n):
+        ckt.comment("Row %d" % r)
         ckt.exactly1(okr.nodes[r], row(n, r), row(n, r, True))
     ckt.andN(okR, okr.nodes)
     ckt.decRefs([okr])
+    ckt.comment("Column Constraints")
     # Column constraints
     for c in range(n):
+        ckt.comment("Column %d" % c)
         ckt.exactly1(okc.nodes[c], col(n, c), col(n, c, True))
     ckt.andN(okC, okc.nodes)
     ckt.decRefs([okc])
     # Diagonal constraints:
+    ckt.comment("Diagonal Constraints")
     for i in range(-n+1,n):
+        ckt.comment("Diagonal %d" % i)
         out = okd.nodes[i+n-1]
         ckt.atMost1(out, diag(n,i), diag(n, i, True))
     ckt.andN(okD, okd.nodes)
     ckt.decRefs([okd])
     # Off diagonal constraints
+    ckt.comment("Off-diagonal Constraints")
     for i in range(-n+1,n):
+        ckt.comment("Off-diagonal %d" % i)
         out = oko.nodes[i+n-1]
         ckt.atMost1(out, offDiag(n,i), offDiag(n, i, True))
     ckt.andN(okO, oko.nodes)
     ckt.decRefs([oko])
+    ckt.comment("Combine Constraints")
     ok = Node("ok")
     ckt.andN(ok, [okR, okC, okD, okO])
     ckt.decRefs([okR, okC, okD, okO])
-    
+    ckt.write("time")
+    ckt.write("count ok")
     

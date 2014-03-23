@@ -21,18 +21,18 @@ typedef word_t ref_t;
 #define REF_FIELD_UNIQ  0
 
 
-#define REF_WIDTH__NEG  (64         -REF_FIELD_NEG)
-#define REF_WIDTH__TYPE (REF_FIELD_NEG  -REF_FIELD_TYPE)
-#define REF_WIDTH__VAR  (REF_FIELD_TYPE -REF_FIELD_VAR)
-#define REF_WIDTH__HASH (REF_FIELD_VAR  -REF_FIELD_HASH)
-#define REF_WIDTH__UNIQ (REF_FIELD_HASH -REF_FIELD_UNIQ)
+#define REF_WIDTH_NEG  (64         -REF_FIELD_NEG)
+#define REF_WIDTH_TYPE (REF_FIELD_NEG  -REF_FIELD_TYPE)
+#define REF_WIDTH_VAR  (REF_FIELD_TYPE -REF_FIELD_VAR)
+#define REF_WIDTH_HASH (REF_FIELD_VAR  -REF_FIELD_HASH)
+#define REF_WIDTH_UNIQ (REF_FIELD_HASH -REF_FIELD_UNIQ)
 
 #define REF_MAKE_MASK(w) ((1llu<<(w))-1)
-#define REF_MASK_NEG  REF_MAKE_MASK(REF_WIDTH__NEG)
-#define REF_MASK_TYPE REF_MAKE_MASK(REF_WIDTH__TYPE)
-#define REF_MASK_VAR  REF_MAKE_MASK(REF_WIDTH__VAR)
-#define REF_MASK_HASH REF_MAKE_MASK(REF_WIDTH__HASH)
-#define REF_MASK_UNIQ REF_MAKE_MASK(REF_WIDTH__UNIQ)
+#define REF_MASK_NEG  REF_MAKE_MASK(REF_WIDTH_NEG)
+#define REF_MASK_TYPE REF_MAKE_MASK(REF_WIDTH_TYPE)
+#define REF_MASK_VAR  REF_MAKE_MASK(REF_WIDTH_VAR)
+#define REF_MASK_HASH REF_MAKE_MASK(REF_WIDTH_HASH)
+#define REF_MASK_UNIQ REF_MAKE_MASK(REF_WIDTH_UNIQ)
 
 #define PACK_REF(neg, typ, var, hash, uniq) \
   ((((neg)& REF_MASK_NEG)  <<REF_FIELD_NEG)  |  \
@@ -129,6 +129,11 @@ keyvalue_table_ptr ref_density(ref_mgr mgr, set_ptr roots);
 
 /* Retrieve double from map */
 double get_double(keyvalue_table_ptr map, ref_t r);
+
+/*
+  Create key-value table mapping set of root nodes to their counts.
+*/
+keyvalue_table_ptr ref_count(ref_mgr mgr, set_ptr roots);
 
 /* Create key-value table mapping set of root nodes to their restrictions,
    with respect to a set of literals (given as a set of refs)
@@ -253,6 +258,7 @@ bool do_uop_store_op(chunk_ptr op);
 ref_t dist_var(ref_mgr mgr);
 ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref);
 keyvalue_table_ptr dist_density(ref_mgr mgr, set_ptr roots);
+keyvalue_table_ptr dist_count(ref_mgr mgr, set_ptr roots);
 void dist_mark(ref_mgr mgr, set_ptr roots);
 set_ptr dist_support(ref_mgr mgr, set_ptr roots);
 

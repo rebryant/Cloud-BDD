@@ -433,6 +433,79 @@ keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots) {
     return density;
 }
 
+/* Place holder.  Yields count of zero for everyone */
+static keyvalue_table_ptr cudd_count(shadow_mgr mgr, set_ptr roots) {
+    word_t wk, wv;
+    keyvalue_table_ptr result = word_keyvalue_new();
+    set_iterstart(roots);
+    while (set_iternext(roots, &wk)) {
+	wv = 0;
+	keyvalue_insert(result, wk, wv);
+    }
+    return result;
+}
+
+/* Create key-value table mapping set of root nodes to their counts */
+keyvalue_table_ptr shadow_count(shadow_mgr mgr, set_ptr roots) {
+    keyvalue_table_ptr lcount = NULL;
+    keyvalue_table_ptr dcount = NULL;
+    keyvalue_table_ptr ccount = NULL;
+    keyvalue_table_ptr count = NULL;
+    word_t wk, wv1, wv2;
+    if (mgr->do_local) {
+	lcount = ref_count(mgr->ref_mgr, roots);
+	count = lcount;
+    }
+    if (mgr->do_dist) {
+	dcount = dist_count(mgr->ref_mgr, roots);
+	if (!count)
+	    count = dcount;
+    }
+    if (mgr->do_cudd) {
+	ccount = cudd_count(mgr, roots);
+	if (!count)
+	    count = ccount;
+    }
+    if (dcount && dcount != count) {
+	/* Have both local and dist versions */
+	keyvalue_diff(dcount, count, word_equal);
+	while (keyvalue_removenext(dcount, &wk, &wv1)) {
+	    ref_t r = (ref_t) wk;
+	    char buf[24];
+	    word_t c1 = wv1;
+	    shadow_show(mgr, r, buf);
+	    if (keyvalue_find(count, wk, &wv2)) {
+		word_t c2 = wv2;
+		err(false, "Count mismatch for %s.  local = %lu, distance = %lu",
+		    buf, c2, c1);
+	    } else {
+		err(false, "Count error for %s.  No local entry", buf);
+	    }
+	}
+	keyvalue_free(dcount);
+    }
+    if (ccount && ccount != count) {
+	/* Have local or dist, plus cudd */
+	keyvalue_diff(ccount, count, word_equal);
+	while (keyvalue_removenext(ccount, &wk, &wv1)) {
+	    ref_t r = (ref_t) wk;
+	    char buf[24];
+	    word_t c1 = wv1;
+	    shadow_show(mgr, r, buf);
+	    if (keyvalue_find(count, wk, &wv2)) {
+		word_t c2 = wv2;
+		err(false, "Count mismatch for %s.  ref = %lu, cudd = %lu",
+		    buf, c2, c1);
+	    } else {
+		err(false, "Count error for %s.  No local entry", buf);
+	    }
+	}
+	keyvalue_free(ccount);
+    }
+    return count;
+}
+
+
 /* Uses CUDD to determine refs for all variable in support set of root functions */
 static set_ptr cudd_support(shadow_mgr mgr, set_ptr roots) {
     /* Create vector of nodes */
