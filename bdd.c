@@ -879,7 +879,7 @@ word_t pval2cnt(word_t pval, unsigned idx) {
 static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
     /* Aux info is count of number of variables */
     /* Compute count relative to top-level index.  Pack index into high-order 16 bits */
-    word_t nvars = (size_t) auxinfo;
+    word_t nvars = *(word_t *) auxinfo;
     word_t cnt;
     word_t idx = REF_GET_VAR(r);
     if (idx > nvars)
@@ -893,6 +893,14 @@ static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t lo
 	word_t lcnt = pval2cnt(loval, idx+1);
 	cnt = hcnt + lcnt;
     }
+#if 0
+    {
+	char buf[24];
+	ref_show(r, buf);
+	report(1, "Ref %s.  nvars = %lu.  idx = %u.  cnt = %lu",
+	       buf, nvars, idx, cnt);
+    }
+#endif
     return pack_count(idx, cnt);
 }
 
@@ -992,9 +1000,11 @@ static keyvalue_table_ptr map_subset(keyvalue_table_ptr map, set_ptr roots) {
   Create key-value table mapping set of root nodes to their counts.
 */
 keyvalue_table_ptr ref_count(ref_mgr mgr, set_ptr roots) {
-    word_t nvars = mgr->variable_cnt;
-    uop_mgr_ptr umgr = new_uop(mgr, 0, UOP_PCOUNT, (void *) nvars, false);
+    word_t *wstore = malloc_or_fail(sizeof(word_t), "ref_count");
+    *wstore = mgr->variable_cnt;
+    uop_mgr_ptr umgr = new_uop(mgr, 0, UOP_PCOUNT, (void *) wstore, false);
     uop_go(umgr, roots);
+    free_block(wstore, sizeof(word_t));
     keyvalue_table_ptr pcnts = map_subset(umgr->map, roots);
     keyvalue_table_ptr result = word_keyvalue_new();
     word_t wk, wv;
@@ -1943,6 +1953,10 @@ ref_t dist_var(ref_mgr mgr) {
     chunk_ptr msg = build_var(dest);
     ref_t r = fire_wait_and_get(mgr, msg);
     chunk_free(msg);
+    unsigned idx = REF_GET_VAR(r);
+    /* Keep track of highest numbered variable */
+    if (idx >= mgr->variable_cnt)
+	mgr->variable_cnt = idx+1;
     return r;
 }
 
@@ -2004,7 +2018,7 @@ keyvalue_table_ptr dist_density(ref_mgr mgr, set_ptr roots) {
 keyvalue_table_ptr dist_count(ref_mgr mgr, set_ptr roots) {
     keyvalue_table_ptr ctable = word_keyvalue_new();
     word_t nvars = mgr->variable_cnt;
-    if (start_client_global(UOP_DENSITY, 0, (void *) nvars)) {
+    if (start_client_global(UOP_PCOUNT, 1, &nvars)) {
 	report(5, "Started count operation");
     } else {
 	err(false, "Couldn't start global count operations");
@@ -2016,7 +2030,6 @@ keyvalue_table_ptr dist_count(ref_mgr mgr, set_ptr roots) {
 	ref_t r = (ref_t) w;
 	word_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
 	chunk_ptr msg = build_uop_down(dest, own_agent, r);
-
 	chunk_ptr rmsg = fire_and_wait(msg);
 	chunk_free(msg);
 	if (rmsg) {
@@ -2179,6 +2192,7 @@ keyvalue_table_ptr dist_shift(ref_mgr mgr, set_ptr roots, keyvalue_table_ptr vma
 void uop_start(unsigned id, unsigned opcode, unsigned nword, word_t *data) {
     ref_mgr mgr = dmgr->rmgr;
     void *auxinfo = NULL;
+    word_t *wstore = NULL;
     switch(opcode) {
 	set_ptr dset = NULL;
 	keyvalue_table_ptr dtable = NULL;
@@ -2189,6 +2203,12 @@ void uop_start(unsigned id, unsigned opcode, unsigned nword, word_t *data) {
 	break;
     case UOP_DENSITY:
 	/* Don't need auxinfo */
+	break;
+    case UOP_PCOUNT:
+	/* Allocate word and copy nvars from controller */
+	wstore = malloc_or_fail(sizeof(word_t), "uop_start");
+	*wstore = *data;
+	auxinfo = (void *) wstore;
 	break;
     case UOP_COFACTOR:
     case UOP_EQUANT:
@@ -2224,7 +2244,9 @@ void uop_finish(unsigned id) {
 	set_free(aset);
 	break;
     case UOP_DENSITY:
-	/* Don't have auxinfo */
+    case UOP_PCOUNT:
+	/* Deallocate saved word */
+	free_block(umgr->auxinfo, sizeof(word_t));
 	break;
     case UOP_SUPPORT:
     case UOP_COFACTOR:

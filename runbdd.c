@@ -548,6 +548,7 @@ bool do_count(int argc, char *argv[]) {
 		report(1, "%s:\t??", argv[i]);
 	    }
 	}
+	keyvalue_free(map);
     } else {
 	keyvalue_table_ptr map = shadow_density(smgr, roots);
 	set_ptr supset = shadow_support(smgr, roots);

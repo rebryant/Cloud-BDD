@@ -467,7 +467,7 @@ def tAtMost1(n, f = sys.stdout):
     v = ckt.nameVec("a", n)
     ckt.declare(v)
     nv = ckt.nameVec("!a", n)
-    ok = Node("ok")
+    ok = ckt.node("ok")
     ckt.atMost1(ok, v, nv)
     
 # Test of subfunctions
@@ -477,7 +477,7 @@ def tExactly1(n, f = sys.stdout):
     ckt.declare(v)
     nv = ckt.nameVec("!a", n)
 #    ckt.notV(nv, v)
-    ok = Node("ok")
+    ok = ckt.node("ok")
     ckt.exactly1(ok, v, nv)
 
 # Generate constraints for n-queens problem
@@ -491,13 +491,13 @@ def nQueens(n, f = sys.stdout):
     ckt.write("time")
     ckt.declare(sv)
     okr = ckt.nameVec("okr", n)
-    okR = Node("okR")
+    okR = ckt.node("okR")
     okc = ckt.nameVec("okc", n)
-    okC = Node("okC")
+    okC = ckt.node("okC")
     okd = ckt.nameVec("okd", n+n-1)
-    okD = Node("okD")
+    okD = ckt.node("okD")
     oko = ckt.nameVec("oko", n+n-1)
-    okO = Node("okO")
+    okO = ckt.node("okO")
     ckt.comment("Row Constraints")
     # Row constraints
     for r in range(n):
@@ -529,9 +529,13 @@ def nQueens(n, f = sys.stdout):
     ckt.andN(okO, oko.nodes)
     ckt.decRefs([oko])
     ckt.comment("Combine Constraints")
-    ok = Node("ok")
-    ckt.andN(ok, [okR, okC, okD, okO])
-    ckt.decRefs([okR, okC, okD, okO])
+    ok = ckt.node("ok")
+    ckt.andN(ok, [okR, okC])
+    ckt.decRefs([okR, okC])
+    ckt.andN(ok, [ok, okD])
+    ckt.decRefs([okD])
+    ckt.andN(ok, [ok, okO])
+    ckt.decRefs([okO])
     ckt.write("time")
     ckt.write("count ok")
     
