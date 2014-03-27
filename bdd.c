@@ -1903,7 +1903,7 @@ bool do_uop_up_op(chunk_ptr op) {
     if (!umgr)
 	return false;
     unsigned opcode = umgr->operation;
-    word_t val;
+    word_t val = 0;
     bool done = false;
     switch(opcode) {
     case UOP_COFACTOR:

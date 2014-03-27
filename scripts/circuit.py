@@ -377,6 +377,15 @@ class Circuit:
         self.orN(dest, [c0, c1])
         self.decRefs([c0, c1])
 
+    def getBit(self, v, i):
+        return ((v>>i) &1)
+
+    # Create product term to match specified value
+    def matchVal(self, v, vec, out):
+        names = [(("!%s" if self.getBit(v, i) == 0 else "%s") % vec.nodes[i]) for i in range(len(vec.nodes))]
+        lits = Vec(names)
+        self.andN(out, lits.nodes)
+
 ## Some benchmarks:
 # Show that addition is associative
 def addAssociative(n, f = sys.stdout):
@@ -538,4 +547,75 @@ def nQueens(n, f = sys.stdout):
     ckt.decRefs([okO])
     ckt.write("time")
     ckt.write("count ok")
+    
+def bigLog2(x):
+    val = 0
+    while ((1<<val) < x):
+        val+=1
+    return val
+
+# Version of nqueens using logarithmic encoding of column numbers
+def lQueens(n, f = sys.stdout):
+    ckt = Circuit(f)
+    m = bigLog2(n)
+    rows = [ckt.nameVec("v-%d" % r, m) for r in range(n)]
+    nrows = [ckt.nameVec("v-%d" % r, m) for r in range(n)]
+# Interleave variables with MSB first
+#    vars = Vec(["v-%d.%d" % (i %  n, m-1 - (i / n)) for i in range(m*n)])
+# Interleave variables with LSB first
+#    vars = Vec(["v-%d.%d" % (i %  n, (i / n)) for i in range(m*n)])
+# Do variables for each row in succession, MSB first
+    vars = Vec(["v-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
+    ckt.write("time")
+    ckt.declare(vars)
+    snames = [sq(i/n, i%n)for i in range(n*n)]
+    nsnames = ["!%s" % name for name in snames]
+    sv = Vec(snames)
+    nsv = Vec(nsnames)
+    ckt.comment("Individual square functions")
+    for r in range(n):
+        for c in range(n):
+            ckt.matchVal(c, rows[r], sq(r,c))
+    okc = ckt.nameVec("okc", n)
+    okC = ckt.node("okC")
+    okd = ckt.nameVec("okd", n+n-1)
+    okD = ckt.node("okD")
+    oko = ckt.nameVec("oko", n+n-1)
+    okO = ckt.node("okO")
+    ckt.comment("Column Constraints")
+    # Column constraints
+    for c in range(n):
+        ckt.comment("Column %d" % c)
+        ckt.exactly1(okc.nodes[c], col(n, c), col(n, c, True))
+    ckt.andN(okC, okc.nodes)
+    ckt.decRefs([okc])
+    # Diagonal constraints:
+    ckt.comment("Diagonal Constraints")
+    for i in range(-n+1,n):
+        ckt.comment("Diagonal %d" % i)
+        out = okd.nodes[i+n-1]
+        ckt.atMost1(out, diag(n,i), diag(n, i, True))
+    ckt.andN(okD, okd.nodes)
+    ckt.decRefs([okd])
+    # Off diagonal constraints
+    ckt.comment("Off-diagonal Constraints")
+    for i in range(-n+1,n):
+        ckt.comment("Off-diagonal %d" % i)
+        out = oko.nodes[i+n-1]
+        ckt.atMost1(out, offDiag(n,i), offDiag(n, i, True))
+    ckt.andN(okO, oko.nodes)
+    ckt.decRefs([oko])
+    ckt.comment("Combine Constraints")
+    ok = ckt.node("ok")
+    ckt.andN(ok, [okC, okD])
+    ckt.decRefs([okC, okD])
+    ckt.andN(ok, [ok, okO])
+    ckt.decRefs([okO])
+    ckt.write("time")
+    ckt.write("count ok")
+
+
+    
+    
+    
     

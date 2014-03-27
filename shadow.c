@@ -18,6 +18,7 @@
 #include "bdd.h"
 
 #include "cudd.h"
+#include "util.h"
 #include "shadow.h"
 
 /* Trick:
@@ -142,7 +143,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist) {
     mgr->do_local = do_local;
     mgr->do_dist = do_dist;
     ref_t r;
-    DdNode *n;
+    DdNode *n = NULL;
     if (do_cudd) {
 	mgr->bdd_manager = Cudd_Init(0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
 	n = Cudd_ReadLogicZero(mgr->bdd_manager);
@@ -433,13 +434,29 @@ keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots) {
     return density;
 }
 
-/* Place holder.  Yields count of zero for everyone */
+static word_t apa2word(DdApaNumber num, int digits) {
+    word_t val = 0;
+    int plim = sizeof(word_t) / sizeof(DdApaDigit);
+    int i;
+    int pos;
+    for (i = digits-1, pos = 0; i >= 0 && pos < plim; i--, pos++) {
+	printf("digits = %u.  num[%d] = %u, pos = %d\n", digits, i, num[i], pos);
+	val += (word_t) num[i] << (pos * sizeof(DdApaDigit) * 8);
+    }
+    return val;
+}
+
 static keyvalue_table_ptr cudd_count(shadow_mgr mgr, set_ptr roots) {
     word_t wk, wv;
     keyvalue_table_ptr result = word_keyvalue_new();
+    size_t nvars = mgr->nvars;
+    int digits;
     set_iterstart(roots);
     while (set_iternext(roots, &wk)) {
-	wv = 0;
+	DdNode *n = (DdNode *) wk;
+	DdApaNumber num = Cudd_ApaCountMinterm(mgr->bdd_manager, n, nvars, &digits);
+	wv = apa2word(num, digits);
+	FREE(num);
 	keyvalue_insert(result, wk, wv);
     }
     return result;

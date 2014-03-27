@@ -345,7 +345,7 @@ bool chunk_equal(word_t vcp1, word_t vcp2) {
 	if (cp1->words[i] != cp2->words[i])
 	    ok = false;
     }
-#endif VMASK
+#endif /* VMASK */
     return ok;
 }
 
