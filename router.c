@@ -51,6 +51,16 @@ static queue_ptr outq_head = NULL;
 /* Youngest item in queue */
 static queue_ptr outq_tail = NULL;
 
+/* buffered input array */
+extern readBuffer* readBufferArray = NULL;
+
+/* Booleans for skipping the select */
+static bool skipSelect = false;
+static bool nextRunSkipSelect = false;
+
+/* enables buffering */
+static int bufferingEnabled = 0;
+
 static void init_router(char *controller_name, unsigned controller_port) {
     unsigned myport = 0;
     if (!new_server(0, &listen_fd, &myport))
@@ -72,6 +82,19 @@ static void init_router(char *controller_name, unsigned controller_port) {
     new_conn_set = word_set_new();
     outq_head = NULL;
     outq_tail = NULL;
+
+    if (bufferingEnabled)
+    {
+        /* Set up buffers for buffered input */
+        int i;
+        readBufferArray = malloc_or_fail(sizeof(readBuffer)*NUM_OF_READ_BUFFERS,
+                                         "initializing router buffers for buffered input");
+        for (i = 0; i < NUM_OF_READ_BUFFERS; i++)
+        {
+            readBufferArray[i].buf = malloc_or_fail(CHUNK_MAX_SIZE, "initializing internal buffer in router buffers");
+            readBufferArray[i].valid = 0;
+        }
+    }
 }
 
 static void quit_router() {
@@ -100,6 +123,18 @@ static void quit_router() {
 	chunk_free(ele->msg);
 	free_block(ele, sizeof(queue_ele));
     }
+
+    if (bufferingEnabled)
+    {
+        /* Deallocate the buffer for buffered input */
+        int i;
+        for (i = 0; i < NUM_OF_READ_BUFFERS; i++)
+        {
+            free(readBufferArray[i].buf);
+        }
+        free(readBufferArray);
+    }
+
 }
 
 #if 0
@@ -161,10 +196,46 @@ static void add_outfd(int fd) {
 	maxfd = fd;
 }
 
+static fd_set bufset;
+static fd_set nextbufset;
+
+static void add_buffered_fd(int fd) {
+    report(6, "Adding fd %d to buffer set", fd);
+    FD_SET(fd, &nextbufset);
+    if (fd > maxfd)
+	maxfd = fd;
+}
+
+static void transfer_buffered_fd() {
+    FD_ZERO(&bufset);
+    int fd;
+    for (fd = 0; fd <= maxfd; fd++)
+    {
+        if (FD_ISSET(fd, &nextbufset))
+        {
+            FD_SET(fd, &bufset);
+            if (fd > maxfd)
+                maxfd = fd;
+        }
+    }
+    FD_ZERO(&nextbufset);
+}
+
 /* Here's the main loop for the router */
 static void run_router() {
     word_t w;
     int fd;
+    int selector = 0;
+
+
+    if (bufferingEnabled)
+    {
+        FD_ZERO(&bufset);
+        FD_ZERO(&nextbufset);
+        skipSelect = false;
+        nextRunSkipSelect = false;
+    }
+
     while (true) {
 	/* Inputs: Select among listening port, controller port, new connections, and connections to workers & clients */
 	FD_ZERO(&inset);
@@ -192,13 +263,38 @@ static void run_router() {
 	    add_outfd(ls->fd);
 	    ls = ls->next;
 	}
+        if (bufferingEnabled)
+        {
+            /* Skip select if there's buffered input waiting */
+            report(6, "skipping select is: %s\n", nextRunSkipSelect ? "true" : "false");
+            skipSelect = nextRunSkipSelect;
+            if (skipSelect)
+            {
+                report(6, "skipping select!");
+            }
+            else
+            {
+                report(6, "waiting for select!\n");
+                select(maxfd+1, &inset, &outset, NULL, NULL);
+            }
 
-	select(maxfd+1, &inset, &outset, NULL, NULL);
+            /* Reset the selector values */
+            selector = skipSelect ? 1 : 0;
+            nextRunSkipSelect = false;
+        }
+        else
+        {
+           select(maxfd+1, &inset, &outset, NULL, NULL);
+        }
+
 
 	/* Go through inputs */
 	for (fd = 0; fd <= maxfd; fd++) {
-	    if (!FD_ISSET(fd, &inset))
-		continue;
+            if ((!(FD_ISSET(fd, &inset))) ||
+                (selector && (!(FD_ISSET(fd, &bufset))))) {
+                continue;
+            }
+
 	    if (fd == listen_fd) {
 		int connfd = accept_connection(fd, NULL);
 		set_insert(new_conn_set, (word_t) connfd);
@@ -206,7 +302,28 @@ static void run_router() {
 		continue;
 	    }
 	    bool eof;
-	    chunk_ptr msg = chunk_read(fd, &eof);
+	    chunk_ptr msg;
+            if (!bufferingEnabled || listen_fd == fd || controller_fd == fd)
+            {
+                msg = chunk_read(fd, &eof);
+	    }
+            else
+            {
+                msg = chunk_read_buffered(fd, &eof, readBufferArray);
+	    }
+
+            if (bufferingEnabled)
+            {
+                /* If the fd has buffered input, add it to the buffered set */
+                if (fd != listen_fd && fd != controller_fd && chunk_waiting())
+                {
+                    report(6, "chunk_waiting on %d descriptor: \n", fd);
+                    add_buffered_fd(fd);
+                    nextRunSkipSelect = true;
+                }
+            }
+
+
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {
@@ -270,6 +387,13 @@ static void run_router() {
 		}
 	    }
 	}
+        if (bufferingEnabled)
+        {
+            /* Transfer the buffers and prepare next run for skipping */
+            skipSelect = nextRunSkipSelect;
+            transfer_buffered_fd();
+        }
+
 	/* Output messages */
 	queue_ptr prev = NULL;
 	ls = outq_head;
@@ -314,6 +438,10 @@ static void usage(char *cmd) {
     printf("\t-v VLEVEL  Set verbosity level\n");
     printf("\t-H HOST    Use HOST as controller host\n");
     printf("\t-P PORT    Use PORT as controller port\n");
+    printf("\t-B BUFFERS Set how many connections should utilize");
+    printf(" buffered input (default/minimum 64)\n");
+    printf("\t-b BUF_ON  Set 1 or 0 to turn buffering on or off");
+    printf(", respectively (default 1)\n");
     exit(0);
 }
 
@@ -324,7 +452,7 @@ int main(int argc, char *argv[]) {
     unsigned port = CPORT;
     int c;
     int level = 1;
-    while ((c = getopt(argc, argv, "hv:H:P:")) != -1) {
+    while ((c = getopt(argc, argv, "hbv:H:P:B:")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage(argv[0]);
@@ -339,6 +467,15 @@ int main(int argc, char *argv[]) {
 	case 'P':
 	    port = atoi(optarg);
 	    break;
+        case 'B':
+            if (NUM_OF_READ_BUFFERS < atoi(optarg))
+                NUM_OF_READ_BUFFERS = atoi(optarg);
+            break;
+        case 'b':
+            if (bufferingEnabled == 0)
+                bufferingEnabled = 1;
+            break;
+
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);

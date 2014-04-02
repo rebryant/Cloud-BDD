@@ -1,6 +1,6 @@
 /******************************************************************************
 Data structure for representing data as a sequence of 64-bit words
-******************************************************************************/ 
+******************************************************************************/
 
 /* What kind of correctness checks should be applied by package.  */
 /* Possible levels:
@@ -131,3 +131,20 @@ typedef void (*err_fun)(void);
 
 /* Set error function to be called when error detected */
 void chunk_at_error(err_fun f);
+
+/* internal buffer implementation for buffered reading. */
+
+extern int NUM_OF_READ_BUFFERS;
+
+typedef struct {
+    char* buf;
+    char* currBufLocation;
+    int valid;
+    int fd;
+    int cnt;
+} readBuffer;
+
+/* Query whether the last read file descriptor has
+   more input buffered (a chunk waiting). */
+
+bool chunk_waiting();

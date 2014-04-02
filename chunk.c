@@ -1,6 +1,6 @@
 /******************************************************************************
 Data structure for representing data as a sequence of 64-bit words
-******************************************************************************/ 
+******************************************************************************/
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -9,11 +9,14 @@ Data structure for representing data as a sequence of 64-bit words
 #include <pthread.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <error.h>
+#include <errno.h>
 
 #include "dtype.h"
 #include "table.h"
 #include "chunk.h"
 #include "report.h"
+
 
 /* Some macros */
 #ifdef VMASK
@@ -45,6 +48,12 @@ void chunk_at_error(err_fun f) {
    3: Overlap checking.  Invalid to insert data into chunk position that is already filled.
  */
 unsigned chunk_check_level = 3;
+
+/* Buffering reads */
+int NUM_OF_READ_BUFFERS = 64;
+
+static bool bufferedWaiting = false;
+
 
 /* Error message generated when violate chunk rules.  */
 static void chunk_error(char *reason, chunk_ptr cp) {
@@ -247,6 +256,130 @@ chunk_ptr chunk_read(int fd, bool *eofp) {
     return chunk_clone(creadp);
 }
 
+ssize_t read_buffered(int fd, char* buf, size_t len, readBuffer* readBufferArray)
+{
+    bufferedWaiting = false;
+    int cnt;
+    int i;
+    int smallestValidOffset = NUM_OF_READ_BUFFERS;
+
+    readBuffer* buffer = NULL;
+    /* Find the proper buffer */
+    if (readBufferArray != NULL)
+    {
+        for (i = 0; i < NUM_OF_READ_BUFFERS; i++)
+        {
+            if (readBufferArray[i].fd == fd && readBufferArray[i].valid == 1)
+            {
+                buffer = &(readBufferArray[i]);
+            }
+            if (readBufferArray[i].valid == 0 && smallestValidOffset > i)
+            {
+                smallestValidOffset = i;
+            }
+        }
+    }
+
+    if (buffer == NULL)
+    {
+        /* no buffer corresponding to our file descriptor, and no empty buffer */
+        if (smallestValidOffset == NUM_OF_READ_BUFFERS || readBufferArray == NULL)
+        {
+            return read(fd, buf, len);
+        }
+        /* else, we assign the next free buffer to our stack */
+        else
+        {
+            buffer = &(readBufferArray[smallestValidOffset]);
+            buffer->valid = 1;
+            buffer->fd = fd;
+            buffer->cnt = 0;
+        }
+    }
+    while (buffer->cnt <= 0)
+    {
+
+        buffer->cnt = read(buffer->fd, buffer->buf, CHUNK_MAX_SIZE);
+        if (buffer->cnt < 0)
+        {
+            if (errno != EINTR)
+            {
+                return -1;
+            }
+        }
+        else if (buffer->cnt == 0)
+        {
+            return 0;
+        }
+        else
+        {
+            buffer->currBufLocation = buffer->buf;
+        }
+    }
+    cnt = len;
+    if (buffer->cnt < cnt)
+        cnt = buffer->cnt;
+    memcpy(buf, buffer->currBufLocation, cnt);
+    buffer->currBufLocation = buffer->currBufLocation + cnt;
+    buffer->cnt = buffer->cnt - cnt;
+    if (buffer->cnt > 0)
+        bufferedWaiting = true;
+    return cnt;
+}
+
+/* Check whether the last read has additional buffered input waiting */
+bool chunk_waiting()
+{
+    return bufferedWaiting;
+}
+
+/* Buffered version of chunk_read */
+chunk_ptr chunk_read_buffered(int fd, bool *eofp, readBuffer* readBufferArray) {
+    unsigned char buf[CHUNK_MAX_SIZE];
+    /* Must get enough bytes to read chunk length */
+    size_t cnt = 0;
+    size_t need_cnt = sizeof(chunk_t);
+    while (cnt < need_cnt) {
+        /* replace with our read */
+	ssize_t n = read_buffered(fd, &buf[cnt], need_cnt-cnt, readBufferArray);
+	if (n < 0) {
+	    chunk_error("Failed read", NULL);
+	    if (eofp)
+		*eofp = false;
+	    return NULL;
+	}
+	if (n == 0) {
+	    if (eofp)
+		*eofp = true;
+	    else
+		chunk_error("Unexpected EOF", NULL);
+	    return NULL;
+	}
+	cnt += n;
+    }
+    chunk_ptr creadp = (chunk_ptr) buf;
+    size_t len = creadp->length;
+    if (len > 1) {
+	need_cnt += WORD_BYTES * (len - 1);
+	while (cnt < need_cnt) {
+            /* replace with our read */
+	    ssize_t n = read_buffered(fd, &buf[cnt], need_cnt-cnt, readBufferArray);
+	    if (n < 0) {
+		chunk_error("Failed read", NULL);
+	    if (eofp)
+		*eofp = false;
+		return NULL;
+	    }
+	    cnt += n;
+	}
+    }
+    if (eofp)
+	*eofp = false;
+    return chunk_clone(creadp);
+}
+
+
+
 /* Write chunk to file */
 /* Return 1 if successful, 0 if failed */
 bool chunk_write(int fd, chunk_ptr cp) {
@@ -360,7 +493,7 @@ keyvalue_table_ptr chunk_table_new() {
 /* Helper functions */
 
 /* Flush queue.  Unsynchronized */
-static void cq_flush(chunk_queue_ptr cq) {    
+static void cq_flush(chunk_queue_ptr cq) {
     if (cq->elements != NULL) {
 	free_array(cq->elements, cq->alloc_length, sizeof(chunk_ptr));
 	cq->alloc_length = 0;
@@ -429,7 +562,7 @@ void chunk_queue_insert(chunk_queue_ptr cq, chunk_ptr item) {
     cq->tail++;
     if (cq->tail >= cq->length) {
 	cq->tail = 0;
-    }
+     }
     cq->elements[cq->tail] = item;
     cq->length++;
     check_err(pthread_cond_signal(&cq->cvar), "chunk_queue_insert");

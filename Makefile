@@ -1,4 +1,4 @@
-CUDDDIR= ../../../boolean/cudd-2.5.0
+CUDDDIR= ../../cudd-2.5.0
 
 CUDDINC= -I$(CUDDDIR)/cudd -I$(CUDDDIR)/mtr -I$(CUDDDIR)/epd -I$(CUDDDIR)/util
 CUDDLIBS = $(CUDDDIR)/cudd/libcudd.a  $(CUDDDIR)/mtr/libmtr.a  $(CUDDDIR)/st/libst.a $(CUDDDIR)/epd/libepd.a $(CUDDDIR)/util/libutil.a -lm
@@ -39,7 +39,7 @@ agent.o: agent.c dtype.h table.h chunk.h report.h msg.h console.h agent.h
 msg.o: msg.c table.h chunk.h report.h msg.h
 	$(CC) $(CFLAGS) -c msg.c
 
-test_df.o: test_df.c dtype.h table.h chunk.h report.h msg.h console.h agent.h test_df.h 
+test_df.o: test_df.c dtype.h table.h chunk.h report.h msg.h console.h agent.h test_df.h
 	$(CC) $(CFLAGS) -c test_df.c
 
 chunk_test: chunk_test.c dtype.h table.h chunk.h report.h chunk.o report.o table.o
@@ -63,7 +63,7 @@ shadow_test: shadow_test.c console.o chunk.o table.o report.o bdd.o shadow.o msg
 console_test: console_test.c console.h report.h console.o report.o
 	$(CC) $(CFLAGS) -o console_test console_test.c console.o report.o
 
-runbdd: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o 
+runbdd: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
 	$(CC) $(CFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS)
 
 bworker: bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o
