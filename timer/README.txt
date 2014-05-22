@@ -11,8 +11,8 @@ csv-tester.py: rewrite for outputting comma-separated value files, for auto-impo
 into google docs. will support both scripts and fork, and getopt.
 
 options to implement:
-input/output file picking
-distributed, local, and cudd
-timing in python vs. parsing the time output of each script
+input/output file picking DONE
+distributed, local, and cudd DONE
+timing in python vs. parsing the delta time output from runbdd DONE
 
-IN PROGRESS
+DONE

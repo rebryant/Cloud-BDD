@@ -1,0 +1,11 @@
+,(seconds),Trial 1(seconds),Trial 2(seconds),Trial 3
+CUDD,,,,
+,,,,
+source scripts/nq5.cmd,,0.0010,0.0010,0.0010
+source scripts/nq6.cmd,,0.0030,0.0030,0.0030
+source scripts/nq8.cmd,,0.0180,0.0190,0.0190
+source scripts/aa16.cmd,,0.0020,0.0020,0.0020
+source scripts/aa4.cmd,,0.0000,0.0000,0.0000
+source scripts/ma6.cmd,,0.0260,0.0370,0.0270
+source scripts/nq10.cmd,,0.2660,0.3300,0.3480
+,,,,
