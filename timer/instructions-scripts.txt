@@ -1,0 +1,7 @@
+source scripts/nq5.cmd
+source scripts/nq6.cmd
+source scripts/nq8.cmd
+source scripts/aa16.cmd
+source scripts/aa4.cmd
+source scripts/ma6.cmd
+source scripts/nq10.cmd
