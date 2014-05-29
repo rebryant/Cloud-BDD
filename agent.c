@@ -170,7 +170,7 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
     chunk_ptr amsg = NULL;
     unsigned ridx = 0;;
     while (ridx < nrouters) {
-	msg = chunk_read(controller_fd, &eof);
+	msg = chunk_read_builtin_buffer(controller_fd, &eof);
 	if (eof) {
 	    err(true, "Unexpected EOF from controller while getting router map");
 	}
@@ -264,6 +264,7 @@ bool quit_agent(int argc, char *argv[]) {
 	}
     }
     keyvalue_free(deferred_operand_table);
+    chunk_deinit();
     return true;
 }
 
@@ -296,7 +297,7 @@ bool do_agent_flush(int argc, char *argv[]) {
     bool ok = chunk_write(controller_fd, msg);
     if (ok)
 	report(3, "Notified controller that want to flush system");
-    else 
+    else
 	err(false, "Couldn't notify controller that want to flush system");
     chunk_free(msg);
     gc_state = GC_IDLE;
@@ -502,13 +503,13 @@ static bool check_fire(chunk_ptr op) {
 	if (!opfun(op))
 	    err(false, "Error encountered firing operator with id 0x%x", id);
     } else
-	err(false, "Unknown opcode %u for operator with id 0x%x", opcode, id);	
+	err(false, "Unknown opcode %u for operator with id 0x%x", opcode, id);
     return true;
 }
 
 /*
   Initiate global operation from client.
-  Returns to client when all workers ready to perform their operations 
+  Returns to client when all workers ready to perform their operations
 */
 bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
     chunk_ptr rmsg = msg_new_cliop_data(own_agent, opcode, nword, data);
@@ -523,7 +524,7 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
     bool ok = true;
     while (!done) {
 	bool eof = false;
-	chunk_ptr msg = chunk_read(controller_fd, &eof);
+	chunk_ptr msg = chunk_read_builtin_buffer(controller_fd, &eof);
 	if (eof) {
 	    /* Unexpected EOF */
 	    err(false, "Unexpected EOF from controller (ignored)");
@@ -655,13 +656,13 @@ void run_worker() {
 	for (ridx = 0; ridx < nrouters; ridx++)
 	    add_cfd(router_fd_array[ridx]);
 
-	select(maxcfd+1, &cset, NULL, NULL, NULL);
+	buf_select(maxcfd+1, &cset, NULL, NULL, NULL);
 	int fd;
 	for (fd = 0; fd <= maxcfd; fd++) {
 	    if (!FD_ISSET(fd, &cset))
 		continue;
 	    bool eof;
-	    chunk_ptr msg = chunk_read(fd, &eof);
+	    chunk_ptr msg = chunk_read_builtin_buffer(fd, &eof);
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {
@@ -784,13 +785,13 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 	for (ridx = 0; ridx < nrouters; ridx++)
 	    add_rfd(router_fd_array[ridx]);
 
-	select(maxrfd+1, &rset, NULL, NULL, NULL);
+	buf_select(maxrfd+1, &rset, NULL, NULL, NULL);
 	int fd;
 	for (fd = 0; fd <= maxrfd; fd++) {
 	    if (!FD_ISSET(fd, &rset))
 		continue;
 	    bool eof;
-	    chunk_ptr msg = chunk_read(fd, &eof);
+	    chunk_ptr msg = chunk_read_builtin_buffer(fd, &eof);
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {
@@ -897,7 +898,7 @@ void run_client(char *infile_name) {
 	    if (!FD_ISSET(fd, &cset))
 		continue;
 	    bool eof;
-	    chunk_ptr msg = chunk_read(fd, &eof);
+	    chunk_ptr msg = chunk_read_builtin_buffer(fd, &eof);
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {

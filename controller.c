@@ -78,7 +78,7 @@ static global_op_ptr global_ops = NULL;
 
 /* Related to garbage collection */
 
-/* GC proceeds asynchronously as follows: 
+/* GC proceeds asynchronously as follows:
    0: Start in GC_READY state
    1: Notify all workers that want to start GC.
       Messge type MSG_GC_START
@@ -226,7 +226,7 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     defer_client_fd_set = NULL;
     gc_generation = 0;
 }
-    
+
 bool do_controller_status_cmd(int argc, char *argv[]) {
     report(0, "Connections: %u routers, %u workers, %u clients",
 	   router_fd_set->nelements, worker_fd_set->nelements, client_fd_set->nelements);
@@ -342,6 +342,7 @@ bool quit_controller(int argc, char *argv[]) {
     if (defer_client_fd_set != NULL)
 	set_free(defer_client_fd_set);
     defer_client_fd_set = NULL;
+    chunk_deinit();
     return true;
 }
 
@@ -425,7 +426,7 @@ static void add_stat_message(chunk_ptr msg) {
 	    word_t minval, maxval, sumval;
 	    minval = maxval = sumval = chunk_get_word(msg, i+1);
 	    for (w = 1; w < worker_cnt; w++) {
-		chunk_ptr msg = stat_messages[w];		
+		chunk_ptr msg = stat_messages[w];
 		word_t val = chunk_get_word(msg, i+1);
 		if (val < minval)
 		    minval = val;
@@ -504,7 +505,7 @@ static void run_controller(char *infile_name) {
 		continue;
 	    }
 	    bool eof;
-	    chunk_ptr msg = chunk_read(fd, &eof);
+	    chunk_ptr msg = chunk_read_builtin_buffer(fd, &eof);
 	    if (eof) {
 		/* Unexpected EOF */
 		if (keyvalue_remove(new_conn_map, (word_t) fd, NULL, NULL)) {
@@ -704,7 +705,7 @@ static void run_controller(char *infile_name) {
 		default:
 		    err(false, "Unexpected message code %u from client", code);
 		}
-		    
+
 	    } else {
 		chunk_free(msg);
 		err(false, "Unexpected message on fd %d (Ignored)", fd);
@@ -881,4 +882,3 @@ int main(int argc, char *argv[]) {
     mem_status(stdout);
     return 0;
 }
-

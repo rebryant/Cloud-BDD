@@ -120,7 +120,7 @@ void init_cmd() {
     init_in();
     init_time();
 }
-    
+
 /* Add a new command */
 void add_cmd(char *name, cmd_function operation, char *documentation) {
     cmd_ptr next_cmd = cmd_list;
@@ -512,7 +512,7 @@ static bool read_ready() {
     return false;
 }
 
-/* 
+/*
    Handle command processing in program that uses select as main control loop.
    Like select, but checks whether command input either present in internal buffer
    or readable from command input.  If so, that command is executed.
@@ -549,7 +549,7 @@ int cmd_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
     }
     if (nfds == 0)
 	return 0;
-    int result = select(nfds, readfds, writefds, exceptfds, timeout);
+    int result = buf_select(nfds, readfds, writefds, exceptfds, timeout);
     if (result <= 0)
 	return result;
     infd = buf_stack->fd;
@@ -590,4 +590,3 @@ void run_console(char *infile_name) {
 	cmd_select(0, NULL, NULL, NULL, NULL);
     }
 }
-
