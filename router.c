@@ -51,15 +51,9 @@ static queue_ptr outq_head = NULL;
 /* Youngest item in queue */
 static queue_ptr outq_tail = NULL;
 
-/* buffered input array */
-extern readBuffer* readBufferArray = NULL;
-
-/* Booleans for skipping the select */
-static bool skipSelect = false;
-static bool nextRunSkipSelect = false;
-
-/* enables buffering */
+/* switch for deactivating buffering */
 static int bufferingEnabled = 0;
+
 
 static void init_router(char *controller_name, unsigned controller_port) {
     unsigned myport = 0;
@@ -83,22 +77,11 @@ static void init_router(char *controller_name, unsigned controller_port) {
     outq_head = NULL;
     outq_tail = NULL;
 
-    if (bufferingEnabled)
-    {
-        /* Set up buffers for buffered input */
-        int i;
-        readBufferArray = malloc_or_fail(sizeof(readBuffer)*NUM_OF_READ_BUFFERS,
-                                         "initializing router buffers for buffered input");
-        for (i = 0; i < NUM_OF_READ_BUFFERS; i++)
-        {
-            readBufferArray[i].buf = malloc_or_fail(CHUNK_MAX_SIZE, "initializing internal buffer in router buffers");
-            readBufferArray[i].valid = 0;
-        }
-    }
 }
 
 static void quit_router() {
     /* Close file connections */
+    chunk_deinit();
     int fd;
     word_t w;
     set_iterstart(new_conn_set);
@@ -124,16 +107,6 @@ static void quit_router() {
 	free_block(ele, sizeof(queue_ele));
     }
 
-    if (bufferingEnabled)
-    {
-        /* Deallocate the buffer for buffered input */
-        int i;
-        for (i = 0; i < NUM_OF_READ_BUFFERS; i++)
-        {
-            free(readBufferArray[i].buf);
-        }
-        free(readBufferArray);
-    }
 
 }
 
@@ -175,7 +148,7 @@ static void insert_queue(chunk_ptr msg) {
     } else {
 	outq_head = outq_tail = ele;
     }
-    report(5, "Queued message with id 0x%x for agent %u.", id, agent);
+    report(2, "Queued message with id 0x%x for agent %u.", id, agent);
 }
 
 static fd_set inset;
@@ -196,45 +169,12 @@ static void add_outfd(int fd) {
 	maxfd = fd;
 }
 
-static fd_set bufset;
-static fd_set nextbufset;
-
-static void add_buffered_fd(int fd) {
-    report(6, "Adding fd %d to buffer set", fd);
-    FD_SET(fd, &nextbufset);
-    if (fd > maxfd)
-	maxfd = fd;
-}
-
-static void transfer_buffered_fd() {
-    FD_ZERO(&bufset);
-    int fd;
-    for (fd = 0; fd <= maxfd; fd++)
-    {
-        if (FD_ISSET(fd, &nextbufset))
-        {
-            FD_SET(fd, &bufset);
-            if (fd > maxfd)
-                maxfd = fd;
-        }
-    }
-    FD_ZERO(&nextbufset);
-}
 
 /* Here's the main loop for the router */
 static void run_router() {
     word_t w;
     int fd;
-    int selector = 0;
 
-
-    if (bufferingEnabled)
-    {
-        FD_ZERO(&bufset);
-        FD_ZERO(&nextbufset);
-        skipSelect = false;
-        nextRunSkipSelect = false;
-    }
 
     while (true) {
 	/* Inputs: Select among listening port, controller port, new connections, and connections to workers & clients */
@@ -263,35 +203,12 @@ static void run_router() {
 	    add_outfd(ls->fd);
 	    ls = ls->next;
 	}
-        if (bufferingEnabled)
-        {
-            /* Skip select if there's buffered input waiting */
-            report(6, "skipping select is: %s\n", nextRunSkipSelect ? "true" : "false");
-            skipSelect = nextRunSkipSelect;
-            if (skipSelect)
-            {
-                report(6, "skipping select!");
-            }
-            else
-            {
-                report(6, "waiting for select!\n");
-                select(maxfd+1, &inset, &outset, NULL, NULL);
-            }
-
-            /* Reset the selector values */
-            selector = skipSelect ? 1 : 0;
-            nextRunSkipSelect = false;
-        }
-        else
-        {
-           select(maxfd+1, &inset, &outset, NULL, NULL);
-        }
+            buf_select(maxfd+1, &inset, &outset, NULL, NULL);
 
 
 	/* Go through inputs */
 	for (fd = 0; fd <= maxfd; fd++) {
-            if ((!(FD_ISSET(fd, &inset))) ||
-                (selector && (!(FD_ISSET(fd, &bufset))))) {
+            if ((!(FD_ISSET(fd, &inset)))  ) {
                 continue;
             }
 
@@ -303,25 +220,8 @@ static void run_router() {
 	    }
 	    bool eof;
 	    chunk_ptr msg;
-            if (!bufferingEnabled || listen_fd == fd || controller_fd == fd)
-            {
-                msg = chunk_read(fd, &eof);
-	    }
-            else
-            {
-                msg = chunk_read_buffered(fd, &eof, readBufferArray);
-	    }
 
-            if (bufferingEnabled)
-            {
-                /* If the fd has buffered input, add it to the buffered set */
-                if (fd != listen_fd && fd != controller_fd && chunk_waiting())
-                {
-                    report(6, "chunk_waiting on %d descriptor: \n", fd);
-                    add_buffered_fd(fd);
-                    nextRunSkipSelect = true;
-                }
-            }
+            msg = chunk_read_builtin_buffer(fd, &eof);
 
 
 	    if (eof) {
@@ -350,7 +250,7 @@ static void run_router() {
 	    word_t h = chunk_get_word(msg, 0);
 	    unsigned code = msg_get_header_code(h);
 	    unsigned agent = msg_get_header_agent(h);
-	    if (fd == controller_fd) {
+            if (fd == controller_fd) {
 		/* Message from controller */
 		switch(code) {
 		case MSG_KILL:
@@ -387,12 +287,6 @@ static void run_router() {
 		}
 	    }
 	}
-        if (bufferingEnabled)
-        {
-            /* Transfer the buffers and prepare next run for skipping */
-            skipSelect = nextRunSkipSelect;
-            transfer_buffered_fd();
-        }
 
 	/* Output messages */
 	queue_ptr prev = NULL;
@@ -417,7 +311,7 @@ static void run_router() {
 		if (chunk_write(fd, outmsg)) {
 		    word_t h = chunk_get_word(outmsg, 0);
 		    unsigned id = msg_get_header_op_id(h);
-		    report(5, "Routed message with id 0x%x to agent %u", id, agent);
+		    report(2, "Routed message with id 0x%x to agent %u", id, agent);
 		}
 		else
 		    err(false, "Couldn't send message to agent %u (ignored)", agent);

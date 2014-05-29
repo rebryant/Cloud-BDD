@@ -11,6 +11,10 @@ Data structure for representing data as a sequence of 64-bit words
 #include <stdbool.h>
 #include <error.h>
 #include <errno.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/select.h>
+#include <fcntl.h>
 
 #include "dtype.h"
 #include "table.h"
@@ -53,6 +57,8 @@ unsigned chunk_check_level = 3;
 int NUM_OF_READ_BUFFERS = 64;
 
 static bool bufferedWaiting = false;
+
+buf_node* buf_list_head = NULL;
 
 
 /* Error message generated when violate chunk rules.  */
@@ -253,7 +259,287 @@ chunk_ptr chunk_read(int fd, bool *eofp) {
     }
     if (eofp)
 	*eofp = false;
+
+
     return chunk_clone(creadp);
+}
+
+static fd_set buf_set;
+static fd_set in_set;
+static int maxfd = 0;
+
+int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+    int returnVal;
+    if (nfds > maxfd)
+    {
+        // on first call, we zero the buffer set and inset
+        if (maxfd == 0)
+        {
+            FD_ZERO(&buf_set);
+            FD_ZERO(&in_set);
+        }
+        maxfd = nfds - 1;
+    }
+    report(3, "maxfd: %d, nfds: %d", maxfd, nfds);
+    // if buffered, we do non-blocking select and make sure the returned
+    // set sets both buffered and readable set
+    // if no buffered input is waiting, we do a blocking select and
+    // return the readable set
+    int isBuffered = 0;
+    int i;
+    for (i = 0; i < nfds && isBuffered == 0; i++)
+    {
+        if (FD_ISSET(i, &buf_set))
+        {
+            isBuffered = 1;
+        }
+    }
+
+    if (!isBuffered)
+    {
+        report(3, "unbuffered select on up through %d", maxfd);
+        returnVal = select(maxfd+1, readfds, writefds, exceptfds, timeout);
+        for (i = 0; i < maxfd+1; i++)
+        {
+            if (!FD_ISSET(i, readfds))
+            {
+                FD_CLR(i, &in_set);
+            }
+            else
+            {
+                FD_SET(i, &in_set);
+            }
+        }
+    }
+    else
+    {
+        struct timeval zeroval;
+        zeroval.tv_sec = (long int)0;
+        zeroval.tv_usec = (long int)0;
+
+        FD_ZERO(&in_set);
+        for (i = 0; i < maxfd+1 ; i++)
+        {
+            if (FD_ISSET(i, readfds))
+            {
+                FD_SET(i, &in_set);
+            }
+        }
+
+        report(3, "buffered select on up through %d", maxfd);
+        returnVal = select(maxfd+1, &in_set, writefds, exceptfds, (timeout == NULL ? &zeroval : timeout));
+
+        if (returnVal >= 0)
+            returnVal = 0;
+        for (i = 0; i < maxfd+1; i++)
+        {
+            if (!FD_ISSET(i, &in_set) && !FD_ISSET(i, &buf_set))
+            {
+                FD_CLR(i, readfds);
+            }
+            else
+            {
+                if (returnVal >= 0)
+                    returnVal++;
+                FD_SET(i, readfds);
+            }
+        }
+
+    }
+    report(3, "leaving buf_select with returnval %d\n", returnVal);
+    return returnVal;
+}
+
+static void toggle_buffered_in_set(buf_node* curr_node)
+{
+    if (curr_node->length > 0)
+    {
+        FD_SET(curr_node->fd, &buf_set);
+    }
+    else
+    {
+        FD_CLR(curr_node->fd, &buf_set);
+    }
+}
+
+static ssize_t buf_read(buf_node* curr_node, bool* eofp, unsigned char* buf, int len)
+{
+    int cnt = 0;
+    int copyLen = 0;
+    while (cnt < len)
+    {
+        report(3, "waiting for %d bytes", (len - cnt));
+        //if there's stuff in the buffer, copy it over
+        if (curr_node->length > 0)
+        {
+            copyLen = ((len - cnt) < curr_node->length ? (len - cnt) : curr_node->length);
+            report(3, "copying a buffer of length %d from total length %d, to the return buffer", copyLen, curr_node->length);
+            report(3, "old length = %d, new length = %d", curr_node->length, curr_node->length - copyLen);
+            memcpy((buf + cnt), ((curr_node->buf) + (curr_node->location)), copyLen);
+            cnt = cnt + copyLen;
+            curr_node->length = curr_node->length - copyLen;
+            if (curr_node->length == 0)
+            {
+                curr_node->location = 0;
+            }
+            else
+            {
+                curr_node->location = curr_node->location + copyLen;
+            }
+            report(3, "new location: %d\n", curr_node->location);
+
+        }
+        //otherwise, we refill the buffer
+        else
+        {
+            report(3, "fill the saved buffer!");
+            ssize_t n = read(curr_node->fd, ((curr_node->buf) + (curr_node->location) + (curr_node->length)), CHUNK_MAX_SIZE);
+            if (n < 0) {
+                chunk_error("Failed read", NULL);
+                if (eofp)
+                    *eofp = false;
+                toggle_buffered_in_set(curr_node);
+                return n;
+            }
+            if (n == 0) {
+                if (eofp)
+                    *eofp = true;
+                else
+                    chunk_error("Unexpected EOF", NULL);
+                toggle_buffered_in_set(curr_node);
+                return n;
+            }
+            curr_node->length = curr_node->length + n;
+            report(3, "added %d bytes to the saved buffer; length is now %d at location %d\n", n, curr_node->length, curr_node->location);
+        }
+    }
+
+
+    toggle_buffered_in_set(curr_node);
+    return (ssize_t)cnt;
+}
+
+chunk_ptr chunk_read_builtin_buffer(int fd, bool* eofp)
+{
+    if (fd > maxfd)
+    {
+        // on first call, we zero the buffer set
+        if (maxfd == 0)
+        {
+            FD_ZERO(&buf_set);
+            FD_ZERO(&in_set);
+        }
+        maxfd = fd;
+    }
+
+    buf_node* curr_node = NULL;
+    buf_node* temp_node = NULL;
+    //create new head
+    if (buf_list_head == NULL) {
+        buf_list_head = calloc_or_fail(sizeof(buf_node), 1, "chunk_read create head");
+        buf_list_head->fd = fd;
+        report(3, "created a node for fd %d as head\n", fd);
+        buf_list_head->length = 0;
+        buf_list_head->location = 0;
+        buf_list_head->buf = calloc_or_fail(CHUNK_MAX_SIZE, 2, "chunk_read create head buf");
+        curr_node = buf_list_head;
+    }
+    // search for the fd in the buffer list, if it exists
+    else {
+        temp_node = buf_list_head;
+        while (temp_node != NULL && curr_node == NULL) {
+            if (fd == temp_node->fd) {
+                curr_node = temp_node;
+                report(3, "found node for fd %d\n", fd);
+            }
+            temp_node = temp_node->next;
+        }
+    }
+    // if it doesn't exist, create the new fd buffer at the head of the list
+    if (curr_node == NULL) {
+        curr_node = calloc_or_fail(sizeof(buf_node), 1, "chunk_read create node");
+        curr_node->fd = fd;
+        curr_node->length = 0;
+        curr_node->location = 0;
+        curr_node->next = buf_list_head;
+        curr_node->buf = calloc_or_fail(CHUNK_MAX_SIZE, 2, "chunk_read create head buf");
+        report(3, "created a node for fd %d at head\n", fd);
+        buf_list_head = curr_node;
+    }
+
+    // if we can copy to the beginning, then we copy to the beginning
+    // (if the read point is past the beginning, and if the end of
+    // the buffered data is past the midway point of the buffer)
+    if (curr_node->length + curr_node->location >= CHUNK_MAX_SIZE && curr_node->location > 0)
+    {
+        memmove(curr_node->buf, (char *)((curr_node->buf + curr_node->location)), curr_node->length);
+        curr_node->location = 0;
+    }
+
+    // read if possible - if there is space, and if the inset contains it
+    // this code is problematic!
+    if (((curr_node->length + curr_node->location) < CHUNK_MAX_SIZE) && !(!(FD_ISSET(fd, &in_set))) )
+    {
+        report(3, "reading for %d\n", curr_node->fd);
+        ssize_t n = read(curr_node->fd, ((curr_node->buf) + (curr_node->location) + (curr_node->length)), CHUNK_MAX_SIZE);
+        curr_node->length += n;
+    }
+
+    report(3, "about to get header for %d\n", fd);
+    // get header of chunk
+    size_t need_cnt = sizeof(chunk_t);
+    unsigned char buf[CHUNK_MAX_SIZE];
+    unsigned char* buf_ptr = (unsigned char*)buf;
+    ssize_t n = buf_read(curr_node, eofp, buf_ptr, need_cnt);
+    //ssize_t n = read(curr_node->fd, buf, need_cnt);
+    if (n <= 0)
+    {
+	return NULL;
+    }
+
+    report(3, "about to get rest of chunk for fd %d\n", fd);
+    // get rest of chunk
+    chunk_ptr creadp = (chunk_ptr) buf_ptr;
+    size_t len = creadp->length;
+    report(3, "len needed: %d", len);
+    if (len > 1) {
+	need_cnt = WORD_BYTES * (len - 1);
+        report(3, "head buf pointer at %p", buf_ptr);
+        buf_ptr = (unsigned char *)(buf_ptr + n);
+        report(3, "moved pointer to %p for rest", buf_ptr);
+        ssize_t n = buf_read(curr_node, eofp, buf_ptr, need_cnt);
+        //ssize_t n = read(curr_node->fd, buf_ptr, need_cnt);
+
+        if (n < 0) {
+            chunk_error("Failed read", NULL);
+	    if (eofp)
+		*eofp = false;
+            return NULL;
+        }
+    }
+
+    report(3, "exiting chunk_read_buffered_builtin!\n");
+    if (eofp)
+	*eofp = false;
+    return chunk_clone(creadp);
+}
+
+void chunk_deinit()
+{
+    buf_node* temp_node = buf_list_head;
+    //create new head
+    while (temp_node != NULL) {
+        buf_list_head = temp_node;
+        temp_node = temp_node->next;
+        if (buf_list_head->buf != NULL)
+            free_block(buf_list_head->buf, 2*CHUNK_MAX_SIZE*sizeof(char));
+        else
+            chunk_error("Chunk buffer was null in a buffer list node", NULL);
+
+        free_block(buf_list_head, sizeof(buf_node));
+    }
+
 }
 
 ssize_t read_buffered(int fd, char* buf, size_t len, readBuffer* readBufferArray)

@@ -148,3 +148,17 @@ typedef struct {
    more input buffered (a chunk waiting). */
 
 bool chunk_waiting();
+
+typedef struct buffer_node {
+  char* buf;
+  int location;
+  int length;
+  int fd;
+  struct buffer_node* next;
+} buf_node;
+
+extern buf_node* buf_list_head;
+
+int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+
+void chunk_deinit();
