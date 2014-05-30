@@ -66,9 +66,11 @@ chunk_ptr chunk_get_chunk(chunk_ptr cp, size_t offset, size_t length);
 /* File I/O based on low-level Unix file descriptors.  These can be files or network connections */
 /* Read chunk from file.  Return null pointer if fail.
    Set flag if EOF encountered.
+   This is legacy code - no buffering is used AT ALL. Do not intersperse with the chunk_read
+   functions below!
  */
 
-chunk_ptr chunk_read(int fd, bool *eofp);
+chunk_ptr chunk_read_legacy(int fd, bool *eofp);
 
 /* Write chunk to file */
 /* Return true if successful, false if failed */
@@ -134,21 +136,6 @@ void chunk_at_error(err_fun f);
 
 /* internal buffer implementation for buffered reading. */
 
-extern int NUM_OF_READ_BUFFERS;
-
-typedef struct {
-    char* buf;
-    char* currBufLocation;
-    int valid;
-    int fd;
-    int cnt;
-} readBuffer;
-
-/* Query whether the last read file descriptor has
-   more input buffered (a chunk waiting). */
-
-bool chunk_waiting();
-
 typedef struct buffer_node {
   char* buf;
   int location;
@@ -159,6 +146,23 @@ typedef struct buffer_node {
 
 extern buf_node* buf_list_head;
 
+
+//DO NOT INTERSPERSE THESE FUNCTIONS WITH THE STANDARD select() AND chunk_read_legacy()!
+
+/* A version of select that takes into account whether there are chunks waiting in one or more
+   buffers, and blocks only when needed */
 int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
 
+
+/* default read operation. sets up a buffer for the fd if necessary, fills it if possible, then reads a chunk from the buffer, refilling it as necessary */
+chunk_ptr chunk_read(int fd, bool *eofp);
+
+/* read operation that does not fill the buffer at random. This provides PSEUDO-UNBUFFERED reading
+   if you are worried about calling read without necessarily knowing if the socket has input for you - i.e., if you're reading without calling buf_select().
+*/
+
+chunk_ptr chunk_read_unbuffered(int fd, bool *eofp);
+
+/* Frees all buffers associated with file descriptors. Call when exiting.
+ */
 void chunk_deinit();

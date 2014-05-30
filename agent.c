@@ -170,7 +170,7 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
     chunk_ptr amsg = NULL;
     unsigned ridx = 0;;
     while (ridx < nrouters) {
-	msg = chunk_read_builtin_buffer(controller_fd, &eof);
+	msg = chunk_read_unbuffered(controller_fd, &eof);
 	if (eof) {
 	    err(true, "Unexpected EOF from controller while getting router map");
 	}
@@ -524,7 +524,7 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
     bool ok = true;
     while (!done) {
 	bool eof = false;
-	chunk_ptr msg = chunk_read_builtin_buffer(controller_fd, &eof);
+	chunk_ptr msg = chunk_read_unbuffered(controller_fd, &eof);
 	if (eof) {
 	    /* Unexpected EOF */
 	    err(false, "Unexpected EOF from controller (ignored)");
@@ -662,7 +662,7 @@ void run_worker() {
 	    if (!FD_ISSET(fd, &cset))
 		continue;
 	    bool eof;
-	    chunk_ptr msg = chunk_read_builtin_buffer(fd, &eof);
+	    chunk_ptr msg = chunk_read(fd, &eof);
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {
@@ -791,7 +791,7 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 	    if (!FD_ISSET(fd, &rset))
 		continue;
 	    bool eof;
-	    chunk_ptr msg = chunk_read_builtin_buffer(fd, &eof);
+	    chunk_ptr msg = chunk_read(fd, &eof);
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {
@@ -898,7 +898,7 @@ void run_client(char *infile_name) {
 	    if (!FD_ISSET(fd, &cset))
 		continue;
 	    bool eof;
-	    chunk_ptr msg = chunk_read_builtin_buffer(fd, &eof);
+	    chunk_ptr msg = chunk_read(fd, &eof);
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {

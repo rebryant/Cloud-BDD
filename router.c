@@ -221,8 +221,7 @@ static void run_router() {
 	    bool eof;
 	    chunk_ptr msg;
 
-            msg = chunk_read_builtin_buffer(fd, &eof);
-
+            msg = chunk_read(fd, &eof);
 
 	    if (eof) {
 		/* Unexpected EOF */
@@ -332,8 +331,6 @@ static void usage(char *cmd) {
     printf("\t-v VLEVEL  Set verbosity level\n");
     printf("\t-H HOST    Use HOST as controller host\n");
     printf("\t-P PORT    Use PORT as controller port\n");
-    printf("\t-B BUFFERS Set how many connections should utilize");
-    printf(" buffered input (default/minimum 64)\n");
     printf("\t-b BUF_ON  Set 1 or 0 to turn buffering on or off");
     printf(", respectively (default 1)\n");
     exit(0);
@@ -346,7 +343,7 @@ int main(int argc, char *argv[]) {
     unsigned port = CPORT;
     int c;
     int level = 1;
-    while ((c = getopt(argc, argv, "hbv:H:P:B:")) != -1) {
+    while ((c = getopt(argc, argv, "hb:v:H:P:B:")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage(argv[0]);
@@ -361,15 +358,9 @@ int main(int argc, char *argv[]) {
 	case 'P':
 	    port = atoi(optarg);
 	    break;
-        case 'B':
-            if (NUM_OF_READ_BUFFERS < atoi(optarg))
-                NUM_OF_READ_BUFFERS = atoi(optarg);
-            break;
         case 'b':
-            if (bufferingEnabled == 0)
-                bufferingEnabled = 1;
+            bufferingEnabled = (((atoi(optarg) & 1) == atoi(optarg)) ? atoi(optarg) : 1);
             break;
-
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);

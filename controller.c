@@ -505,7 +505,7 @@ static void run_controller(char *infile_name) {
 		continue;
 	    }
 	    bool eof;
-	    chunk_ptr msg = chunk_read_builtin_buffer(fd, &eof);
+	    chunk_ptr msg = chunk_read(fd, &eof);
 	    if (eof) {
 		/* Unexpected EOF */
 		if (keyvalue_remove(new_conn_map, (word_t) fd, NULL, NULL)) {

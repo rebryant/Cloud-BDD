@@ -54,12 +54,9 @@ void chunk_at_error(err_fun f) {
 unsigned chunk_check_level = 3;
 
 /* Buffering reads */
-int NUM_OF_READ_BUFFERS = 64;
-
-static bool bufferedWaiting = false;
-
 buf_node* buf_list_head = NULL;
 
+static int bufferReadBool = 1;
 
 /* Error message generated when violate chunk rules.  */
 static void chunk_error(char *reason, chunk_ptr cp) {
@@ -218,9 +215,10 @@ chunk_ptr chunk_get_chunk(chunk_ptr cp, size_t offset, size_t length) {
 }
 
 
+
 /* File I/O based on low-level Unix file descriptors.  These can be files or network connections */
 /* Read chunk from file.  Return null pointer if fail. */
-chunk_ptr chunk_read(int fd, bool *eofp) {
+chunk_ptr chunk_read_legacy(int fd, bool *eofp) {
     unsigned char buf[CHUNK_MAX_SIZE];
     /* Must get enough bytes to read chunk length */
     size_t cnt = 0;
@@ -420,7 +418,7 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp, unsigned char* buf, int
     return (ssize_t)cnt;
 }
 
-chunk_ptr chunk_read_builtin_buffer(int fd, bool* eofp)
+chunk_ptr chunk_read(int fd, bool* eofp)
 {
     if (fd > maxfd)
     {
@@ -477,9 +475,9 @@ chunk_ptr chunk_read_builtin_buffer(int fd, bool* eofp)
         curr_node->location = 0;
     }
 
-    // read if possible - if there is space, and if the inset contains it
-    // this code is problematic!
-    if (((curr_node->length + curr_node->location) < CHUNK_MAX_SIZE) && !(!(FD_ISSET(fd, &in_set))) )
+    // read if possible - if there is space, if the inset contains it, and if we
+    // want to use buffering (otherwise we don't want random buffer refills)
+    if (((curr_node->length + curr_node->location) < CHUNK_MAX_SIZE) && bufferReadBool && !(!(FD_ISSET(fd, &in_set))) )
     {
         report(3, "reading for %d\n", curr_node->fd);
         ssize_t n = read(curr_node->fd, ((curr_node->buf) + (curr_node->location) + (curr_node->length)), CHUNK_MAX_SIZE);
@@ -525,6 +523,14 @@ chunk_ptr chunk_read_builtin_buffer(int fd, bool* eofp)
     return chunk_clone(creadp);
 }
 
+chunk_ptr chunk_read_unbuffered(int fd, bool *eofp)
+{
+    bufferReadBool = 0;
+    chunk_ptr p = chunk_read(fd, eofp);
+    bufferReadBool = 1;
+    return p;
+}
+
 void chunk_deinit()
 {
     buf_node* temp_node = buf_list_head;
@@ -541,129 +547,6 @@ void chunk_deinit()
     }
 
 }
-
-ssize_t read_buffered(int fd, char* buf, size_t len, readBuffer* readBufferArray)
-{
-    bufferedWaiting = false;
-    int cnt;
-    int i;
-    int smallestValidOffset = NUM_OF_READ_BUFFERS;
-
-    readBuffer* buffer = NULL;
-    /* Find the proper buffer */
-    if (readBufferArray != NULL)
-    {
-        for (i = 0; i < NUM_OF_READ_BUFFERS; i++)
-        {
-            if (readBufferArray[i].fd == fd && readBufferArray[i].valid == 1)
-            {
-                buffer = &(readBufferArray[i]);
-            }
-            if (readBufferArray[i].valid == 0 && smallestValidOffset > i)
-            {
-                smallestValidOffset = i;
-            }
-        }
-    }
-
-    if (buffer == NULL)
-    {
-        /* no buffer corresponding to our file descriptor, and no empty buffer */
-        if (smallestValidOffset == NUM_OF_READ_BUFFERS || readBufferArray == NULL)
-        {
-            return read(fd, buf, len);
-        }
-        /* else, we assign the next free buffer to our stack */
-        else
-        {
-            buffer = &(readBufferArray[smallestValidOffset]);
-            buffer->valid = 1;
-            buffer->fd = fd;
-            buffer->cnt = 0;
-        }
-    }
-    while (buffer->cnt <= 0)
-    {
-
-        buffer->cnt = read(buffer->fd, buffer->buf, CHUNK_MAX_SIZE);
-        if (buffer->cnt < 0)
-        {
-            if (errno != EINTR)
-            {
-                return -1;
-            }
-        }
-        else if (buffer->cnt == 0)
-        {
-            return 0;
-        }
-        else
-        {
-            buffer->currBufLocation = buffer->buf;
-        }
-    }
-    cnt = len;
-    if (buffer->cnt < cnt)
-        cnt = buffer->cnt;
-    memcpy(buf, buffer->currBufLocation, cnt);
-    buffer->currBufLocation = buffer->currBufLocation + cnt;
-    buffer->cnt = buffer->cnt - cnt;
-    if (buffer->cnt > 0)
-        bufferedWaiting = true;
-    return cnt;
-}
-
-/* Check whether the last read has additional buffered input waiting */
-bool chunk_waiting()
-{
-    return bufferedWaiting;
-}
-
-/* Buffered version of chunk_read */
-chunk_ptr chunk_read_buffered(int fd, bool *eofp, readBuffer* readBufferArray) {
-    unsigned char buf[CHUNK_MAX_SIZE];
-    /* Must get enough bytes to read chunk length */
-    size_t cnt = 0;
-    size_t need_cnt = sizeof(chunk_t);
-    while (cnt < need_cnt) {
-        /* replace with our read */
-	ssize_t n = read_buffered(fd, &buf[cnt], need_cnt-cnt, readBufferArray);
-	if (n < 0) {
-	    chunk_error("Failed read", NULL);
-	    if (eofp)
-		*eofp = false;
-	    return NULL;
-	}
-	if (n == 0) {
-	    if (eofp)
-		*eofp = true;
-	    else
-		chunk_error("Unexpected EOF", NULL);
-	    return NULL;
-	}
-	cnt += n;
-    }
-    chunk_ptr creadp = (chunk_ptr) buf;
-    size_t len = creadp->length;
-    if (len > 1) {
-	need_cnt += WORD_BYTES * (len - 1);
-	while (cnt < need_cnt) {
-            /* replace with our read */
-	    ssize_t n = read_buffered(fd, &buf[cnt], need_cnt-cnt, readBufferArray);
-	    if (n < 0) {
-		chunk_error("Failed read", NULL);
-	    if (eofp)
-		*eofp = false;
-		return NULL;
-	    }
-	    cnt += n;
-	}
-    }
-    if (eofp)
-	*eofp = false;
-    return chunk_clone(creadp);
-}
-
 
 
 /* Write chunk to file */
