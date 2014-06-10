@@ -248,8 +248,8 @@ chunk_ptr chunk_read_legacy(int fd, bool *eofp) {
 	    ssize_t n = read(fd, &buf[cnt], need_cnt-cnt);
 	    if (n < 0) {
 		chunk_error("Failed read", NULL);
-	    if (eofp)
-		*eofp = false;
+		if (eofp)
+		    *eofp = false;
 		return NULL;
 	    }
 	    cnt += n;
