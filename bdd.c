@@ -1132,7 +1132,7 @@ void ref_collect(ref_mgr mgr, set_ptr roots) {
 void ref_show_stat(ref_mgr mgr) {
     /* Gather statistics information */
     size_t i;
-    agent_stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    agent_stat_counter[STATA_BYTE_PEAK] = last_peak_bytes;
     for (i = 0; i < NSTATA; i++)
 	mgr->stat_counter[i] = agent_stat_counter[i];
     report(0, "Peak bytes %" PRIu64,
@@ -1206,7 +1206,8 @@ chunk_ptr flush_dref_mgr() {
     report(3, "Flushing state");
     /* Gather statistics information */
     size_t i;
-    agent_stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    agent_stat_counter[STATA_BYTE_PEAK] = last_peak_bytes;
+    reset_peak_bytes();
     for (i = 0; i < NSTATA; i++)
 	dmgr->rmgr->stat_counter[i] = agent_stat_counter[i];
     chunk_ptr msg = msg_new_stat(1, NSTAT, dmgr->rmgr->stat_counter);

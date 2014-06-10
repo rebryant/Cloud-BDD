@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -13,9 +14,12 @@
 #include <fcntl.h>
 #include <ctype.h>
 
+#include "dtype.h"
+#include "table.h"
+#include "chunk.h"
 #include "report.h"
-
 #include "console.h"
+
 
 /* Some global values */
 static cmd_ptr cmd_list = NULL;
