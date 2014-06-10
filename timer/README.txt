@@ -12,3 +12,5 @@ input/output file picking
 distributed, local, and cudd
 timing in python vs. parsing the delta time output from runbdd
 grabbing ite/memory utilization
+
+parallel-runner.py: Runs jobs on the Marmot (NMC PRObE) clusters. More to come.
