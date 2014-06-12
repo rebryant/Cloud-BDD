@@ -270,7 +270,7 @@ bool quit_agent(int argc, char *argv[]) {
 
 void agent_show_stat() {
     /* Gather statistics information */
-    agent_stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    agent_stat_counter[STATA_BYTE_PEAK] = last_peak_bytes;
     report(0, "Peak bytes %" PRIu64,
 	   agent_stat_counter[STATA_BYTE_PEAK]);
     report(0, "Operations.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,

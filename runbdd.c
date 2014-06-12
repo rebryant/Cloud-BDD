@@ -601,6 +601,7 @@ bool do_local_flush(int argc, char *argv[]) {
     report(1, "Flushing state");
     bdd_quit(0, NULL);
     mem_status(stdout);
+    reset_peak_bytes();
     bdd_init();
     return true;
 }

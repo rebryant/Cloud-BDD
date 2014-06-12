@@ -9,8 +9,10 @@ Data structure for representing data as a sequence of 64-bit words
 #include <pthread.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#if 0
 #include <error.h>
 #include <errno.h>
+#endif
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/select.h>
@@ -248,8 +250,8 @@ chunk_ptr chunk_read_legacy(int fd, bool *eofp) {
 	    ssize_t n = read(fd, &buf[cnt], need_cnt-cnt);
 	    if (n < 0) {
 		chunk_error("Failed read", NULL);
-	    if (eofp)
-		*eofp = false;
+		if (eofp)
+		    *eofp = false;
 		return NULL;
 	    }
 	    cnt += n;

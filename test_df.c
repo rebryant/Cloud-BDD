@@ -52,7 +52,8 @@
 chunk_ptr flush_worker() {
     report(3, "Flushing state");
     /* Gather statistics information */
-    agent_stat_counter[STATA_BYTE_PEAK] = peak_bytes;
+    agent_stat_counter[STATA_BYTE_PEAK] = last_peak_bytes;
+    reset_peak_bytes();
     chunk_ptr msg = msg_new_stat(1, NSTATA, agent_stat_counter);
     return msg;
 }

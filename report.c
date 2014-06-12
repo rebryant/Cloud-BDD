@@ -78,10 +78,10 @@ static size_t allocate_cnt = 0;
 static size_t allocate_bytes = 0;
 static size_t free_cnt = 0;
 static size_t free_bytes = 0;
-/* This one is externally visible */
+/* These are externally visible */
 size_t peak_bytes = 0;
+size_t last_peak_bytes = 0;
 static size_t current_bytes = 0;
-
 
 /* Call malloc & exit if fails */
 void * malloc_or_fail(size_t bytes, char *fun_name) {
@@ -94,6 +94,7 @@ void * malloc_or_fail(size_t bytes, char *fun_name) {
   allocate_bytes += bytes;
   current_bytes += bytes;
   peak_bytes = MAX(peak_bytes, current_bytes);
+  last_peak_bytes = MAX(last_peak_bytes, current_bytes);
   return p;
 }
 
@@ -108,11 +109,13 @@ void *calloc_or_fail(size_t cnt, size_t bytes, char *fun_name) {
   allocate_bytes += cnt * bytes;
   current_bytes += cnt * bytes;
   peak_bytes = MAX(peak_bytes, current_bytes);
+  last_peak_bytes = MAX(last_peak_bytes, current_bytes);
 
   return p;
 }
 
-/* Call realloc returns NULL & exit if fails.  Require explicit indication of current allocation */
+/* Call realloc returns NULL & exit if fails.
+   Require explicit indication of current allocation */
 void * realloc_or_fail(void *old, size_t old_bytes, size_t new_bytes, char *fun_name) {
   void *p = realloc(old, new_bytes);
   if (!p) {
@@ -123,6 +126,7 @@ void * realloc_or_fail(void *old, size_t old_bytes, size_t new_bytes, char *fun_
   allocate_bytes += new_bytes;
   current_bytes += (new_bytes-old_bytes);
   peak_bytes = MAX(peak_bytes, current_bytes);
+  last_peak_bytes = MAX(last_peak_bytes, current_bytes);
   free_cnt++;
   free_bytes += old_bytes;
   return p;
@@ -140,6 +144,7 @@ char *strsave_or_fail(char *s, char *fun_name) {
   allocate_bytes += len+1;
   current_bytes += len+1;
   peak_bytes = MAX(peak_bytes, current_bytes);
+  last_peak_bytes = MAX(last_peak_bytes, current_bytes);
 
   return strcpy(ss, s);
 }
@@ -178,8 +183,14 @@ void free_string(char *s) {
 
 /* Report current allocation status */
 void mem_status(FILE *fp) {
-    fprintf(fp, "Allocated cnt/bytes: %lu/%lu.  Freed cnt/bytes: %lu/%lu.  Peak bytes %lu, Current bytes %ld\n",
+    fprintf(fp, "Allocated cnt/bytes: %lu/%lu.  Freed cnt/bytes: %lu/%lu.  Peak bytes %lu, Last peak bytes %ld, Current bytes %ld\n",
 	    (long unsigned) allocate_cnt, (long unsigned) allocate_bytes,
 	    (long unsigned) free_cnt, (long unsigned) free_bytes,
-	    (long unsigned) peak_bytes, (long) current_bytes);
+	    (long unsigned) peak_bytes, 
+	    (long unsigned) last_peak_bytes,
+	    (long unsigned) current_bytes);
+}
+
+void reset_peak_bytes() {
+    last_peak_bytes = current_bytes;
 }
