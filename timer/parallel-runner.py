@@ -1,9 +1,9 @@
-import shlex, subprocess, sys, time, getopt
+import shlex, subprocess, sys, time, getopt, signal, string, os
 from subprocess import PIPE
 
 inputFileName = 'instructions-runner.txt'
 outputFileName = ''
-portStr = ''
+portStr = '6616'
 numTrials = 1
 useDeltaTime = False
 verbosity = 0
@@ -36,10 +36,12 @@ def runRounds(runOptions):
         if (hostStr.endswith('-deth')):
             (ipStr, nameStr) = hostStr.split(" ", 1)
             nameStr = nameStr.lstrip().rstrip()
-            hostsList.append(nameStr)
+            if (nameStr.startswith('h')):
+                hostsList.append(nameStr)
     file.close(hostsFile)
 
     maxHosts = len(hostsList)
+    print(hostsList)
 
     for (routers, workers) in routerWorkerList:
         if (maxHosts < routers + workers + 2):
@@ -48,13 +50,13 @@ def runRounds(runOptions):
             sys.exit(2)
 
         # create final name for each outputfile
-        outputFileName = outputFileName + "-r" + str(routers) + "-w" + str(workers) + ".csv"
+        thisOutputFileName = outputFileName + "-r" + str(routers) + "-w" + str(workers) + ".csv"
 
         controllerHost = ''
         clientHost = ''
         routerHosts = []
         workerHosts = []
-        tempHosts = hostsList
+        tempHosts = list(hostsList)
         # assign each node to a job
         controllerHost = tempHosts.pop()
         clientHost = tempHosts.pop()
@@ -67,18 +69,26 @@ def runRounds(runOptions):
         controllerArgList = ['pdsh', '-R', 'exec', '-w']
         controllerArgList.append(controllerHost)
         controllerArgList.append('ssh')
+
         controllerArgList.append('-oStrictHostKeyChecking=no')
         controllerArgList.append('-x')
-        controllerArgList.append('%%h')
-        controllerArgList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/controller')
-        controllerArgList.append("-p")
-        controllerArgList.append(portStr)
-        controllerArgList.append("-r")
-        controllerArgList.append(str(routers))
-        controllerArgList.append("-w")
-        controllerArgList.append(str(workers))
+        controllerArgList.append('%h')
 
-        controllerProc = subprocess.Popen(controllerArgList)
+        controllerArgSSHList = []
+        controllerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/controller')
+        controllerArgSSHList.append("-p")
+        controllerArgSSHList.append(portStr)
+        controllerArgSSHList.append("-r")
+        controllerArgSSHList.append(str(routers))
+        controllerArgSSHList.append("-w")
+        controllerArgSSHList.append(str(workers))
+        controllerArgList.append("\'" + string.join(controllerArgSSHList) + "\'")
+
+        print(string.join(controllerArgList, " "))
+        controllerProc = subprocess.Popen(string.join(controllerArgList, " "), shell=True)
+        print("Created controller.")
+
+        time.sleep(2)
 
         # build router arglist
         routerArgList = ['pdsh', '-R', 'exec', '-w']
@@ -89,15 +99,20 @@ def runRounds(runOptions):
         routerArgList.append('ssh')
         routerArgList.append('-oStrictHostKeyChecking=no')
         routerArgList.append('-x')
-        routerArgList.append('%%h')
-        routerArgList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/router')
-        routerArgList.append("-H")
-        routerArgList.append(controllerHost)
-        routerArgList.append("-P")
-        routerArgList.append(portStr)
+        routerArgList.append('%h')
 
-        routerProc = subprocess.Popen(routerArgList)
+        routerArgSSHList = []
+        routerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/router')
+        routerArgSSHList.append("-H")
+        routerArgSSHList.append(controllerHost)
+        routerArgSSHList.append("-P")
+        routerArgSSHList.append(portStr)
 
+        routerArgList.append("\'" + string.join(routerArgSSHList, " ") + "\'")
+        print(string.join(routerArgList, " "))
+        routerProc = subprocess.Popen(string.join(routerArgList, " "), shell=True)
+
+        time.sleep(2)
         # build worker arglist
         workerArgList = ['pdsh', '-R', 'exec', '-w']
         workerListStr = workerHosts.pop()
@@ -107,15 +122,19 @@ def runRounds(runOptions):
         workerArgList.append('ssh')
         workerArgList.append('-oStrictHostKeyChecking=no')
         workerArgList.append('-x')
-        workerArgList.append('%%h')
-        workerArgList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/bworker')
-        workerArgList.append("-H")
-        workerArgList.append(controllerHost)
-        workerArgList.append("-P")
-        workerArgList.append(portStr)
+        workerArgList.append('%h')
 
-        workerProc = subprocess.Popen(workerArgList)
+        workerArgSSHList = []
+        workerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/bworker')
+        workerArgSSHList.append("-H")
+        workerArgSSHList.append(controllerHost)
+        workerArgSSHList.append("-P")
+        workerArgSSHList.append(portStr)
+        workerArgList.append("\'" + string.join(workerArgSSHList, " ") + "\'")
+        print(string.join(workerArgList, " "))
 
+        workerProc = subprocess.Popen(string.join(workerArgList, " "), shell=True)
+        time.sleep(2)
         # finally, build client arglist
 
         clientArgList = ['pdsh', '-R', 'exec', '-w']
@@ -123,31 +142,31 @@ def runRounds(runOptions):
         clientArgList.append('ssh')
         clientArgList.append('-oStrictHostKeyChecking=no')
         clientArgList.append('-x')
-        clientArgList.append('%%h')
+        clientArgList.append('%h')
 
         compoundStr = '\'cd /proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/timer; python csv-tester.py'
         for option in runOptions:
             compoundStr = compoundStr + ' ' + option
         compoundStr = compoundStr + ' -H ' + controllerHost
-        compoundStr = compoundStr + ' -o ' + outputFileName
+        compoundStr = compoundStr + ' -o ' + thisOutputFileName
         compoundStr = compoundStr + ' -i ' + sourceFileName
         compoundStr = compoundStr + '\''
-        print(compoundStr)
         clientArgList.append(compoundStr)
 
         # create the script process; wait for it to execute
         # error-checking goes HERE
-        clientProc = subprocess.Popen(clientArgList)
+        print(string.join(clientArgList, " "))
+        clientProc = subprocess.Popen(string.join(clientArgList, " "), shell=True)
         clientProc.wait()
 
         # kill off the workers, routers, and controllers via
-        # the pdsh SIGINT method
-        workerProc.send_signal(SIGINT)
-        workerProc.send_signal(SIGINT)
-        routerProc.send_signal(SIGINT)
-        routerProc.send_signal(SIGINT)
-        controllerProc.send_signal(SIGINT)
-        controllerProc.send_signal(SIGINT)
+        # the pdsh signal.SIGINT method
+        workerProc.send_signal(signal.SIGINT)
+        workerProc.send_signal(signal.SIGINT)
+        routerProc.send_signal(signal.SIGINT)
+        routerProc.send_signal(signal.SIGINT)
+        controllerProc.send_signal(signal.SIGINT)
+        controllerProc.send_signal(signal.SIGINT)
 
 
 def usage():
@@ -241,5 +260,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-    print("Done!")
+    pid = os.fork()
+    if (pid == 0):
+        main()
+        print("Done!")
+        sys.exit(0)
+    else:
+        print("Forked a child...")
+        print("Child pid: %i" % pid)
+        sys.exit(0)
