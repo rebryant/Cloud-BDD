@@ -69,7 +69,7 @@ def runRounds(runOptions):
         controllerArgList.append('ssh')
         controllerArgList.append('-oStrictHostKeyChecking=no')
         controllerArgList.append('-x')
-        controllerArgList.append('\%h')
+        controllerArgList.append('%%h')
         controllerArgList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/controller')
         controllerArgList.append("-p")
         controllerArgList.append(portStr)
@@ -89,7 +89,7 @@ def runRounds(runOptions):
         routerArgList.append('ssh')
         routerArgList.append('-oStrictHostKeyChecking=no')
         routerArgList.append('-x')
-        routerArgList.append('\%h')
+        routerArgList.append('%%h')
         routerArgList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/router')
         routerArgList.append("-H")
         routerArgList.append(controllerHost)
@@ -107,7 +107,7 @@ def runRounds(runOptions):
         workerArgList.append('ssh')
         workerArgList.append('-oStrictHostKeyChecking=no')
         workerArgList.append('-x')
-        workerArgList.append('\%h')
+        workerArgList.append('%%h')
         workerArgList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/bworker')
         workerArgList.append("-H")
         workerArgList.append(controllerHost)
@@ -123,7 +123,7 @@ def runRounds(runOptions):
         clientArgList.append('ssh')
         clientArgList.append('-oStrictHostKeyChecking=no')
         clientArgList.append('-x')
-        clientArgList.append('\%h')
+        clientArgList.append('%%h')
 
         compoundStr = '\'cd /proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/timer; python csv-tester.py'
         for option in runOptions:
