@@ -31,11 +31,11 @@ def initUtilizationDetails(timeFile, p):
             total = total.lstrip(' Total ')
             print(total)
             details.append(int(total))
-        elif (readStr.startswith('Peak ITEc entries')):
-            readStr = readStr.lstrip('Peak ITEc entries')
+        elif (readStr.startswith('Peak unique entries')):
+            readStr = readStr.lstrip('Peak unique entries')
             (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
-            average = average.lstrip().rstrip("Sum").rstrip()
-            details.append(float(average))
+            Sum = Sum.lstrip().rstrip("Sum").rstrip()
+            details.append(float(Sum))
 
 
 def printUtilizationDetails(timeFile, p):
@@ -59,11 +59,11 @@ def printUtilizationDetails(timeFile, p):
             print(total)
             timeFile.write(str(int(total) - int(details.pop(0))))
             timeFile.write(',')
-        elif (readStr.startswith('Peak ITEc entries')):
-            readStr = readStr.lstrip('Peak ITEc entries')
+        elif (readStr.startswith('Peak unique entries')):
+            readStr = readStr.lstrip('Peak unique entries')
             (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
-            average = average.lstrip().rstrip("Sum").rstrip()
-            timeFile.write(str(float(average) - float(details.pop(0))))
+            Sum = Sum.lstrip().rstrip("Sum").rstrip()
+            timeFile.write(str(float(Sum) - float(details.pop(0))))
             timeFile.write(',')
 
 
@@ -71,7 +71,7 @@ def printUtilizationDetails(timeFile, p):
 def utilizationDetailsHeader(timeFile):
     timeFile.write("Allocated bytes from previous operation,")
     timeFile.write("Total number of ITEs,")
-    timeFile.write("Avg Peak ITEc entries,")
+    timeFile.write("Sum Peak unique entries,")
 
 
 def runTests(inputFile, timeFile, p):
@@ -156,7 +156,7 @@ def runTimer(runOptions):
     global useDeltaTime, inputFileName, outputFileName
     global portStr, hostStr, numTrials, getUtilDetailsBool
 
-    timeFile = open(outputFileName, 'w')
+    timeFile = open(outputFileName, 'w', 1)
 
     timeFile.write(",,")
     for i in range(numTrials):

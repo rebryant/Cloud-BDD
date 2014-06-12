@@ -9,8 +9,10 @@ Data structure for representing data as a sequence of 64-bit words
 #include <pthread.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#if 0
 #include <error.h>
 #include <errno.h>
+#endif
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/select.h>
