@@ -15,7 +15,7 @@ specialDeltaTime = False
 
 def initUtilizationDetails(timeFile, p, runMode):
     global verbosity, details
-    if (runMode.equals("-c")):
+    if (runMode == "-c"):
         p.stdin.write("flush")
         p.stdin.write("\n")
     else:
@@ -42,17 +42,17 @@ def initUtilizationDetails(timeFile, p, runMode):
 
 def printUtilizationDetails(timeFile, p, runMode):
     global verbosity, details
-    if (runMode.equals("-c")):
+    if (runMode == "-c"):
         p.stdin.write("status")
         p.stdin.write("\n")
         readStr = ""
         while ((readStr.startswith('Time for reordering')) == False):
             readStr = p.stdout.readline().lstrip().rstrip()
             if (readStr.startswith('Memory in use: ')):
-                readStr.lstrip('Memory in use: ').rstrip()
+                readStr = readStr.lstrip('Memory in use:').rstrip()
                 timeFile.write(readStr + ",,")
             elif (readStr.startswith('Peak number of nodes: ')):
-                readStr.lstrip('Peak number of nodes: ').rstrip()
+                readStr = readStr.lstrip('Peak number of nodes:').rstrip()
                 timeFile.write(readStr + ",")
         p.stdin.write("flush")
         p.stdin.write("\n")
@@ -82,7 +82,7 @@ def printUtilizationDetails(timeFile, p, runMode):
             if (readStr.startswith('Peak bytes allocated')):
                 readStr = readStr.lstrip('Peak bytes allocated')
                 (temp1, temp2, Min, Max, Avg, Sum) = readStr.split(':', 5)
-                timeFile.write(int(Sum.rstrip().lstrip()))
+                timeFile.write(str(int(Sum.rstrip().lstrip())))
                 timeFile.write(',')
         for x in detailsToPrint:
             timeFile.write(x)
@@ -180,7 +180,7 @@ def runTests(inputFile, timeFile, p, opt):
                 timeFile.write(('%.4f' % diffTime) + ",")
 
             if getUtilDetailsBool:
-                printUtilizationDetails(timeFile, p)
+                printUtilizationDetails(timeFile, p, opt)
 
         timeFile.write("\r\n")
 
