@@ -8,6 +8,8 @@ numTrials = 1
 useDeltaTime = False
 verbosity = 0
 getUtilDetailsBool = True
+specialTimeDeltaBool = False
+
 
 def runRounds(runOptions):
     global inputFileName, outputFileName, portStr
@@ -74,7 +76,7 @@ def runRounds(runOptions):
         controllerArgList.append(controllerHost)
         controllerArgNewList = []
         controllerArgNewList.append('ssh')
-        
+
         controllerArgNewList.append('-oStrictHostKeyChecking=no')
         controllerArgNewList.append('-x')
         controllerArgNewList.append('%h')
@@ -87,7 +89,7 @@ def runRounds(runOptions):
         controllerArgSSHList.append(str(routers))
         controllerArgSSHList.append("-w")
         controllerArgSSHList.append(str(workers))
-        controllerArgNewList.append("\'" + string.join(controllerArgSSHList, " ") + "\'") 
+        controllerArgNewList.append("\'" + string.join(controllerArgSSHList, " ") + "\'")
 
         controllerProc = subprocess.Popen(controllerArgList, stdin=PIPE)
         controllerProc.stdin.write(string.join(controllerArgNewList, " ") + "\n")
@@ -100,7 +102,7 @@ def runRounds(runOptions):
         for routerHost in routerHosts:
             routerListStr = routerListStr + "," + routerHost
         routerArgList.append(routerListStr)
-        
+
         routerArgNewList = []
         routerArgNewList.append('ssh')
         routerArgNewList.append('-oStrictHostKeyChecking=no')
@@ -113,7 +115,7 @@ def runRounds(runOptions):
         routerArgSSHList.append(controllerHost)
         routerArgSSHList.append("-P")
         routerArgSSHList.append(portStr)
-        
+
         routerArgNewList.append("\'" + string.join(routerArgSSHList, " ") + "\'")
         routerProc = subprocess.Popen(routerArgList, stdin=PIPE, shell=False)
         routerProc.stdin.write(string.join(routerArgNewList, " ") + "\n")
@@ -131,7 +133,7 @@ def runRounds(runOptions):
         workerArgNewList.append('-oStrictHostKeyChecking=no')
         workerArgNewList.append('-x')
         workerArgNewList.append('%h')
- 
+
         workerArgSSHList = []
         workerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/bworker')
         workerArgSSHList.append("-H")
@@ -188,7 +190,7 @@ def runRounds(runOptions):
         killallRouterList = ['/usr/bin/pdsh', '-R', 'exec', '-w']
         killallRouterList.append(routerListStr)
         killallRouterList.extend(['ssh', '-oStrictHostKeyChecking=no', '-x', '%h', "\'killall -9 router\'"])
-        
+
         routerKillProc = subprocess.Popen(string.join(killallRouterList, " "), shell=True)
         # routerKillProc.stdin.write(string.join(killallRouterList, " ") + "\n")
         time.sleep(2 * routers)
@@ -209,7 +211,7 @@ def runRounds(runOptions):
         os.kill(workerProc.pid + 1, signal.SIGINT)
         time.sleep(0.2)
         os.kill(workerProc.pid + 1, signal.SIGINT)
-        
+
         time.sleep(2 * workers)
         workerProc.terminate()
 
@@ -217,7 +219,7 @@ def runRounds(runOptions):
         os.kill(routerProc.pid + 1, signal.SIGINT)
         time.sleep(0.2)
         os.kill(routerProc.pid + 1, signal.SIGINT)
-        
+
         time.sleep(2 * routers)
         routerProc.terminate()
 
@@ -225,7 +227,7 @@ def runRounds(runOptions):
         os.kill(controllerProc.pid + 1, signal.SIGINT)
         time.sleep(0.2)
         os.kill(controllerProc.pid + 1, signal.SIGINT)
-        
+
         time.sleep(2)
         controllerProc.terminate() '''
 
@@ -260,7 +262,7 @@ def main():
 
     global useDeltaTime, inputFileName, outputFileName
     global portStr, numTrials, verbosity
-    global getUtilDetailsBool
+    global getUtilDetailsBool, specialDeltaTime
     runOptions = []
 
     for opt, arg in opts:
@@ -269,6 +271,8 @@ def main():
         elif opt == "-t":
             if (int(arg) == 1):
                 useDeltaTime = True
+            elif (int(arg) == 2):
+                specialDeltaTime = True
         elif opt == "-i":
             inputFileName = arg
         elif opt == "-o":
@@ -307,7 +311,7 @@ def main():
 
     # add all options to run
     runOptions.append("-t")
-    runOptions.append(str((1 if useDeltaTime else 0)))
+    runOptions.append(str((1 if useDeltaTime else (2 if specialDeltaTime else 0))))
     runOptions.append("-n")
     runOptions.append(str(numTrials))
     runOptions.append("-v")
@@ -320,7 +324,7 @@ def main():
 
 if __name__ == "__main__":
     pid = os.fork()
-    if (pid == 0): 
+    if (pid == 0):
         main()
         print("Done!")
         sys.exit(0)

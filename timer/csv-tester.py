@@ -11,71 +11,99 @@ verbosity = 0
 getUtilDetailsBool = False
 numDetails = 3
 details = []
+specialDeltaTime = False
 
-def initUtilizationDetails(timeFile, p):
+def initUtilizationDetails(timeFile, p, runMode):
     global verbosity, details
-    p.stdin.write("flush")
-    p.stdin.write("\n")
-    readStr = "s"
-    while ((readStr.startswith('Unary stores')) == False and len(readStr) != 0):
-        readStr = p.stdout.readline().lstrip('cmd>')
-        if (readStr.startswith('Allocated cnt/bytes')):
-            readStr = readStr.lstrip('Allocated cnt/bytes')
-            (temp1, data, temp2) = readStr.split('/', 2)
-            (data, temp1) = data.split('.', 1)
-            details.append(int(data))
-        elif (readStr.startswith('ITEs. Total ')):
-            readStr = readStr.lstrip('ITEs. Total ')
-            print(readStr)
-            (total, local, cache, recursion) = readStr.split('.', 3)
-            total = total.lstrip(' Total ')
-            print(total)
-            details.append(int(total))
-        elif (readStr.startswith('Peak unique entries')):
-            readStr = readStr.lstrip('Peak unique entries')
-            (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
-            Sum = Sum.lstrip().rstrip("Sum").rstrip()
-            details.append(float(Sum))
+    if (runMode.equals("-c")):
+        p.stdin.write("flush")
+        p.stdin.write("\n")
+    else:
+        p.stdin.write("flush")
+        p.stdin.write("\n")
+        readStr = "s"
+        while ((readStr.startswith('Unary stores')) == False and len(readStr) != 0):
+            readStr = p.stdout.readline().lstrip('cmd>')
+            # if (readStr.startswith('Peak bytes allocated')):
+                # nothing, since we don't need a previous value
+            if (readStr.startswith('ITEs. Total ')):
+                readStr = readStr.lstrip('ITEs. Total ')
+                print(readStr)
+                (total, local, cache, recursion) = readStr.split('.', 3)
+                total = total.lstrip(' Total ')
+                print(total)
+                details.append(int(total))
+            elif (readStr.startswith('Peak unique entries')):
+                readStr = readStr.lstrip('Peak unique entries')
+                (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
+                Sum = Sum.lstrip().rstrip("Sum").rstrip()
+                details.append(float(Sum))
 
 
-def printUtilizationDetails(timeFile, p):
+def printUtilizationDetails(timeFile, p, runMode):
     global verbosity, details
-    p.stdin.write("flush")
-    p.stdin.write("\n")
-    readStr = ""
-    while ((readStr.startswith('Unary stores')) == False):
-        readStr = p.stdout.readline().lstrip('cmd>')
-        if (readStr.startswith('Allocated cnt/bytes')):
-            readStr = readStr.lstrip('Allocated cnt/bytes')
-            (temp1, data, temp2) = readStr.split('/', 2)
-            (data, temp1) = data.split('.', 1)
-            timeFile.write(str(int(data) - int(details.pop(0))))
+    if (runMode.equals("-c")):
+        p.stdin.write("status")
+        p.stdin.write("\n")
+        readStr = ""
+        while ((readStr.startswith('Time for reordering')) == False):
+            readStr = p.stdout.readline().lstrip().rstrip()
+            if (readStr.startswith('Memory in use: ')):
+                readStr.lstrip('Memory in use: ').rstrip()
+                timeFile.write(readStr + ",,")
+            elif (readStr.startswith('Peak number of nodes: ')):
+                readStr.lstrip('Peak number of nodes: ').rstrip()
+                timeFile.write(readStr + ",")
+        p.stdin.write("flush")
+        p.stdin.write("\n")
+    else:
+        p.stdin.write("flush")
+        p.stdin.write("\n")
+        readStr = ""
+        detailsToPrint = []
+        while ((readStr.startswith('Unary stores')) == False):
+            readStr = p.stdout.readline().lstrip('cmd>')
+            if (readStr.startswith('ITEs. Total ')):
+                readStr = readStr.lstrip('ITEs.')
+                (total, local, cache, recursion) = readStr.split('.', 3)
+                total = total.lstrip(' Total ')
+                detailsToPrint.append(str(int(total) - int(details.pop(0))))
+            elif (readStr.startswith('Peak unique entries')):
+                readStr = readStr.lstrip('Peak unique entries')
+                (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
+                Sum = Sum.lstrip().lstrip("Sum").rstrip()
+                detailsToPrint.append(str(float(Sum) - float(details.pop(0))))
+
+        p.stdin.write("flush")
+        p.stdin.write("\n")
+        readStr = ""
+        while ((readStr.startswith('Unary stores')) == False):
+            readStr = p.stdout.readline().lstrip('cmd>')
+            if (readStr.startswith('Peak bytes allocated')):
+                readStr = readStr.lstrip('Peak bytes allocated')
+                (temp1, temp2, Min, Max, Avg, Sum) = readStr.split(':', 5)
+                timeFile.write(int(Sum.rstrip().lstrip()))
+                timeFile.write(',')
+        for x in detailsToPrint:
+            timeFile.write(x)
             timeFile.write(',')
-        elif (readStr.startswith('ITEs. Total ')):
-            readStr = readStr.lstrip('ITEs.')
-            print(readStr)
-            (total, local, cache, recursion) = readStr.split('.', 3)
-            total = total.lstrip(' Total ')
-            print(total)
-            timeFile.write(str(int(total) - int(details.pop(0))))
-            timeFile.write(',')
-        elif (readStr.startswith('Peak unique entries')):
-            readStr = readStr.lstrip('Peak unique entries')
-            (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
-            Sum = Sum.lstrip().rstrip("Sum").rstrip()
-            timeFile.write(str(float(Sum) - float(details.pop(0))))
-            timeFile.write(',')
+
 
 
 
 def utilizationDetailsHeader(timeFile):
-    timeFile.write("Allocated bytes from previous operation,")
+    timeFile.write("Sum Peak bytes allocated,")
     timeFile.write("Total number of ITEs,")
     timeFile.write("Sum Peak unique entries,")
 
+def utilizationDetailsHeaderCUDD(timeFile):
+    timeFile.write("Memory in use,")
+    timeFile.write("N/A,")
+    timeFile.write("Peak number of nodes,")
 
-def runTests(inputFile, timeFile, p):
-    global useDeltaTime, numTrials, verbosity
+
+def runTests(inputFile, timeFile, p, opt):
+    global useDeltaTime, numTrials, verbosity, specialDeltaTime
     for line in inputFile:
         timeFile.write(line.rstrip() + ",,")
         for i in range(numTrials):
@@ -84,7 +112,7 @@ def runTests(inputFile, timeFile, p):
 
             # if we want to track utilization details
             if getUtilDetailsBool:
-                initUtilizationDetails(timeFile, p)
+                initUtilizationDetails(timeFile, p, opt)
 
             # we keep track of the number of times that
             # time is called, so that we know when to
@@ -137,13 +165,17 @@ def runTests(inputFile, timeFile, p):
             deltaTimeList = deltaTimeList[1:]
             for x in deltaTimeList:
                 deltaTime = deltaTime + x
+            deltaTimeList.reverse()
+            directTime = deltaTimeList[1]
             if (verbosity > 0):
-                print('operation \'' + line.rstrip() + '\' took ' + ('%.4f' % diffTime) + ' seconds. Delta time (from program): ' + ('%.4f' % deltaTime) + ' \n')
+                print('operation \'' + line.rstrip() + '\' took ' + ('%.4f' % diffTime) + ' seconds. Delta time (from program): ' + ('%.4f' % deltaTime) + ' seconds. Direct time: ' + ('%.4f' % directTime) + ' seconds \n')
             if (tempFile != None):
                 file.close(tempFile)
 
             if (useDeltaTime):
                 timeFile.write(('%.4f' % deltaTime) + ",")
+            elif (specialDeltaTime):
+                timeFile.write(('%.4f' % directTime) + ",")
             else:
                 timeFile.write(('%.4f' % diffTime) + ",")
 
@@ -155,6 +187,7 @@ def runTests(inputFile, timeFile, p):
 def runTimer(runOptions):
     global useDeltaTime, inputFileName, outputFileName
     global portStr, hostStr, numTrials, getUtilDetailsBool
+    global specialDeltaTime
 
     timeFile = open(outputFileName, 'w', 1)
 
@@ -162,7 +195,8 @@ def runTimer(runOptions):
     for i in range(numTrials):
         timeFile.write("Trial " + str(i + 1) + " (s),")
         if (getUtilDetailsBool):
-            utilizationDetailsHeader(timeFile)
+            for i in range(numDetails):
+                timeFile.write(",")
 
     timeFile.write("\r\n")
 
@@ -183,8 +217,10 @@ def runTimer(runOptions):
         for i in range(numTrials):
             timeFile.write(",")
             if (getUtilDetailsBool):
-                for i in range(numDetails):
-                    timeFile.write(",")
+                if (opt == "-c"):
+                    utilizationDetailsHeaderCUDD(timeFile)
+                else:
+                    utilizationDetailsHeader(timeFile)
         timeFile.write("\r\n")
 
         #write empty row
@@ -208,7 +244,7 @@ def runTimer(runOptions):
         # run timer and output to file
         p = subprocess.Popen(argList, stdin=PIPE, stdout=PIPE, bufsize = 0)
 
-        runTests(inputFile, timeFile, p)
+        runTests(inputFile, timeFile, p, opt)
         p.kill()
         file.close(inputFile)
         # create empty row
@@ -234,7 +270,7 @@ def usage():
     print("\t-P PORT          The port of the controller. Default: 6616")
     print("\t-i INPUTFILE     The file name to take input from. Default: instructions-scripts.txt")
     print("\t-o OUTPUTFILE    The file name to take output from. Default: times-scripts.txt")
-    print("\t-t USE DELTATIME 1 to use the delta times from the program, 0 to use the timer in this script. Default: 0")
+    print("\t-t USE DELTATIME 1 to use the delta times from the program, 0 to use the timer in this script. 2 to use direct delta times, and not a separate set of times. Default: 0")
     print("\t-n NUM           The number of trials for each command. Default: 1")
     print("\t-c               Uses the CUDD package for timing. Default: disabled.")
     print("\t-d               Uses the distributed package for timing. Default: enabled.")
@@ -253,7 +289,7 @@ def main():
 
     global useDeltaTime, inputFileName, outputFileName
     global portStr, hostStr, numTrials, verbosity
-    global getUtilDetailsBool
+    global getUtilDetailsBool, specialDeltaTime
     runOptions = []
 
     for opt, arg in opts:
@@ -264,6 +300,8 @@ def main():
         elif opt == "-t":
             if (int(arg) == 1):
                 useDeltaTime = True
+            elif (int(arg) == 2):
+                specialDeltaTime = True
         elif opt == "-i":
             inputFileName = arg
         elif opt == "-o":
