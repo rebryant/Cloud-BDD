@@ -8,17 +8,14 @@ hostStr = ''
 numTrials = 1
 useDeltaTime = False
 verbosity = 0
-getUtilDetailsBool = False
+vgetUtilDetailsBool = False
 numDetails = 3
 details = []
 specialDeltaTime = False
 
 def initUtilizationDetails(timeFile, p, runMode):
     global verbosity, details
-    if (runMode == "-c"):
-        p.stdin.write("flush")
-        p.stdin.write("\n")
-    else:
+    if (runMode == "-d"):
         p.stdin.write("flush")
         p.stdin.write("\n")
         readStr = "s"
@@ -28,16 +25,31 @@ def initUtilizationDetails(timeFile, p, runMode):
                 # nothing, since we don't need a previous value
             if (readStr.startswith('ITEs. Total ')):
                 readStr = readStr.lstrip('ITEs. Total ')
-                print(readStr)
                 (total, local, cache, recursion) = readStr.split('.', 3)
                 total = total.lstrip(' Total ')
-                print(total)
                 details.append(int(total))
             elif (readStr.startswith('Peak unique entries')):
                 readStr = readStr.lstrip('Peak unique entries')
                 (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
                 Sum = Sum.lstrip().rstrip("Sum").rstrip()
                 details.append(float(Sum))
+    elif (runMode == "-l"):
+        p.stdin.write("flush")
+        p.stdin.write("\n")
+        readStr = "s"
+        while ((readStr.startswith('Allocated cnt/bytes:')) == False and len(readStr) != 0):
+            readStr = p.stdout.readline().lstrip('cmd>')
+            # if (readStr.startswith('Peak bytes allocated')):
+                # nothing, since we don't need a previous value
+            if (readStr.startswith('ITEs. Total ')):
+                readStr = readStr.lstrip('ITEs. Total ')
+                (total, local, cache, recursion) = readStr.split('.', 3)
+                total = total.lstrip(' Total ')
+                details.append(int(total))
+    else:
+        p.stdin.write("flush")
+        p.stdin.write("\n")
+
 
 
 def printUtilizationDetails(timeFile, p, runMode):
@@ -56,6 +68,23 @@ def printUtilizationDetails(timeFile, p, runMode):
                 timeFile.write(readStr + ",")
         p.stdin.write("flush")
         p.stdin.write("\n")
+    elif (runMode == "-l"):
+        p.stdin.write("flush")
+        p.stdin.write("\n")
+        readStr = ""
+        while ((readStr.startswith('Allocated cnt/bytes:')) == False):
+            readStr = p.stdout.readline().lstrip('cmd>')
+            if (readStr.startswith('Peak bytes ')):
+                readStr = readStr.lstrip('Peak bytes ').rstrip()
+                timeFile.write(readStr)
+                timeFile.write(',')
+            if (readStr.startswith('ITEs. Total ')):
+                readStr = readStr.lstrip('ITEs.')
+                (total, local, cache, recursion) = readStr.split('.', 3)
+                total = total.lstrip(' Total ')
+                timeFile.write(str(int(total) - int(details.pop(0))))
+                timeFile.write(',,')
+
     else:
         p.stdin.write("flush")
         p.stdin.write("\n")
@@ -88,13 +117,15 @@ def printUtilizationDetails(timeFile, p, runMode):
             timeFile.write(x)
             timeFile.write(',')
 
-
-
-
 def utilizationDetailsHeader(timeFile):
     timeFile.write("Sum Peak bytes allocated,")
     timeFile.write("Total number of ITEs,")
     timeFile.write("Sum Peak unique entries,")
+
+def utilizationDetailsHeaderLocal(timeFile):
+    timeFile.write("Peak bytes,")
+    timeFile.write("Total number of ITEs,")
+    timeFile.write("N/A,")
 
 def utilizationDetailsHeaderCUDD(timeFile):
     timeFile.write("Memory in use,")
@@ -219,6 +250,8 @@ def runTimer(runOptions):
             if (getUtilDetailsBool):
                 if (opt == "-c"):
                     utilizationDetailsHeaderCUDD(timeFile)
+                elif (opt == "-l"):
+                    utilizationDetailsHeaderLocal(timeFile)
                 else:
                     utilizationDetailsHeader(timeFile)
         timeFile.write("\r\n")
