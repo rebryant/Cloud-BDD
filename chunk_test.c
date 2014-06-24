@@ -124,7 +124,14 @@ static void reassemble_test(char *s, chunk_ptr cp) {
 /* Test ability to write and read chunks as files */
 static void write_read_test(char *s, chunk_ptr cp) {
     char *fname = "chunk_test.dat";
-    int fd = open(fname, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR);
+    int fd = open(fname, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR); //Add O_TRUNC to mitigate bug.
+
+    /*
+      Explanation:
+
+      My code refills the buffer using the entire file (refills using CHUNK_MAX_SIZE). Sometimes, the file will be longer than needed (longer string previously, and shorter string now - the file is not truncated but overwritten from the beginning.) It'll load the next string correctly, but after that the following chunk's header is corrupted since the file had 'extra' data that then got cast to a chunk header - thus resulting in giant chunk sizes.
+     */
+
     if (fd < 0) {
 	err(true, "Couldn't open file '%s' for write", fname);
     }
@@ -206,7 +213,7 @@ int main(int argc, char *argv[]) {
 	}
     }
     size_t i;
-    for (i = 0; i < tcount; i++) 
+    for (i = 0; i < tcount; i++)
 	test_string(maxlen);
     printf("Completed %d tests\n", tcount);
     mem_status(stdout);
