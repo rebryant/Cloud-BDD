@@ -8,7 +8,7 @@ numTrials = 1
 useDeltaTime = False
 verbosity = 0
 getUtilDetailsBool = True
-specialTimeDeltaBool = False
+specialDeltaTime = False
 
 
 def runRounds(runOptions):
@@ -82,15 +82,18 @@ def runRounds(runOptions):
         controllerArgNewList.append('%h')
 
         controllerArgSSHList = []
-        controllerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/controller')
+        controllerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/Cloud-BDD-master/controller')
         controllerArgSSHList.append("-p")
         controllerArgSSHList.append(portStr)
+        controllerArgSSHList.append("-c")
+        controllerArgSSHList.append(str(1))
         controllerArgSSHList.append("-r")
         controllerArgSSHList.append(str(routers))
         controllerArgSSHList.append("-w")
         controllerArgSSHList.append(str(workers))
         controllerArgNewList.append("\'" + string.join(controllerArgSSHList, " ") + "\'")
-
+        print(controllerArgList)
+        print(string.join(controllerArgNewList, " ") + "\n")
         controllerProc = subprocess.Popen(controllerArgList, stdin=PIPE)
         controllerProc.stdin.write(string.join(controllerArgNewList, " ") + "\n")
         print("Controller pid " + str(controllerProc.pid) + "\n Corrected pid: " + str(controllerProc.pid+1))
@@ -110,7 +113,7 @@ def runRounds(runOptions):
         routerArgNewList.append('%h')
 
         routerArgSSHList = []
-        routerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/router')
+        routerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/Cloud-BDD-master/router')
         routerArgSSHList.append("-H")
         routerArgSSHList.append(controllerHost)
         routerArgSSHList.append("-P")
@@ -135,7 +138,7 @@ def runRounds(runOptions):
         workerArgNewList.append('%h')
 
         workerArgSSHList = []
-        workerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/bworker')
+        workerArgSSHList.append('/proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/Cloud-BDD-master/bworker')
         workerArgSSHList.append("-H")
         workerArgSSHList.append(controllerHost)
         workerArgSSHList.append("-P")
@@ -154,7 +157,7 @@ def runRounds(runOptions):
         clientArgList.append('-x')
         clientArgList.append('%h')
 
-        compoundStr = '\'cd /proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/timer; python csv-tester.py'
+        compoundStr = '\'cd /proj/CloudBDD/CloudBDD-Test/Cloud-BDD-master/Cloud-BDD-master/timer; python csv-tester.py'
         for option in runOptions:
             compoundStr = compoundStr + ' ' + option
         compoundStr = compoundStr + ' -H ' + controllerHost

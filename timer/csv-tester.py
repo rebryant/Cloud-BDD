@@ -8,10 +8,15 @@ hostStr = ''
 numTrials = 1
 useDeltaTime = False
 verbosity = 0
-vgetUtilDetailsBool = False
-numDetails = 3
+getUtilDetailsBool = False
+
 details = []
 specialDeltaTime = False
+
+numDistributedDetails = 5
+numLocalDetails = 2
+numCUDDDetails = 2
+numTotalDetails = max(max(numDistributedDetails, numLocalDetails), numCUDDDetails)
 
 def initUtilizationDetails(timeFile, p, runMode):
     global verbosity, details
@@ -28,11 +33,21 @@ def initUtilizationDetails(timeFile, p, runMode):
                 (total, local, cache, recursion) = readStr.split('.', 3)
                 total = total.lstrip(' Total ')
                 details.append(int(total))
+            elif (readStr.startswith('Total operations sent')):
+                readStr = readStr.lstrip('Total operations sent')
+                (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
+                Sum = Sum.lstrip().rstrip("Sum").rstrip()
+                details.append(int(Sum))
+            elif (readStr.startswith('Total number of ITEs')):
+                readStr = readStr.lstrip('Total number of ITEs')
+                (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
+                Sum = Sum.lstrip().rstrip("Sum").rstrip()
+                details.append(int(Sum))
             elif (readStr.startswith('Peak unique entries')):
                 readStr = readStr.lstrip('Peak unique entries')
                 (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
                 Sum = Sum.lstrip().rstrip("Sum").rstrip()
-                details.append(float(Sum))
+                details.append(int(Sum))
     elif (runMode == "-l"):
         p.stdin.write("flush")
         p.stdin.write("\n")
@@ -53,7 +68,7 @@ def initUtilizationDetails(timeFile, p, runMode):
 
 
 def printUtilizationDetails(timeFile, p, runMode):
-    global verbosity, details
+    global verbosity, details, numTotalDetails, numCUDDDetails, numDistributedDetails, numLocalDetails
     if (runMode == "-c"):
         p.stdin.write("status")
         p.stdin.write("\n")
@@ -62,10 +77,12 @@ def printUtilizationDetails(timeFile, p, runMode):
             readStr = p.stdout.readline().lstrip().rstrip()
             if (readStr.startswith('Memory in use: ')):
                 readStr = readStr.lstrip('Memory in use:').rstrip()
-                timeFile.write(readStr + ",,")
+                timeFile.write(readStr + ",")
             elif (readStr.startswith('Peak number of nodes: ')):
                 readStr = readStr.lstrip('Peak number of nodes:').rstrip()
                 timeFile.write(readStr + ",")
+        for x in range(numTotalDetails - numCUDDDetails):
+            timeFile.write(",")
         p.stdin.write("flush")
         p.stdin.write("\n")
     elif (runMode == "-l"):
@@ -83,7 +100,9 @@ def printUtilizationDetails(timeFile, p, runMode):
                 (total, local, cache, recursion) = readStr.split('.', 3)
                 total = total.lstrip(' Total ')
                 timeFile.write(str(int(total) - int(details.pop(0))))
-                timeFile.write(',,')
+                timeFile.write(',')
+        for x in range(numTotalDetails - numLocalDetails):
+            timeFile.write(",")
 
     else:
         p.stdin.write("flush")
@@ -97,11 +116,21 @@ def printUtilizationDetails(timeFile, p, runMode):
                 (total, local, cache, recursion) = readStr.split('.', 3)
                 total = total.lstrip(' Total ')
                 detailsToPrint.append(str(int(total) - int(details.pop(0))))
+            elif (readStr.startswith('Total operations sent')):
+                readStr = readStr.lstrip('Total operations sent')
+                (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
+                Sum = Sum.lstrip().rstrip("Sum").rstrip()
+                detailsToPrint.append(str(int(Sum) - int(details.pop(0))))
+            elif (readStr.startswith('Total number of ITEs')):
+                readStr = readStr.lstrip('Total number of ITEs')
+                (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
+                Sum = Sum.lstrip().rstrip("Sum").rstrip()
+                detailsToPrint.append(str(int(Sum) - int(details.pop(0))))
             elif (readStr.startswith('Peak unique entries')):
                 readStr = readStr.lstrip('Peak unique entries')
                 (temp1, temp2, minimum, maximum, average, Sum) = readStr.split(':', 5)
                 Sum = Sum.lstrip().lstrip("Sum").rstrip()
-                detailsToPrint.append(str(float(Sum) - float(details.pop(0))))
+                detailsToPrint.append(str(int(Sum) - int(details.pop(0))))
 
         p.stdin.write("flush")
         p.stdin.write("\n")
@@ -116,21 +145,33 @@ def printUtilizationDetails(timeFile, p, runMode):
         for x in detailsToPrint:
             timeFile.write(x)
             timeFile.write(',')
+        for x in range(numTotalDetails - numDistributedDetails):
+            timeFile.write(",")
+
 
 def utilizationDetailsHeader(timeFile):
+    global numTotalDetails, numDistributedDetails
     timeFile.write("Sum Peak bytes allocated,")
-    timeFile.write("Total number of ITEs,")
-    timeFile.write("Sum Peak unique entries,")
+    timeFile.write("Total number of ITEs (Controller),")
+    timeFile.write("Sum Total operations sent,")
+    timeFile.write("Sum Peak Unique Entries,")
+    timeFile.write("Sum Total number of ITEs (Workers),")
+    for x in range(numTotalDetails - numDistributedDetails):
+            timeFile.write(",")
 
 def utilizationDetailsHeaderLocal(timeFile):
+    global numTotalDetails, numLocalDetails
     timeFile.write("Peak bytes,")
     timeFile.write("Total number of ITEs,")
-    timeFile.write("N/A,")
+    for x in range(numTotalDetails - numLocalDetails):
+            timeFile.write(",")
 
 def utilizationDetailsHeaderCUDD(timeFile):
+    global numTotalDetails, numCUDDDetails
     timeFile.write("Memory in use,")
-    timeFile.write("N/A,")
     timeFile.write("Peak number of nodes,")
+    for x in range(numTotalDetails - numCUDDDetails):
+            timeFile.write(",")
 
 
 def runTests(inputFile, timeFile, p, opt):
@@ -226,7 +267,7 @@ def runTimer(runOptions):
     for i in range(numTrials):
         timeFile.write("Trial " + str(i + 1) + " (s),")
         if (getUtilDetailsBool):
-            for i in range(numDetails):
+            for i in range(numTotalDetails):
                 timeFile.write(",")
 
     timeFile.write("\r\n")
@@ -261,7 +302,7 @@ def runTimer(runOptions):
         for i in range(numTrials):
             timeFile.write(",")
             if (getUtilDetailsBool):
-                for i in range(numDetails):
+                for i in range(numTotalDetails):
                     timeFile.write(",")
         timeFile.write("\r\n")
 
@@ -285,7 +326,7 @@ def runTimer(runOptions):
         for i in range(numTrials):
             timeFile.write(",")
             if (getUtilDetailsBool):
-                for i in range(numDetails):
+                for i in range(numTotalDetails):
                     timeFile.write(",")
 
         timeFile.write("\r\n")
