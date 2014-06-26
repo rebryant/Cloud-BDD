@@ -10,12 +10,13 @@ verbosity = 0
 getUtilDetailsBool = True
 specialDeltaTime = False
 hostFileStr = "/etc/hosts"
+localizeRouters = False
 
 '''
 Creates the controller, routers, workers, and clients via pdsh commands, runs the csv-tester script, then kills off the jobs.
 '''
 def runRounds(runOptions):
-    global inputFileName, outputFileName, portStr, hostFileStr
+    global inputFileName, outputFileName, portStr, hostFileStr, localizeRouters
     inputFile = open(inputFileName, 'r')
     sourceFileName = ''
     routerWorkerList = []
@@ -56,10 +57,13 @@ def runRounds(runOptions):
     for (routers, workers) in routerWorkerList:
         # make sure there are enough hosts and workers to satisfy this request
         # CUSTOMIZE IF ROUTERS/WORKERS ARE STARTED TOGETHER
-        if (maxHosts < routers + workers + 2):
+        if (maxHosts < routers + workers + 2 and not(localizeRouters)):
             print("Not enough nodes allocated for " +
                   ('%i routers and %i workers' % (routers, workers)))
             sys.exit(2)
+        if (maxHosts < max(routers, workers) + 2 and localizeRouters):
+            print("Not enough nodes allocated for " +
+                  ('%i routers and %i workers (localized routers)' % (routers, workers)))
 
         # create final name for each outputfile
         thisOutputFileName = outputFileName + "-r" + str(routers) + "-w" + str(workers) + ".csv"
@@ -77,10 +81,14 @@ def runRounds(runOptions):
         # assign each node to a job
         controllerHost = tempHosts.pop()
         clientHost = tempHosts.pop()
-        for x in range(routers):
-            routerHosts.append(tempHosts.pop())
         for x in range(workers):
             workerHosts.append(tempHosts.pop())
+        for x in range(routers):
+            if localizeRouters and x >= 0 and x < len(workerHosts):
+                routerHosts.append(workerHosts[x])
+            else:
+                routerHosts.append(tempHosts.pop())
+
 
         # build controller arglist
         controllerArgList = ['/usr/bin/pdsh', '-R', 'exec', '-w']
@@ -279,6 +287,7 @@ def usage():
     print("\t-d               Uses the distributed package for timing. Default: enabled.")
     print("\t-l               Uses the local refs for timing. Default: disabled.")
     print("\t-f               Allows you to specify the file containing the hosts and IPs, as described in the README")
+    print("\t-r               Runs each router on the same system as a worker")
     print("\t-v VERBOSITY     Verbose mode. Prints output. Level 1: Prints individual commands and times; Level 2: Prints everything. Default: 0.")
     print("\t-u UTIL DETAILS  1 to list utilization details (peak bytes, peak ITEs, etc.) Default: 1")
     print("")
@@ -286,14 +295,14 @@ def usage():
 
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "P:dcli:o:t:n:hv:u:f:", [])
+        opts, args = getopt.getopt(sys.argv[1:], "P:dcli:o:t:n:hv:u:f:r", [])
     except getopt.GetoptError as err:
         print(err)
         usage()
         sys.exit(2)
 
     global useDeltaTime, inputFileName, outputFileName
-    global portStr, numTrials, verbosity, hostFileStr
+    global portStr, numTrials, verbosity, hostFileStr, localizeRouters
     global getUtilDetailsBool, specialDeltaTime
     runOptions = []
 
@@ -327,6 +336,8 @@ def main():
                 getUtilDetailsBool = False
         elif opt == "-f":
             hostFileStr = arg
+        elif opt == "-r":
+            localizeRouters = True
         else:
             print("Invalid option.")
             usage()
