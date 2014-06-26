@@ -11,6 +11,10 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
 #include "dtype.h"
 #include "table.h"
@@ -130,6 +134,9 @@ gc_state_t gc_state = GC_IDLE;
 /* Sequence number for garbage collection phases */
 unsigned gc_generation = 0;
 
+/* Number representing the file descriptor of the router running on the same system, or -1 if no such router exists (by default) */
+int local_router_fd = -1;
+
 /* Add an operation */
 void add_op_handler(unsigned opcode, op_handler h) {
     op_ptr ele = (op_ptr) malloc_or_fail(sizeof(op_ele), "add_op_handler");
@@ -137,6 +144,40 @@ void add_op_handler(unsigned opcode, op_handler h) {
     ele->opfun = h;
     ele->next = op_list;
     op_list = ele;
+}
+
+int match_self_ip(unsigned hip) {
+    char ipv4str[INET_ADDRSTRLEN];
+    unsigned nip = ntohl(hip);
+    inet_ntop(AF_INET, &nip, ipv4str, INET_ADDRSTRLEN);
+    report(5, "Provided IP is: %s\n", ipv4str);
+
+    struct ifaddrs *ifap;
+    int x;
+    if ((x = getifaddrs(&ifap)) == -1)
+    {
+        err(false, "Couldn't get self-interface information");
+        return -1;
+    }
+
+    struct ifaddrs *curr = ifap;
+
+    unsigned interface_ip;
+
+    while (curr != NULL)
+    {
+        if (((struct sockaddr_in *)(curr->ifa_addr))->sin_family == AF_INET)
+        {
+            interface_ip = ((struct sockaddr_in *)(curr->ifa_addr))->sin_addr.s_addr;
+            inet_ntop(AF_INET, &interface_ip, ipv4str, INET_ADDRSTRLEN);
+            report(5, "System's IP is: %s\n", ipv4str);
+
+            if (interface_ip == nip)
+                return 1;
+        }
+        curr = curr->ifa_next;
+    }
+    return 0;
 }
 
 void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
@@ -200,6 +241,12 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
 		    if (!chunk_write(fd, amsg)) {
 			err(true, "Couldn't send agent registration message to router with ip 0x%x, port %u", ip, port);
 		    }
+
+                    if (local_router_fd == -1 && match_self_ip(ip))
+                    {
+                        local_router_fd = fd;
+                        report(5, "Router with fd %d is designated the local router and prioritized for sending packets", fd);
+                    }
 		}
 	    }
 	    chunk_free(msg);
@@ -386,9 +433,20 @@ bool send_op(chunk_ptr msg) {
 	    return true;
 	}
     }
-    unsigned idx = random() % nrouters;
-    int rfd = router_fd_array[idx];
-    report(5, "Sending message with id 0x%lx through router %u (fd %d)", id, idx, rfd);
+    // Try to send to a local router if possible
+    int rfd;
+    if (local_router_fd == -1)
+    {
+        unsigned idx = random() % nrouters;
+        rfd = router_fd_array[idx];
+        report(5, "Sending message with id 0x%x through router %u (fd %d)", id, idx, rfd);
+    }
+    else
+    {
+        rfd = local_router_fd;
+        report(5, "Sending message with id 0x%x through the local router (fd %d)", id, rfd);
+    }
+
     bool ok = chunk_write(rfd, msg);
     if (ok)
 	report(5, "Message sent");

@@ -228,7 +228,7 @@ int main(int argc, char *argv[]) {
 	}
     }
     size_t i;
-    for (i = 0; i < tcount; i++) 
+    for (i = 0; i < tcount; i++)
 	test_string(maxlen);
     printf("Completed %d tests\n", tcount);
     mem_status(stdout);
