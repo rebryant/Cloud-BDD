@@ -9,10 +9,13 @@ useDeltaTime = False
 verbosity = 0
 getUtilDetailsBool = True
 specialDeltaTime = False
+hostFileStr = "/etc/hosts"
 
-
+'''
+Creates the controller, routers, workers, and clients via pdsh commands, runs the csv-tester script, then kills off the jobs.
+'''
 def runRounds(runOptions):
-    global inputFileName, outputFileName, portStr
+    global inputFileName, outputFileName, portStr, hostFileStr
     inputFile = open(inputFileName, 'r')
     sourceFileName = ''
     routerWorkerList = []
@@ -26,12 +29,13 @@ def runRounds(runOptions):
             workerStr = workerStr.lstrip().rstrip()
             routerWorkerList.append((int(routerStr), int(workerStr)))
     file.close(inputFile)
-    print("Parsed inputFile: " + inputFileName)
-    print("Source File for tests: " + sourceFileName)
-    print("Router Worker List: " + str(routerWorkerList))
+    if (verbosity >= 1):
+        print("Parsed inputFile: " + inputFileName)
+        print("Source File for tests: " + sourceFileName)
+        print("Router Worker List: " + str(routerWorkerList))
 
     # parse the hosts list to get the correct hosts and interfaces
-    hostsFile = open("/etc/hosts", 'r')
+    hostsFile = open(hostFileStr, 'r')
     hostsList = []
     for line in hostsFile:
         hostStr = line.lstrip().rstrip()
@@ -42,10 +46,16 @@ def runRounds(runOptions):
                 hostsList.append(nameStr)
     file.close(hostsFile)
 
+    # QUERY LIVE VS. DEAD HOSTS
+
     maxHosts = len(hostsList)
-    print(hostsList)
+    if (verbosity >= 1):
+        print("The list of hosts is:")
+        print(hostsList)
 
     for (routers, workers) in routerWorkerList:
+        # make sure there are enough hosts and workers to satisfy this request
+        # CUSTOMIZE IF ROUTERS/WORKERS ARE STARTED TOGETHER
         if (maxHosts < routers + workers + 2):
             print("Not enough nodes allocated for " +
                   ('%i routers and %i workers' % (routers, workers)))
@@ -56,7 +66,8 @@ def runRounds(runOptions):
 
         # increment port
         portStr = str(int(portStr) + 1)
-        print("PORT: " + portStr)
+        if (verbosity >= 1):
+            print("This job will be run on port " + portStr)
 
         controllerHost = ''
         clientHost = ''
@@ -92,13 +103,19 @@ def runRounds(runOptions):
         controllerArgSSHList.append("-w")
         controllerArgSSHList.append(str(workers))
         controllerArgNewList.append("\'" + string.join(controllerArgSSHList, " ") + "\'")
-        print(controllerArgList)
-        print(string.join(controllerArgNewList, " ") + "\n")
+        if (verbosity >= 2):
+            print("The arguments to create the controller process are:")
+            print(controllerArgList)
+            print("The arguments written to that process are:")
+            print(string.join(controllerArgNewList, " ") + "\n")
         controllerProc = subprocess.Popen(controllerArgList, stdin=PIPE)
         controllerProc.stdin.write(string.join(controllerArgNewList, " ") + "\n")
-        print("Controller pid " + str(controllerProc.pid) + "\n Corrected pid: " + str(controllerProc.pid+1))
+        if (verbosity >= 1):
+            print("Controller pid " + str(controllerProc.pid) + "\n Corrected pid: " + str(controllerProc.pid+1)) # pdsh spawns a second process, which generally has a pid that is one larger than the controller. We keep track of this to kill it off at the end of execution
 
+        # provide a short delay to ensure that processes are created
         time.sleep(2)
+
         # build router arglist
         routerArgList = ['/usr/bin/pdsh', '-R', 'exec', '-w']
         routerListStr = routerHosts.pop()
@@ -119,10 +136,20 @@ def runRounds(runOptions):
         routerArgSSHList.append("-P")
         routerArgSSHList.append(portStr)
 
+        if (verbosity >= 2):
+            print("The arguments to create the router process are:")
+            print(routerArgList)
+            print("The arguments written to that process are:")
+            print(string.join(routerArgNewList, " ") + "\n")
+
         routerArgNewList.append("\'" + string.join(routerArgSSHList, " ") + "\'")
         routerProc = subprocess.Popen(routerArgList, stdin=PIPE, shell=False)
         routerProc.stdin.write(string.join(routerArgNewList, " ") + "\n")
-        time.sleep((2 * (routers / 4)) + 1)
+
+        if (verbosity >= 1):
+            print("Router pid " + str(routerProc.pid) + "\n Corrected pid: " + str(routerProc.pid+1))
+
+        time.sleep(2)
 
         # build worker arglist
         workerArgList = ['/usr/bin/pdsh', '-R', 'exec', '-w']
@@ -144,9 +171,20 @@ def runRounds(runOptions):
         workerArgSSHList.append("-P")
         workerArgSSHList.append(portStr)
         workerArgNewList.append("\'" + string.join(workerArgSSHList, " ") + "\'")
+
+        if (verbosity >= 2):
+            print("The arguments to create the worker process are:")
+            print(workerArgList)
+            print("The arguments written to that process are:")
+            print(string.join(workerArgNewList, " ") + "\n")
+
         workerProc = subprocess.Popen(workerArgList, stdin=PIPE, shell=False)
         workerProc.stdin.write(string.join(workerArgNewList, " ") + "\n")
-        time.sleep((2 * (workers / 4)) + 1)
+        if (verbosity >= 1):
+            print("Worker pid " + str(workerProc.pid) + "\n Corrected pid: " + str(workerProc.pid+1))
+
+
+        time.sleep(2)
 
         # finally, build client arglist
 
@@ -168,73 +206,63 @@ def runRounds(runOptions):
         compoundStr = compoundStr + '\''
         clientArgList.append(compoundStr)
 
+        if (verbosity >= 2):
+            print("The arguments to create the client process are:")
+            print(string.join(clientArgList, " "))
+
         # create the script process; wait for it to execute
         # error-checking goes HERE
         clientProc = subprocess.Popen(string.join(clientArgList, " "), shell=True)
-        print("Client pid " + str(clientProc.pid) + "\n Corrected pid: " + str(clientProc.pid+1))
+        if (verbosity >= 1):
+            print("Client pid " + str(clientProc.pid) + "\n Corrected pid: " + str(clientProc.pid+1))
 
         clientProc.wait()
 
-
-        print("Worker pid " + str(workerProc.pid) + "\n Corrected pid: " + str(workerProc.pid+1))
-        print("Router pid " + str(routerProc.pid) + "\n Corrected pid: " + str(routerProc.pid+1))
-        print("Controller pid " + str(controllerProc.pid) + "\n Corrected pid: " + str(controllerProc.pid+1))
-        print("Client pid " + str(clientProc.pid) + "\n Corrected pid: " + str(clientProc.pid+1))
+        if (verbosity >= 2):
+            print("Worker pid " + str(workerProc.pid) + "\n Corrected pid: " + str(workerProc.pid+1))
+            print("Router pid " + str(routerProc.pid) + "\n Corrected pid: " + str(routerProc.pid+1))
+            print("Controller pid " + str(controllerProc.pid) + "\n Corrected pid: " + str(controllerProc.pid+1))
+            print("Client pid " + str(clientProc.pid) + "\n Corrected pid: " + str(clientProc.pid+1))
 
         # kill off the host jobs
         time.sleep(2)
         killallWorkerList = ['/usr/bin/pdsh', '-R', 'exec', '-w']
         killallWorkerList.append(workerListStr)
         killallWorkerList.extend(['ssh', '-oStrictHostKeyChecking=no', '-x', '%h', "\'killall -9 bworker\'"])
-        print(string.join(killallWorkerList, " "))
+        if (verbosity >= 2):
+            print("The shell command to kill all workers:")
+            print(string.join(killallWorkerList, " "))
         workerKillProc = subprocess.Popen(string.join(killallWorkerList, " "), shell=True)
-        # workerKillProc.stdin.write(string.join(killallWorkerList, " ") + "\n")
-        time.sleep(2 * workers)
+
+        time.sleep(2)
+
         killallRouterList = ['/usr/bin/pdsh', '-R', 'exec', '-w']
         killallRouterList.append(routerListStr)
         killallRouterList.extend(['ssh', '-oStrictHostKeyChecking=no', '-x', '%h', "\'killall -9 router\'"])
 
+        if (verbosity >= 2):
+            print("The shell command to kill all routers:")
+            print(string.join(killallRouterList, " "))
+
         routerKillProc = subprocess.Popen(string.join(killallRouterList, " "), shell=True)
-        # routerKillProc.stdin.write(string.join(killallRouterList, " ") + "\n")
-        time.sleep(2 * routers)
+
+        time.sleep(2)
+
         killallControllerList = ['/usr/bin/pdsh', '-R', 'exec', '-w']
         killallControllerList.append(controllerHost)
         killallControllerList.extend(['ssh', '-oStrictHostKeyChecking=no', '-x', '%h', "\'killall -9 controller\'"])
 
+        if (verbosity >= 2):
+            print("The shell command to kill the controller:")
+            print(string.join(killallControllerList, " "))
+
         controllerKillProc = subprocess.Popen(string.join(killallControllerList, " "), shell=True)
-        # controllerKillProc.stdin.write(string.join(killallControllerList, " ") + "\n")
-        time.sleep(2)
-
-#        sys.exit(1)
-
-        # kill off the workers, routers, and controllers via
-        # the pdsh signal.SIGINT method - kill the spawned
-        # pdsh.bin, then kill the main pdsh 'daemon'
-'''        time.sleep(2)
-        os.kill(workerProc.pid + 1, signal.SIGINT)
-        time.sleep(0.2)
-        os.kill(workerProc.pid + 1, signal.SIGINT)
-
-        time.sleep(2 * workers)
-        workerProc.terminate()
 
         time.sleep(2)
-        os.kill(routerProc.pid + 1, signal.SIGINT)
-        time.sleep(0.2)
-        os.kill(routerProc.pid + 1, signal.SIGINT)
 
-        time.sleep(2 * routers)
-        routerProc.terminate()
-
-        time.sleep(2)
-        os.kill(controllerProc.pid + 1, signal.SIGINT)
-        time.sleep(0.2)
-        os.kill(controllerProc.pid + 1, signal.SIGINT)
-
-        time.sleep(2)
-        controllerProc.terminate() '''
-
-
+'''
+Prints usage instructions.
+'''
 def usage():
     print("This little program times the distributed BDD package.")
     usageStr = "Usage: python csv-tester.py [-h] [-H HOST] [-P PORT]"
@@ -250,6 +278,7 @@ def usage():
     print("\t-c               Uses the CUDD package for timing. Default: disabled.")
     print("\t-d               Uses the distributed package for timing. Default: enabled.")
     print("\t-l               Uses the local refs for timing. Default: disabled.")
+    print("\t-f               Allows you to specify the file containing the hosts and IPs, as described in the README")
     print("\t-v VERBOSITY     Verbose mode. Prints output. Level 1: Prints individual commands and times; Level 2: Prints everything. Default: 0.")
     print("\t-u UTIL DETAILS  1 to list utilization details (peak bytes, peak ITEs, etc.) Default: 1")
     print("")
@@ -257,14 +286,14 @@ def usage():
 
 def main():
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "P:dcli:o:t:n:hv:u:", [])
+        opts, args = getopt.getopt(sys.argv[1:], "P:dcli:o:t:n:hv:u:f:", [])
     except getopt.GetoptError as err:
         print(err)
         usage()
         sys.exit(2)
 
     global useDeltaTime, inputFileName, outputFileName
-    global portStr, numTrials, verbosity
+    global portStr, numTrials, verbosity, hostFileStr
     global getUtilDetailsBool, specialDeltaTime
     runOptions = []
 
@@ -296,6 +325,8 @@ def main():
         elif opt == "-u":
             if (int(arg) == 0):
                 getUtilDetailsBool = False
+        elif opt == "-f":
+            hostFileStr = arg
         else:
             print("Invalid option.")
             usage()
@@ -332,6 +363,7 @@ if __name__ == "__main__":
         print("Done!")
         sys.exit(0)
     else:
-        print("Forked a child...")
-        print("Child pid: %i" % pid)
+        if (verbosity >= 2):
+            print("Forked a child...")
+            print("Child pid: %i" % pid)
         sys.exit(0)

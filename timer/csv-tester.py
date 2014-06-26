@@ -7,7 +7,7 @@ portStr = '6616'
 hostStr = ''
 numTrials = 1
 useDeltaTime = False
-specialDeltaTime = False
+specialDeltaTime = True
 getUtilDetailsBool = False
 
 verbosity = 0
@@ -167,7 +167,9 @@ def printUtilizationDetails(timeFile, p, runMode):
         for x in range(numTotalDetails - numDistributedDetails):
             timeFile.write(",")
 
-
+'''
+Writes the header to the CSV file for a distributed run.
+'''
 def utilizationDetailsHeaderDistributed(timeFile):
     global numTotalDetails, numDistributedDetails
     timeFile.write("Sum Peak bytes allocated,")
@@ -178,6 +180,9 @@ def utilizationDetailsHeaderDistributed(timeFile):
     for x in range(numTotalDetails - numDistributedDetails):
             timeFile.write(",")
 
+'''
+Writes the header to the CSV file for a local run.
+'''
 def utilizationDetailsHeaderLocal(timeFile):
     global numTotalDetails, numLocalDetails
     timeFile.write("Peak bytes,")
@@ -185,6 +190,9 @@ def utilizationDetailsHeaderLocal(timeFile):
     for x in range(numTotalDetails - numLocalDetails):
             timeFile.write(",")
 
+'''
+Writes the header to the CSV file for a CUDD run.
+'''
 def utilizationDetailsHeaderCUDD(timeFile):
     global numTotalDetails, numCUDDDetails
     timeFile.write("Memory in use,")
@@ -192,7 +200,10 @@ def utilizationDetailsHeaderCUDD(timeFile):
     for x in range(numTotalDetails - numCUDDDetails):
             timeFile.write(",")
 
-
+'''
+Runs the tests/benchmarks in the supplied process, recording utilizationd etails and times
+to an output CSV file
+'''
 def runTests(inputFile, timeFile, p, opt):
     global useDeltaTime, numTrials, verbosity, specialDeltaTime
     for line in inputFile:
@@ -241,7 +252,7 @@ def runTests(inputFile, timeFile, p, opt):
             deltaTimeList = []
             while (newNumTime < numTime):
                 readStr = p.stdout.readline().lstrip('cmd>')
-                if (verbosity > 1):
+                if (verbosity >= 2):
                     print(readStr.rstrip())
                 if (readStr.startswith('Elapsed')):
                     # capture delta time output here
@@ -265,6 +276,7 @@ def runTests(inputFile, timeFile, p, opt):
             if (tempFile != None):
                 file.close(tempFile)
 
+            # write the correct time
             if (useDeltaTime):
                 timeFile.write(('%.4f' % deltaTime) + ",")
             elif (specialDeltaTime):
@@ -277,6 +289,9 @@ def runTests(inputFile, timeFile, p, opt):
 
         timeFile.write("\r\n")
 
+'''
+Calls a series of tests on different modes of runbdd (local, CUDD, and distributed)
+'''
 def runTimer(runOptions):
     global useDeltaTime, inputFileName, outputFileName
     global portStr, hostStr, numTrials, getUtilDetailsBool
@@ -354,6 +369,9 @@ def runTimer(runOptions):
 
     file.close(timeFile)
 
+'''
+Prints usage instructions.
+'''
 def usage():
     print("This little program times the distributed BDD package.")
     usageStr = "Usage: python csv-tester.py [-h] [-H HOST] [-P PORT]"
@@ -365,8 +383,8 @@ def usage():
     print("\t-P PORT          The port of the controller. Default: 6616")
     print("\t-i INPUTFILE     The file name to take input from. Default: instructions-scripts.txt")
     print("\t-o OUTPUTFILE    The file name to take output from. Default: times-scripts.txt")
-    print("\t-t USE DELTATIME 1 to use the delta times from the program, 0 to use the timer in this script. 2 to use direct delta times, and not a separate set of times. Default: 0")
-    print("\t-n NUM           The number of trials for each command. Default: 1")
+    print("\t-t USE DELTATIME 1 to use the delta times from the program, 0 to use the timer in this script. 2 to use direct delta times, and not a separate set of times. Default: 2")
+    print("\t-n NUM           The number of trials for each script, per mode. Default: 1")
     print("\t-c               Uses the CUDD package for timing. Default: disabled.")
     print("\t-d               Uses the distributed package for timing. Default: enabled.")
     print("\t-l               Uses the local refs for timing. Default: disabled.")
@@ -397,8 +415,11 @@ def main():
         elif opt == "-t":
             if (int(arg) == 1):
                 useDeltaTime = True
+                specialDeltaTime = False
             elif (int(arg) == 2):
                 specialDeltaTime = True
+            elif (int(arg) == 0):
+                specialDeltaTime = False
         elif opt == "-i":
             inputFileName = arg
         elif opt == "-o":
