@@ -66,7 +66,7 @@ bool do_incr_cmd(int argc, char *argv[]) {
 	err(false, "Arguments must be integers");
 	return false;
     }
-    word_t d = msg_build_destination(own_agent, new_operator_id(), 0);
+    dword_t d = msg_build_destination(own_agent, new_operator_id(), 0);
     chunk_ptr msg = build_incr(d, (word_t) val, (word_t) cnt);
     chunk_ptr rmsg = fire_and_wait(msg);
     chunk_free(msg);
@@ -74,7 +74,7 @@ bool do_incr_cmd(int argc, char *argv[]) {
 	err(false, "Incr command failed");
 	return false;
     }
-    word_t rval = chunk_get_word(rmsg, 1);
+    word_t rval = chunk_get_word(rmsg, 0 + OPER_HEADER_CNT);
     chunk_free(rmsg);
     word_t expected_val = (word_t) val + (word_t) cnt;
     bool ok = rval == expected_val;
@@ -94,7 +94,7 @@ bool do_fork_cmd(int argc, char *argv[]) {
     if (!get_int(argv[1], &width) || !get_int(argv[2], &val) || !get_int(argv[3], &cnt)) {
 	return false;
     }
-    word_t d = msg_build_destination(own_agent, new_operator_id(), 0);
+    dword_t d = msg_build_destination(own_agent, new_operator_id(), 0);
     chunk_ptr msg = build_ifork(d, (word_t) width, (word_t) val, (word_t) cnt);
     chunk_ptr rmsg = fire_and_wait(msg);
     chunk_free(msg);
@@ -102,7 +102,7 @@ bool do_fork_cmd(int argc, char *argv[]) {
 	err(false, "Incr command failed");
 	return false;
     }
-    word_t rval = chunk_get_word(rmsg, 1);
+    word_t rval = chunk_get_word(rmsg, 0 + OPER_HEADER_CNT);
     chunk_free(rmsg);
     word_t expected_val = (word_t) width * ((word_t) val + (word_t) cnt);
     bool ok = rval == expected_val;
@@ -123,17 +123,17 @@ bool do_join_cmd(int argc, char *argv[]) {
 	err(false, "Arguments must be integers");
 	return false;
     }
-    word_t d = msg_build_destination(own_agent, new_operator_id(), 0);
+    dword_t d = msg_build_destination(own_agent, new_operator_id(), 0);
     chunk_ptr msg = build_join(d);
-    op_insert_word(msg, (word_t) val1, 1+OP_HEADER_CNT);
-    op_insert_word(msg, (word_t) val2, 2+OP_HEADER_CNT);
+    op_insert_word(msg, (word_t) val1, OPER_SIZE + 0 + OP_HEADER_CNT);
+    op_insert_word(msg, (word_t) val2, OPER_SIZE + 1 + OP_HEADER_CNT);
     chunk_ptr rmsg = fire_and_wait(msg);
     chunk_free(msg);
     if (!rmsg) {
 	err(false, "Incr command failed");
 	return false;
     }
-    word_t rval = chunk_get_word(rmsg, 1);
+    word_t rval = chunk_get_word(rmsg, OPER_HEADER_CNT);
     chunk_free(rmsg);
     word_t expected_val = (word_t) val1 + (word_t) val2;
     bool ok = rval == expected_val;

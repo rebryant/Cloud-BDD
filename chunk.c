@@ -24,19 +24,12 @@ Data structure for representing data as a sequence of 64-bit words
 #include "report.h"
 
 
-/* Some macros */
-#ifdef VMASK
-#define CHUNK_WORD_VALID(cp, idx) ((((cp)->vmask) >> (idx)) & 0x1)
-
-#define CHUNK_ADD_WORD_VALID(cp, idx) ((cp)->vmask | (0x1llu << (idx)))
-#endif
 
 /* Error handling */
 /* Default error function does nothing */
 static void default_err_fun(void) {
     return;
 }
-
 
 static err_fun efun = default_err_fun;
 
@@ -80,9 +73,6 @@ chunk_ptr chunk_new(size_t len) {
 	chunk_error("Could not allocate chunk", cp);
     }
     cp->length = len;
-#ifdef VMASK
-    cp->vmask = 0;
-#endif
     return cp;
 }
 
@@ -103,32 +93,11 @@ chunk_ptr chunk_clone(chunk_ptr cp) {
     }
     chunk_ptr ncp = chunk_new(cp->length);
     ncp->length = cp->length;
-#ifdef VMASK
-    ncp->vmask = cp ->vmask;
-#endif
     size_t i;
     for (i = 0; i < cp->length; i++) {
 	    ncp->words[i] = cp->words[i];
     }
     return ncp;
-}
-
-/* Test whether all words of chunk are valid */
-bool chunk_filled(chunk_ptr cp) {
-    if (cp == NULL && chunk_check_level >= 2) {
-	chunk_error("Null Pointer", cp);
-	return false;
-    }
-#ifdef VMASK
-    word_t mask = cp->vmask;
-    word_t len = cp->length;
-    /* Create checking mask */
-    word_t cmask = len == CHUNK_MAX_LENGTH ? ~0ULL : (1ULL << len) - 1;
-    return mask == cmask;
-#else
-    /* Can't determine validity without vmask */
-    return false;
-#endif
 }
 
 /* Insert word into chunk */
@@ -141,34 +110,7 @@ void chunk_insert_word(chunk_ptr cp, word_t wd, size_t offset) {
 	chunk_error("Out of bounds insertion", cp);
 	return;
     }
-#ifdef VMASK
-    if (chunk_check_level >= 3 && CHUNK_WORD_VALID(cp, offset)) {
-	char buf[128];
-	sprintf(buf, "Insertion into occupied word.  Offset %u", (unsigned) offset);
-	chunk_error(buf, cp);
-	return;
-    }
-#endif
     cp->words[offset] = wd;
-#ifdef VMASK
-    cp->vmask = CHUNK_ADD_WORD_VALID(cp, offset);
-#endif
-}
-
-/* Replace word in chunk */
-void chunk_replace_word(chunk_ptr cp, word_t wd, size_t offset) {
-    if (cp == NULL && chunk_check_level >= 2) {
-	chunk_error("Null Pointer", cp);
-	return;
-    }
-    if (chunk_check_level >= 2 && offset >= cp->length) {
-	chunk_error("Out of bounds insertion", cp);
-	return;
-    }
-    cp->words[offset] = wd;
-#ifdef VMASK
-    cp->vmask = CHUNK_ADD_WORD_VALID(cp, offset);
-#endif
 }
 
 /* Get word from chunk */
@@ -180,13 +122,39 @@ word_t chunk_get_word(chunk_ptr cp, size_t offset) {
 	err(false, "Out of bounds retrieval.  Length %lu, offset %lu",
 	    cp->length, offset);
     }
-#ifdef VMASK
-    if (chunk_check_level >= 3 && !CHUNK_WORD_VALID(cp, offset)) {
-	chunk_error("Retrieval of invalid word", cp);
-    }
-#endif
     return cp->words[offset];
 }
+
+/* Insert double word into chunk.  Offset indicates position of first word */
+void chunk_insert_dword(chunk_ptr cp, dword_t dwd, size_t offset) {
+    if (cp == NULL && chunk_check_level >= 2) {
+	chunk_error("Null Pointer", cp);
+	return;
+    }
+    if (chunk_check_level >= 2 && offset+1 >= cp->length) {
+	chunk_error("Out of bounds insertion", cp);
+	return;
+    }
+    cp->words[offset] = dwd.w0;
+    cp->words[offset+1] = dwd.w1;
+}
+
+
+/* Get double word from chunk.  Offset indicates position of first word */
+dword_t chunk_get_dword(chunk_ptr cp, size_t offset) {
+    if (cp == NULL && chunk_check_level >= 2) {
+	chunk_error("Null Pointer", cp);
+    }
+    if (chunk_check_level >= 2 && offset+1 >= cp->length) {
+	err(false, "Out of bounds retrieval.  Length %lu, offset %lu",
+	    cp->length, offset+1);
+    }
+    dword_t result;
+    result.w0 = cp->words[offset];
+    result.w1 = cp->words[offset+1];
+    return result;
+}
+
 
 /* Insert words from source chunk into destination chunk with designated offset */
 void chunk_insert_chunk(chunk_ptr cdestp, chunk_ptr csrcp, size_t offset) {
@@ -197,12 +165,7 @@ void chunk_insert_chunk(chunk_ptr cdestp, chunk_ptr csrcp, size_t offset) {
     size_t i;
     size_t len = (size_t) csrcp->length;
     for(i = 0; i < len; i++) {
-#ifdef VMASK
-	if (CHUNK_WORD_VALID(csrcp, i))
-	    chunk_insert_word(cdestp, csrcp->words[i], i + offset);
-#else
 	chunk_insert_word(cdestp, csrcp->words[i], i + offset);
-#endif
     }
 }
 
@@ -281,7 +244,7 @@ int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
         }
         maxfd = nfds - 1;
     }
-    report(3, "maxfd: %d, nfds: %d", maxfd, nfds);
+    report(5, "maxfd: %d, nfds: %d", maxfd, nfds);
     // if buffered, we do non-blocking select and make sure the returned
     // set sets both buffered and readable set
     // if no buffered input is waiting, we do a blocking select and
@@ -298,7 +261,7 @@ int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
 
     if (!isBuffered)
     {
-        report(3, "unbuffered select on up through %d", maxfd);
+        report(5, "unbuffered select on up through %d", maxfd);
         returnVal = select(maxfd+1, readfds, writefds, exceptfds, timeout);
         for (i = 0; i < maxfd+1; i++)
         {
@@ -327,7 +290,7 @@ int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
             }
         }
 
-        report(3, "buffered select on up through %d", maxfd);
+        report(5, "buffered select on up through %d", maxfd);
         returnVal = select(maxfd+1, &in_set, writefds, exceptfds, (timeout == NULL ? &zeroval : timeout));
 
         if (returnVal >= 0)
@@ -347,7 +310,7 @@ int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
         }
 
     }
-    report(3, "leaving buf_select with returnval %d\n", returnVal);
+    report(5, "leaving buf_select with returnval %d\n", returnVal);
     return returnVal;
 }
 
@@ -369,13 +332,13 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp, unsigned char* buf, int
     int copyLen = 0;
     while (cnt < len)
     {
-        report(3, "waiting for %d bytes", (len - cnt));
+        report(5, "waiting for %d bytes", (len - cnt));
         //if there's stuff in the buffer, copy it over
         if (curr_node->length > 0)
         {
             copyLen = ((len - cnt) < curr_node->length ? (len - cnt) : curr_node->length);
-            report(3, "copying a buffer of length %d from total length %d, to the return buffer", copyLen, curr_node->length);
-            report(3, "old length = %d, new length = %d", curr_node->length, curr_node->length - copyLen);
+            report(5, "copying a buffer of length %d from total length %d, to the return buffer", copyLen, curr_node->length);
+            report(5, "old length = %d, new length = %d", curr_node->length, curr_node->length - copyLen);
             memcpy((buf + cnt), ((curr_node->buf) + (curr_node->location)), copyLen);
             cnt = cnt + copyLen;
             curr_node->length = curr_node->length - copyLen;
@@ -387,13 +350,13 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp, unsigned char* buf, int
             {
                 curr_node->location = curr_node->location + copyLen;
             }
-            report(3, "new location: %d\n", curr_node->location);
+            report(5, "new location: %d\n", curr_node->location);
 
         }
         //otherwise, we refill the buffer
         else
         {
-            report(3, "fill the saved buffer!");
+            report(5, "fill the saved buffer!");
             ssize_t n = read(curr_node->fd, ((curr_node->buf) + (curr_node->location) + (curr_node->length)), CHUNK_MAX_SIZE);
             if (n < 0) {
                 chunk_error("Failed read", NULL);
@@ -411,7 +374,7 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp, unsigned char* buf, int
                 return n;
             }
             curr_node->length = curr_node->length + n;
-            report(3, "added %d bytes to the saved buffer; length is now %d at location %d\n", n, curr_node->length, curr_node->location);
+            report(5, "added %d bytes to the saved buffer; length is now %d at location %d\n", n, curr_node->length, curr_node->location);
         }
     }
 
@@ -439,7 +402,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
     if (buf_list_head == NULL) {
         buf_list_head = calloc_or_fail(sizeof(buf_node), 1, "chunk_read create head");
         buf_list_head->fd = fd;
-        report(3, "created a node for fd %d as head\n", fd);
+        report(5, "created a node for fd %d as head\n", fd);
         buf_list_head->length = 0;
         buf_list_head->location = 0;
         buf_list_head->buf = calloc_or_fail(CHUNK_MAX_SIZE, 2, "chunk_read create head buf");
@@ -451,7 +414,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
         while (temp_node != NULL && curr_node == NULL) {
             if (fd == temp_node->fd) {
                 curr_node = temp_node;
-                report(3, "found node for fd %d\n", fd);
+                report(5, "found node for fd %d\n", fd);
             }
             temp_node = temp_node->next;
         }
@@ -464,7 +427,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
         curr_node->location = 0;
         curr_node->next = buf_list_head;
         curr_node->buf = calloc_or_fail(CHUNK_MAX_SIZE, 2, "chunk_read create head buf");
-        report(3, "created a node for fd %d at head\n", fd);
+        report(5, "created a node for fd %d at head\n", fd);
         buf_list_head = curr_node;
     }
 
@@ -481,12 +444,12 @@ chunk_ptr chunk_read(int fd, bool* eofp)
     // want to use buffering (otherwise we don't want random buffer refills)
     if (((curr_node->length + curr_node->location) < CHUNK_MAX_SIZE) && bufferReadBool && !(!(FD_ISSET(fd, &in_set))) )
     {
-        report(3, "reading for %d\n", curr_node->fd);
+        report(5, "reading for %d\n", curr_node->fd);
         ssize_t n = read(curr_node->fd, ((curr_node->buf) + (curr_node->location) + (curr_node->length)), CHUNK_MAX_SIZE);
         curr_node->length += n;
     }
 
-    report(3, "about to get header for %d\n", fd);
+    report(5, "about to get header for %d\n", fd);
     // get header of chunk
     size_t need_cnt = sizeof(chunk_t);
     unsigned char buf[CHUNK_MAX_SIZE];
@@ -498,16 +461,16 @@ chunk_ptr chunk_read(int fd, bool* eofp)
 	return NULL;
     }
 
-    report(3, "about to get rest of chunk for fd %d\n", fd);
+    report(5, "about to get rest of chunk for fd %d\n", fd);
     // get rest of chunk
     chunk_ptr creadp = (chunk_ptr) buf_ptr;
     size_t len = creadp->length;
-    report(3, "len needed: %d", len);
+    report(5, "len needed: %d", len);
     if (len > 1) {
 	need_cnt = WORD_BYTES * (len - 1);
-        report(3, "head buf pointer at %p", buf_ptr);
+        report(5, "head buf pointer at %p", buf_ptr);
         buf_ptr = (unsigned char *)(buf_ptr + n);
-        report(3, "moved pointer to %p for rest", buf_ptr);
+        report(5, "moved pointer to %p for rest", buf_ptr);
         ssize_t n = buf_read(curr_node, eofp, buf_ptr, need_cnt);
         //ssize_t n = read(curr_node->fd, buf_ptr, need_cnt);
 
@@ -519,7 +482,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
         }
     }
 
-    report(3, "exiting chunk_read_buffered_builtin!\n");
+    report(5, "exiting chunk_read_buffered_builtin!\n");
     if (eofp)
 	*eofp = false;
     return chunk_clone(creadp);
@@ -606,11 +569,7 @@ char * chunk2str(chunk_ptr cp) {
 /* Compute hash signature for chunk */
 size_t chunk_hash(word_t vcp) {
     chunk_ptr cp = (chunk_ptr) vcp;
-#ifdef VMASK
-    size_t result = wordarray_hash(cp->words, cp->length, cp->vmask);
-#else
     size_t result = wordarray_hash(cp->words, cp->length);
-#endif
     return result;
 }
 
@@ -621,26 +580,6 @@ bool chunk_equal(word_t vcp1, word_t vcp2) {
     if (cp1 == NULL)
 	return (cp2 == NULL);
     bool ok = true;
-#ifdef VMASK
-    word_t vmask1 = cp1->vmask;
-    word_t vmask2 = cp2->vmask;
-    size_t i;
-    /* OK for chunks to have different lengths, as long as mask bits cover same words */
-    size_t len = cp1->length < cp2->length ? cp1->length : cp2->length;
-    for (i = 0; ok && i < len; i++) {
-	int check1 = vmask1 & 0x1;
-	int check2 = vmask2 & 0x1;
-	if (check1 != check2) {
-	    ok = false;
-	}
-	if (ok && check1 && cp1->words[i] != cp2->words[i]) {
-	    ok = false;
-	}
-	vmask1 >>= 1;
-	vmask2 >>= 1;
-    }
-    ok = ok && vmask1 == 0 && vmask2 == 0;
-#else
     size_t i;
     size_t len = cp1->length;
     if (len != cp2->length)
@@ -649,7 +588,6 @@ bool chunk_equal(word_t vcp1, word_t vcp2) {
 	if (cp1->words[i] != cp2->words[i])
 	    ok = false;
     }
-#endif /* VMASK */
     return ok;
 }
 

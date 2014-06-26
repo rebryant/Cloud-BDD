@@ -56,10 +56,7 @@ struct OPELE {
 static keyvalue_table_ptr deferred_operand_table = NULL;
 
 /* Own sequence number */
-static unsigned seq_num = 0;
-
-/* Number of bits available for sequence number */
-static unsigned snb = 16;
+static word_t seq_num = 0;
 
 /* Function to call when flush message received */
 static flush_function flush_helper = NULL;
@@ -99,12 +96,12 @@ struct OELE {
 /* Set of operations */
 op_ptr op_list = NULL;
 
-/* Set function to be called when agent command to flush its state */
+/* Set function to be called when agent commanded to flush its state */
 void set_agent_flush_helper(flush_function ff) {
     flush_helper = ff;
 }
 
-/* Set function to be called when agent command to flush its state */
+/* Set function to be called when agent commanded to gather statistics */
 void set_agent_stat_helper(stat_function sf) {
     stat_helper = sf;
 }
@@ -183,7 +180,6 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
 		amsg = msg_new_register_agent(own_agent);
 		nworkers = msg_get_header_workercount(h);
 		nrouters = msg_get_header_wordcount(h);
-		snb = msg_get_header_snb(h);
 		router_fd_array = calloc_or_fail(nrouters, sizeof(int), "init_agent");
 		report(3, "Ack from controller.  Agent Id %u.  %d workers.  %d routers.", own_agent, nworkers, nrouters);
 		first = false;
@@ -317,9 +313,9 @@ bool do_agent_gc(int argc, char *argv[]) {
 }
 
 /* Create a new operator id */
-unsigned new_operator_id() {
-    unsigned mask = (unsigned) ((word_t) 1 << snb) - 1;
-    return (own_agent << snb) | (seq_num++ & mask);
+word_t new_operator_id() {
+    word_t mask = ((word_t) 1 << 48) - 1;
+    return ((word_t) own_agent << 48) | (seq_num++ & mask);
 }
 
 
@@ -358,7 +354,7 @@ static void receive_operand(chunk_ptr oper);
 static bool self_route = true;
 
 /* Send single-valued operand */
-bool send_as_operand(word_t dest, word_t val) {
+bool send_as_operand(dword_t dest, word_t val) {
     chunk_ptr oper = msg_new_operand(dest, 1 + OPER_HEADER_CNT);
     chunk_insert_word(oper, val, 0 + OPER_HEADER_CNT);
     bool ok = send_op(oper);
@@ -367,16 +363,16 @@ bool send_as_operand(word_t dest, word_t val) {
 }
 
 bool send_op(chunk_ptr msg) {
-    word_t h = chunk_get_word(msg, 0);
-    unsigned agent = msg_get_header_agent(h);
-    unsigned code = msg_get_header_code(h);
-    unsigned id = msg_get_header_op_id(h);
+    dword_t dh = chunk_get_dword(msg, 0);
+    unsigned agent = msg_get_dheader_agent(dh);
+    unsigned code = msg_get_dheader_code(dh);
+    word_t id = msg_get_dheader_op_id(dh);
 
     if (code == MSG_OPERATION) {
 	agent_stat_counter[STATA_OPERATION_TOTAL]++;
 	if (self_route && agent == own_agent) {
 	    agent_stat_counter[STATA_OPERATION_LOCAL]++;
-	    report(6, "Routing operator with id 0x%x to self", id);
+	    report(6, "Routing operator with id 0x%lx to self", id);
 	    receive_operation(chunk_clone(msg));
 	    return true;
 	}
@@ -385,14 +381,14 @@ bool send_op(chunk_ptr msg) {
 	agent_stat_counter[STATA_OPERAND_TOTAL]++;
 	if (self_route && agent == own_agent && !isclient) {
 	    agent_stat_counter[STATA_OPERAND_LOCAL]++;
-	    report(6, "Routing operand with id 0x%x to self", id);
+	    report(6, "Routing operand with id 0x%lx to self", id);
 	    receive_operand(chunk_clone(msg));
 	    return true;
 	}
     }
     unsigned idx = random() % nrouters;
     int rfd = router_fd_array[idx];
-    report(5, "Sending message with id 0x%x through router %u (fd %d)", id, idx, rfd);
+    report(5, "Sending message with id 0x%lx through router %u (fd %d)", id, idx, rfd);
     bool ok = chunk_write(rfd, msg);
     if (ok)
 	report(5, "Message sent");
@@ -403,14 +399,43 @@ bool send_op(chunk_ptr msg) {
 
 /* Insert word into operator, updating its valid mask.  Offset includes header size */
 void op_insert_word(chunk_ptr op, word_t wd, size_t offset) {
-    word_t vmask = chunk_get_word(op, 1);
-    word_t idx = 0x1llu << offset;
+    word_t vmask = chunk_get_word(op, 2);
+    word_t nvmask;
+    word_t idx = (word_t) 1 << offset;
     if (vmask & idx) {
 	err(false, "Inserting into already filled position in operator.  Offset = %lu", offset);
     }
     chunk_insert_word(op, wd, offset);
-    vmask |= idx;
-    chunk_replace_word(op, vmask, 1);
+    nvmask = vmask | idx;
+    chunk_insert_word(op, nvmask, 2);
+    if (verblevel >= 6) {
+	dword_t dh = chunk_get_dword(op, 0);
+	word_t id = msg_get_dheader_op_id(dh);
+	report(6, "Inserted word at offset %d into operation with id 0x%lx.  Total size = %d.  Vmask 0x%lx --> 0x%lx",
+	       (int) offset, id, op->length, vmask, nvmask);
+    }
+}
+
+/* Insert double word into operator, updating its valid mask.
+   Offset includes header size.
+   Offset is for first word.
+*/
+void op_insert_dword(chunk_ptr op, dword_t dwd, size_t offset) {
+    word_t vmask = chunk_get_word(op, 2);
+    word_t nvmask;
+    word_t imask = (word_t) 3 << offset;
+    if (vmask & imask) {
+	err(false, "Inserting into already filled position in operator.  Offsets = %lu,%lu", offset, offset+1);
+    }
+    chunk_insert_dword(op, dwd, offset);
+    nvmask = vmask | imask;
+    chunk_insert_word(op, nvmask, 2);
+    if (verblevel >= 6) {
+	dword_t dh = chunk_get_dword(op, 0);
+	word_t id = msg_get_dheader_op_id(dh);
+	report(6, "Inserted double word at offset %d into operation with id 0x%lx.  Total size = %d.  Vmask 0x%lx --> 0x%lx",
+	       (int) offset, id, op->length, vmask, nvmask);
+    }
 }
 
 /* Insert an operand into an operation */
@@ -418,10 +443,10 @@ void op_insert_operand(chunk_ptr op, chunk_ptr oper, unsigned offset) {
     size_t i;
     size_t n = oper->length-OPER_HEADER_CNT;
     if (verblevel >= 6) {
-	word_t h = chunk_get_word(op, 0);
-	word_t vmask = chunk_get_word(op, 1);
-	unsigned opcode = msg_get_header_opcode(h);
-	report(6, "Inserting operand with %u words into operation with opcode %u at offset %u.  Mask 0x%lx",
+	dword_t dh = chunk_get_dword(op, 0);
+	word_t vmask = chunk_get_word(op, 2);
+	unsigned opcode = msg_get_dheader_opcode(dh);
+	report(5, "Inserting operand with %u words into operation with opcode %u at offset %u.  Mask 0x%lx",
 	       (unsigned) n, opcode, offset, vmask);
     }
     for (i = 0; i < n; i++) {
@@ -437,7 +462,7 @@ bool op_check_full(chunk_ptr op) {
 	return false;
     }
     word_t len = op->length;
-    word_t vmask = chunk_get_word(op, 1);
+    word_t vmask = chunk_get_word(op, 2);
     /* Create checking vmask */
     word_t cmask = len == OP_MAX_LENGTH ? ~0ULL : (1ULL << len) - 1;
     return vmask == cmask;
@@ -465,7 +490,7 @@ static void add_rfd(int fd) {
 	maxrfd = fd;
 }
 
-static void add_deferred_operand(unsigned operator_id, chunk_ptr operand, unsigned offset) {
+static void add_deferred_operand(word_t operator_id, chunk_ptr operand, unsigned offset) {
     word_t w;
     operand_ptr ele = malloc_or_fail(sizeof(operand_ele), "add_deferred_operand");
     ele->operand = operand;
@@ -486,12 +511,12 @@ static bool check_fire(chunk_ptr op) {
     if (!op_check_full(op)) {
 	return false;
     }
-    word_t h = chunk_get_word(op, 0);
-    unsigned opcode = msg_get_header_opcode(h);
-    unsigned id = msg_get_header_op_id(h);
+    dword_t dh = chunk_get_dword(op, 0);
+    unsigned opcode = msg_get_dheader_opcode(dh);
+    word_t id = msg_get_dheader_op_id(dh);
     op_ptr ls = op_list;
     op_handler opfun = NULL;
-    report(5, "Firing operation with id 0x%x", id);
+    report(5, "Firing operation with id 0x%lx", id);
     while (ls) {
 	if (ls->opcode == opcode) {
 	    opfun = ls->opfun;
@@ -501,9 +526,9 @@ static bool check_fire(chunk_ptr op) {
     }
     if (opfun) {
 	if (!opfun(op))
-	    err(false, "Error encountered firing operator with id 0x%x", id);
+	    err(false, "Error encountered firing operator with id 0x%lx", id);
     } else
-	err(false, "Unknown opcode %u for operator with id 0x%x", opcode, id);
+	err(false, "Unknown opcode %u for operator with id 0x%lx", opcode, id);
     return true;
 }
 
@@ -592,56 +617,56 @@ bool finish_client_global() {
 /* Accept operation and either fire it or defer it */
 static void receive_operation(chunk_ptr op) {
     word_t w;
-    word_t h = chunk_get_word(op, 0);
-    unsigned id = msg_get_header_op_id(h);
-    report(5, "Received operation.  id 0x%x", id);
+    dword_t dh = chunk_get_dword(op, 0);
+    word_t id = msg_get_dheader_op_id(dh);
+    report(5, "Received operation.  id 0x%lx", id);
     /* Check if there's already an outstanding operation with the same ID */
     if (keyvalue_find(operator_table, id, NULL)) {
-	err(false, "Operator ID collision encountered.  Op id = 0x%x", id);
+	err(false, "Operator ID collision encountered.  Op id = 0x%lx", id);
 	chunk_free(op);
 	return;
     }
     /* See if there are any pending operands for this operation */
-    if (keyvalue_remove(deferred_operand_table, (word_t) id, NULL, &w)) {
+    if (keyvalue_remove(deferred_operand_table, id, NULL, &w)) {
 	operand_ptr ls = (operand_ptr) w;
 	while (ls) {
 	    operand_ptr ele = ls;
 	    op_insert_operand(op, ls->operand, ls->offset);
-	    report(5, "Inserted operand with offset %u into received operator with id 0x%x", ls->offset, id);
+	    report(5, "Inserted operand with offset %u into received operator with id 0x%lx", ls->offset, id);
 	    chunk_free(ls->operand);
 	    ls = ls->next;
 	    free_block(ele, sizeof(operand_ele));
 	}
     }
     if (check_fire(op)) {
-	report(5, "Completed firing of newly received operation with id 0x%x", id);
+	report(5, "Completed firing of newly received operation with id 0x%lx", id);
 	chunk_free(op);
     } else {
 	keyvalue_insert(operator_table, (word_t) id, (word_t) op);
-	report(5, "Queued operation with id 0x%x", id);
+	report(5, "Queued operation with id 0x%lx", id);
     }
 }
 
 /* For workers only */
 static void receive_operand(chunk_ptr oper) {
     word_t w;
-    word_t h = chunk_get_word(oper, 0);
-    unsigned id = msg_get_header_op_id(h);
-    unsigned offset = msg_get_header_offset(h);
-    if (keyvalue_find(operator_table, (word_t) id, &w)) {
+    dword_t dh = chunk_get_dword(oper, 0);
+    word_t id = msg_get_dheader_op_id(dh);
+    unsigned offset = msg_get_dheader_offset(dh);
+    if (keyvalue_find(operator_table, id, &w)) {
 	/* Operation exists */
 	chunk_ptr op = (chunk_ptr) w;
 	op_insert_operand(op, oper, offset);
-	report(5, "Inserted operand with offset %u into existing operator with id 0x%x", offset, id);
+	report(5, "Inserted operand with offset %u into existing operator with id 0x%lx", offset, id);
 	chunk_free(oper);
 	if (check_fire(op)) {
-	    report(5, "Completed firing of dequeued operation with id 0x%x", id);
-	    keyvalue_remove(operator_table, (word_t) id, NULL, NULL);
+	    report(5, "Completed firing of dequeued operation with id 0x%lx", id);
+	    keyvalue_remove(operator_table, id, NULL, NULL);
 	    chunk_free(op);
 	}
     } else {
 	add_deferred_operand(id, oper, offset);
-	report(5, "Deferred operand with offset %u for id 0x%x", offset, id);
+	report(5, "Deferred operand with offset %u for id 0x%lx", offset, id);
     }
 }
 
@@ -678,11 +703,12 @@ void run_worker() {
 		continue;
 	    }
 	    word_t h = chunk_get_word(msg, 0);
+	    /* Rely on fact that following message fields in same location for both single and double-word headers */
 	    unsigned code = msg_get_header_code(h);
+	    unsigned agent = msg_get_header_agent(h); 
+	    unsigned opcode = msg_get_header_opcode(h);
 	    if (fd == controller_fd) {
 		/* Message from controller */
-		word_t h;
-		unsigned agent;
 		switch(code) {
 		case MSG_KILL:
 		    chunk_free(msg);
@@ -705,10 +731,7 @@ void run_worker() {
 		    }
 		    break;
 		case MSG_CLIOP_DATA:
-		    h = chunk_get_word(msg, 0);
-		    agent = msg_get_header_agent(h);
-		    unsigned opcode = msg_get_header_opcode(h);
-		    report(5, "Received client operation data.  Id = %u", agent);
+		    report(5, "Received client operation data.  Agent = %u", agent);
 		    word_t *data = &msg->words[1];
 		    unsigned nword = msg->length - 1;
 		    if (gop_start_helper)
@@ -716,16 +739,14 @@ void run_worker() {
 		    chunk_free(msg);
 		    chunk_ptr rmsg = msg_new_cliop_ack(agent);
 		    if (chunk_write(controller_fd, rmsg)) {
-			report(5, "Acknowledged client operation data.  Id = %u", agent);
+			report(5, "Acknowledged client operation data.  Agent = %u", agent);
 		    } else {
-			err(false, "Failed to acknowledge client operation data.  Id = %u", agent);
+			err(false, "Failed to acknowledge client operation data.  Agent = %u", agent);
 		    }
 		    chunk_free(rmsg);
 		    break;
 		case MSG_CLIOP_ACK:
-		    h = chunk_get_word(msg, 0);
-		    agent = msg_get_header_agent(h);
-		    report(5, "Received client operation ack.  Id = %u", agent);
+		    report(5, "Received client operation ack.  Agent = %u", agent);
 		    if (gop_finish_helper)
 			gop_finish_helper(agent);
 		    chunk_free(msg);
@@ -808,7 +829,6 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 	    }
 	    word_t h = chunk_get_word(msg, 0);
 	    unsigned code = msg_get_header_code(h);
-	    unsigned id = msg_get_header_op_id(h);
 	    if (fd == controller_fd) {
 		/* Message from controller */
 		switch(code) {
@@ -833,12 +853,15 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		    break;
 		case MSG_GC_FINISH:
 		    err(false, "Unexpected GC_FINISH message from controller when waiting for result (ignored)");
+		    chunk_free(msg);
 		    break;
 		default:
 		    chunk_free(msg);
 		    err(false, "Unknown message code %u from controller (ignored)", code);
 		}
 	    } else {
+		dword_t dh;
+		word_t id;
 		/* Must be message from router */
 		switch (code) {
 		case MSG_OPERATION:
@@ -847,7 +870,9 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		    local_done = true;
 		    break;
 		case MSG_OPERAND:
-		    report(5, "Received operand with id 0x%x", id);
+		    dh = chunk_get_dword(msg, 0);
+		    id = msg_get_dheader_op_id(dh);
+		    report(5, "Received operand with id 0x%lx", id);
 		    rval = msg;
 		    local_done = true;
 		    break;

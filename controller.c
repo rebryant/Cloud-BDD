@@ -35,11 +35,8 @@ static int worker_cnt = 0;
 
 static int need_workers = 100000;
 
-/* How many bits are available for sequence numbers */
-static unsigned snb = 16;
-
 /* How many clients are allowed */
-static unsigned maxclients = 1;
+static unsigned maxclients = 1024;
 
 /* Set of connections from which have not received any messages.
    Given as map from file descriptor to IP address (Since some of these will be routers)
@@ -198,7 +195,7 @@ unsigned biglog2(unsigned v) {
 }
 
 
-static void init_controller(int port, int nrouters, int nworkers, int mc) {
+static void init_controller(int port, int nrouters, int nworkers) {
     if (!new_server(port, &listen_fd, NULL))
 	err(true, "Cannot set up server on port %u", port);
     report(2, "Listening socket has descriptor %d", listen_fd);
@@ -214,9 +211,6 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     add_quit_helper(quit_controller);
     need_routers = nrouters;
     need_workers = nworkers;
-    maxclients = mc;
-    snb = 32-biglog2(nworkers+maxclients);
-    report(0, "Set subnetwork bits to %d\n", snb);
     worker_cnt = nworkers;
     stat_message_cnt = 0;
     flush_requestor_fd = -1;
@@ -358,7 +352,7 @@ static void add_fd(int fd) {
 
 #define MAX_IDS (CHUNK_MAX_LENGTH-1)
 
-/* Add new agent.  Send agent ID + number of workers + snb + router map */
+/* Add new agent.  Send agent ID + number of workers +  router map */
 static void add_agent(int fd, bool isclient) {
     unsigned agent = next_agent++;
     if (agent >= worker_cnt + maxclients) {
@@ -392,7 +386,7 @@ static void add_agent(int fd, bool isclient) {
 	bcount++;
 	if (bcount == MAX_IDS) {
 	    /* This block is filled */
-	    size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) | ((word_t) worker_cnt << 16) | (snb << 8) | MSG_ACK_AGENT;
+	    size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) | ((word_t) worker_cnt << 16) | MSG_ACK_AGENT;
 	    chunk_insert_word(msg, h1, 0);
 	    ok = chunk_write(fd, msg);
 	    chunk_free(msg);
@@ -401,7 +395,7 @@ static void add_agent(int fd, bool isclient) {
 	}
     }
     if (ok && ncount > 0) {
-	size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) | ((word_t) worker_cnt << 16) | (snb << 8) | MSG_ACK_AGENT;
+	size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) | ((word_t) worker_cnt << 16) | MSG_ACK_AGENT;
 	chunk_insert_word(msg, h1, 0);
 	ok = chunk_write(fd, msg);
 	chunk_free(msg);
@@ -849,7 +843,6 @@ int main(int argc, char *argv[]) {
     int nworkers = 1;
     int nrouters = 1;
     /* Max number of clients */
-    int maxclients = 1;
     int c;
     int level = 1;
     while ((c = getopt(argc, argv, "hv:p:r:w:c:")) != -1) {
@@ -879,7 +872,7 @@ int main(int argc, char *argv[]) {
 	}
     }
     set_verblevel(level);
-    init_controller(port, nrouters, nworkers, maxclients);
+    init_controller(port, nrouters, nworkers);
     run_controller(NULL);
     mem_status(stdout);
     return 0;

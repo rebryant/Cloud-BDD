@@ -23,7 +23,7 @@ void add_op_handler(unsigned opcode, op_handler h);
 void agent_show_stat();
 
 /* Create a new operator id */
-unsigned new_operator_id();
+word_t new_operator_id();
 
 /* Get agent ID for worker based on some hashed value */
 unsigned choose_hashed_worker(word_t hash);
@@ -42,16 +42,19 @@ unsigned choose_own_worker();
 /*
   Send chunk containing either operator or operand.
   Message contains its own routing information.
-  Worker agent modified to within bounds.
   Return true if successful.
 */
 bool send_op(chunk_ptr msg);
 
 /* Send single-valued operand */
-bool send_as_operand(word_t dest, word_t val);
+bool send_as_operand(dword_t dest, word_t val);
 
 /* Insert word into operator, updating its valid mask.  Offset includes header size */
 void op_insert_word(chunk_ptr op, word_t wd, size_t offset);
+
+/* Insert double word into operator, updating its valid mask.  Offset includes header size */
+/* Offset is for first word */
+void op_insert_dword(chunk_ptr op, dword_t wd, size_t offset);
 
 /*
   Insert an operand into an operation.

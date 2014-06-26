@@ -221,25 +221,25 @@ void init_dref_mgr();
 void free_dref_mgr();
 chunk_ptr flush_dref_mgr();
 
-chunk_ptr build_var(word_t dest);
+chunk_ptr build_var(dword_t dest);
 
-chunk_ptr build_canonize(word_t dest, ref_t vref);
+chunk_ptr build_canonize(dword_t dest, ref_t vref);
 
-chunk_ptr build_canonize_lookup(word_t dest, word_t hash, ref_t vref, ref_t hiref, ref_t loref, bool negate);
+chunk_ptr build_canonize_lookup(dword_t dest, word_t hash, ref_t vref, ref_t hiref, ref_t loref, bool negate);
 
-chunk_ptr build_retrieve_lookup(word_t dest, ref_t ref);
+chunk_ptr build_retrieve_lookup(dword_t dest, ref_t ref);
 
-chunk_ptr build_ite_lookup(word_t dest, ref_t iref, ref_t tref, ref_t eref, bool negate);
+chunk_ptr build_ite_lookup(dword_t dest, ref_t iref, ref_t tref, ref_t eref, bool negate);
 
-chunk_ptr build_ite_recurse(word_t dest, ref_t vref);
+chunk_ptr build_ite_recurse(dword_t dest, ref_t vref);
 
-chunk_ptr build_ite_store(word_t dest, word_t iref, word_t tref, word_t eref, bool negate);
+chunk_ptr build_ite_store(dword_t dest, word_t iref, word_t tref, word_t eref, bool negate);
 
-chunk_ptr build_uop_down(word_t dest, unsigned uid, ref_t ref);
+chunk_ptr build_uop_down(dword_t dest, unsigned uid, ref_t ref);
 
-chunk_ptr build_uop_up(word_t dest, unsigned uid, ref_t ref);
+chunk_ptr build_uop_up(dword_t dest, unsigned uid, ref_t ref);
 
-chunk_ptr build_uop_store(word_t dest, unsigned uid, ref_t ref);
+chunk_ptr build_uop_store(dword_t dest, unsigned uid, ref_t ref);
 
 
 bool do_var_op(chunk_ptr op);
