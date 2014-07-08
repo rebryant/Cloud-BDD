@@ -5,12 +5,12 @@ inputFileName = 'instructions-runner.txt'
 outputFileName = ''
 portStr = '6616'
 numTrials = 1
-useDeltaTime = False
+useDeltaTime = True
 verbosity = 0
 getUtilDetailsBool = True
-specialDeltaTime = False
+specialDeltaTime = True
 hostFileStr = "/etc/hosts"
-localizeRouters = False
+localizeRouters = True
 
 '''
 Creates the controller, routers, workers, and clients via pdsh commands, runs the csv-tester script, then kills off the jobs.
@@ -281,13 +281,13 @@ def usage():
     print("\t-P PORT          The port of the controller. Default: 6616")
     print("\t-i INPUTFILE     The file name to take input from. Default: instructions-runner.txt")
     print("\t-o OUTPUTFILE    The base file name to take output from. Default: times-(timestamp)-r#-w#.csv")
-    print("\t-t USE DELTATIME 1 to use the delta times from the program, 0 to use the timer in this script. Default: 0")
+    print("\t-t USE DELTATIME 1 to use the delta times from the program, 0 to use the timer in this script. 2 to use the delta times built into each test (the tester will not add additional 'time' commands before and after each test.)  Default: 2")
     print("\t-n NUM           The number of trials for each command. Default: 1")
     print("\t-c               Uses the CUDD package for timing. Default: disabled.")
     print("\t-d               Uses the distributed package for timing. Default: enabled.")
     print("\t-l               Uses the local refs for timing. Default: disabled.")
     print("\t-f               Allows you to specify the file containing the hosts and IPs, as described in the README")
-    print("\t-r               Runs each router on the same system as a worker")
+    print("\t-r               Runs each router SEPARATELY from a worker")
     print("\t-v VERBOSITY     Verbose mode. Prints output. Level 1: Prints individual commands and times; Level 2: Prints everything. Default: 0.")
     print("\t-u UTIL DETAILS  1 to list utilization details (peak bytes, peak ITEs, etc.) Default: 1")
     print("")
@@ -312,8 +312,10 @@ def main():
         elif opt == "-t":
             if (int(arg) == 1):
                 useDeltaTime = True
-            elif (int(arg) == 2):
-                specialDeltaTime = True
+                specialDeltaTime = False
+            elif (int(arg) == 0):
+                specialDeltaTime = False
+                useDeltaTime = False
         elif opt == "-i":
             inputFileName = arg
         elif opt == "-o":
@@ -337,7 +339,7 @@ def main():
         elif opt == "-f":
             hostFileStr = arg
         elif opt == "-r":
-            localizeRouters = True
+            localizeRouters = False
         else:
             print("Invalid option.")
             usage()
@@ -356,7 +358,7 @@ def main():
 
     # add all options to run
     runOptions.append("-t")
-    runOptions.append(str((1 if useDeltaTime else (2 if specialDeltaTime else 0))))
+    runOptions.append(str((2 if specialDeltaTime else (1 if useDeltaTime else 0))))
     runOptions.append("-n")
     runOptions.append(str(numTrials))
     runOptions.append("-v")
