@@ -383,7 +383,7 @@ def usage():
     print("\t-P PORT          The port of the controller. Default: 6616")
     print("\t-i INPUTFILE     The file name to take input from. Default: instructions-scripts.txt")
     print("\t-o OUTPUTFILE    The file name to take output from. Default: times-scripts.txt")
-    print("\t-t USE DELTATIME 1 to use the delta times from the program, 0 to use the timer in this script. 2 to use direct delta times, and not a separate set of times. Default: 2")
+    print("\t-t USE DELTATIME 1 to use the delta times from the program, 0 to use the timer in this script. 2 to use the delta times built into each test (the tester will not add additional 'time' commands before and after each test.)  Default: 2")
     print("\t-n NUM           The number of trials for each script, per mode. Default: 1")
     print("\t-c               Uses the CUDD package for timing. Default: disabled.")
     print("\t-d               Uses the distributed package for timing. Default: enabled.")
