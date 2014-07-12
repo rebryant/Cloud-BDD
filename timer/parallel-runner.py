@@ -13,6 +13,18 @@ hostFileStr = "/etc/hosts"
 localizeRouters = True
 
 '''
+Queries live vs. dead hosts, removing dead hosts from the list of hosts
+'''
+def queryLiveHosts(hostsList):
+    newHostsList = []
+    for host in hostsList:
+        if subprocess.call(['ping', '-c', '2', '-w', '2', host]) == 0:
+            newHostsList.append(host)
+        else:
+            pass
+    return newHostsList
+
+'''
 Creates the controller, routers, workers, and clients via pdsh commands, runs the csv-tester script, then kills off the jobs.
 '''
 def runRounds(runOptions):
@@ -48,6 +60,7 @@ def runRounds(runOptions):
     file.close(hostsFile)
 
     # QUERY LIVE VS. DEAD HOSTS
+    hostsList = queryLiveHosts(hostsList)
 
     maxHosts = len(hostsList)
     if (verbosity >= 1):
