@@ -14,13 +14,15 @@
 #include "table.h"
 #include "chunk.h"
 #include "report.h"
+#include "agent.h"
 #include "bdd.h"
 
 #include "cudd.h"
+
 #include "shadow.h"
 
 /* How many unique variables */
-static int vcount = 1;
+// static int vcount = 1;
 
 /*
   General strategy is to create as many unique references as possible
@@ -87,7 +89,8 @@ static void iter_xor(word_t value) {
 }
 
 
-static size_t run(size_t nvars, size_t max_new, bool do_cudd, bool do_local, bool do_dist) {
+static size_t run(size_t nvars, size_t max_new, bool do_cudd,
+		  bool do_local, bool do_dist) {
     char buf[24];
     size_t i;
     ref_t r;

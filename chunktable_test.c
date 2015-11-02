@@ -60,7 +60,7 @@ static word_t chunk2word(chunk_ptr cp) {
     if (cp == NULL || cp->length != 1) {
 	err(true, "Invalid single-word chunk");
     }
-#endif VMASK
+#endif /* VMASK */
     return cp->words[0];
 }
     
@@ -105,17 +105,21 @@ static void fill_empty_test(size_t nele) {
     int deletion_cnt = 0;
     size_t i, j;
     for (i = 0; i < nele; i++) {
-	keyvalue_insert(kv_table, (word_t) kv_set[i].key, (word_t) kv_set[i].value);
+	keyvalue_insert(kv_table, (word_t) kv_set[i].key,
+			(word_t) kv_set[i].value);
 	size_t w = chunk2word(kv_set[i].value);
 	char *k = chunk2str(kv_set[i].key);
-	report(3, "i = %d.  Inserted value 0x%llx (pointer %p, for key '%s'", i, w, kv_set[i].value, k);
+	report(3,
+	       "i = %d.  Inserted value 0x%llx (pointer %p, for key '%s'",
+	       i, w, kv_set[i].value, k);
 	free_string(k);
 	insertion_cnt++;
     }
     size_t n = nele;
     while (n > 0) {
 	size_t *rp = random_perm(nele);
-	/* Make pass over all possible elements.  Randomly remove some, setting their values to 0 */
+	/* Make pass over all possible elements.
+	   Randomly remove some, setting their values to 0 */
 	for (j = 0; j < nele; j++) {
 	    size_t i = rp[j];
 	    char *k = chunk2str(kv_set[i].key);
@@ -125,16 +129,22 @@ static void fill_empty_test(size_t nele) {
 		bool insert = (random() % weight) == 0;
 		chunk_ptr vcp; 
 		find_cnt++;
-		if (keyvalue_find(kv_table, (word_t) kv_set[i].key, (word_t *) &vcp)) {
-		    err(true, "i = %lu.  Found pointer %p (word 0x%llx) for key '%s'.  Expected NULL", i, vcp, chunk_get_word(vcp, 0), k);
+		if (keyvalue_find(kv_table, (word_t) kv_set[i].key,
+				  (word_t *) &vcp)) {
+		    err(true,
+"i = %lu.  Found pointer %p (word 0x%llx) for key '%s'.  Expected NULL",
+			i, vcp, chunk_get_word(vcp, 0), k);
 		} else {
-		    report(5, "i = %lu.  As expected, didn't find entry for key '%s'.", i, k);
+		    report(5,
+"i = %lu.  As expected, didn't find entry for key '%s'.", i, k);
 		}
 		if (insert) {
 		    word_t v = random();
 		    kv_set[i].value = word2chunk(v);
-		    keyvalue_insert(kv_table, (word_t) kv_set[i].key, (word_t) kv_set[i].value);
-		    report(3, "i = %d.  Reinserted value 0x%llx for key '%s'", i, v, k);
+		    keyvalue_insert(kv_table, (word_t) kv_set[i].key,
+				    (word_t) kv_set[i].value);
+		    report(3, "i = %d.  Reinserted value 0x%llx for key '%s'",
+			   i, v, k);
 		    reinsertion_cnt++;
 		    n++;
 		}
@@ -144,8 +154,10 @@ static void fill_empty_test(size_t nele) {
 		bool remove = (random() % weight) == 0;
 		chunk_ptr vcp; 
 		find_cnt++;
-		if (keyvalue_find(kv_table, (word_t) kv_set[i].key, (word_t *) &vcp)) {
-		    report(5, "i = %lu.  Found pointer %p for key '%s'", i, (void *) vcp, k);
+		if (keyvalue_find(kv_table, (word_t) kv_set[i].key,
+				  (word_t *) &vcp)) {
+		    report(5, "i = %lu.  Found pointer %p for key '%s'",
+			   i, (void *) vcp, k);
 		} else {
 		    err(true, "i = %lu.  Didn't find entry for key '%s'", i, k);
 		}
@@ -153,13 +165,18 @@ static void fill_empty_test(size_t nele) {
 		word_t ev = chunk2word(kv_set[i].value);
 		if (rv != ev) {
 		    if (vcp != kv_set[i].value) {
-			err(false, "i = %lu.  Pointer corruption for key '%s'.  Expected %p.  Got %p", i, k, kv_set[i].value, vcp);
+			err(false,
+"i = %lu.  Pointer corruption for key '%s'.  Expected %p.  Got %p",
+			    i, k, kv_set[i].value, vcp);
 		    }
-		    err(true, "i = %lu.  Retrieved value 0x%llx for key '%s'.  Expected 0x%llx",
+		    err(true,
+"i = %lu.  Retrieved value 0x%llx for key '%s'.  Expected 0x%llx",
 			i, rv, k, ev);
 		}
 		if (remove) {
-		    report(3, "i = %d.  Removing word 0x%llx (pointer %p) for key '%s'", i, chunk_get_word(kv_set[i].value, 0),
+		    report(3,
+"i = %d.  Removing word 0x%llx (pointer %p) for key '%s'",
+			   i, chunk_get_word(kv_set[i].value, 0),
 			   kv_set[i].value, k);
 		    keyvalue_remove(kv_table, (word_t) kv_set[i].key, NULL, NULL);
 		    chunk_free(kv_set[i].value);
@@ -172,7 +189,9 @@ static void fill_empty_test(size_t nele) {
 	}
 	free_array(rp, nele, sizeof(size_t));
     }
-    printf("Fill/Empty: Insertions %d.  Reinsertions %d.  Deletions %d.  Finds %d\n", insertion_cnt, reinsertion_cnt, deletion_cnt, find_cnt);
+    printf(
+"Fill/Empty: Insertions %d.  Reinsertions %d.  Deletions %d.  Finds %d\n",
+           insertion_cnt, reinsertion_cnt, deletion_cnt, find_cnt);
 }
 
 int usage(char *cmd) {

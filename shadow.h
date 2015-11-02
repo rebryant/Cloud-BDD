@@ -11,13 +11,14 @@
     cudd   local  dist
     F      F      T     Distributed only.  (Should be fastest)
     F      T      F     Local only.  Check functionality and measure performance
-    F      T      T     Local & distributed.  Make sure distributed implementation is working
+    F      T      T     Local & distributed.  Check distributed implementation
     T      F      F     Cudd only.  Performance comparison.
     T      F      T     Cudd & dist.  Not likely.
     T      T      F     Cudd & local.  For debugging ref-based package
     T      T      T     Belt & suspenders!
 
-    Requirements: When running local + dist, only works if ref's are identical at all times.
+    Requirements:
+    When running local + dist, only works if ref's are identical at all times.
     This will stop working once two distinct refs generate same hash signature.
     When that happens, shift over to a single mode.
 */
@@ -89,8 +90,10 @@ keyvalue_table_ptr shadow_equant(shadow_mgr mgr, set_ptr roots, set_ptr vars);
 /* Create key-value table mapping set of root nodes to their shifted versions
    with respect to a mapping from old variables to new ones 
 */
-keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap);
+keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots,
+				keyvalue_table_ptr vmap);
 
 
-/* Garbage collection.  Find all nodes reachable from roots and keep only those in unique table */
+/* Garbage collection.
+   Find all nodes reachable from roots and keep only those in unique table */
 void shadow_collect(shadow_mgr mgr, set_ptr roots);

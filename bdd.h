@@ -1,7 +1,8 @@
 /* Implementation of a ref-based BDD package */
 
 /* Different classes of refs */
-typedef enum {BDD_NULL, BDD_CONSTANT, BDD_VARIABLE, BDD_FUNCTION, BDD_RECURSE, BDD_INVALID} ref_type_t;
+typedef enum {BDD_NULL, BDD_CONSTANT, BDD_VARIABLE, BDD_FUNCTION,
+	      BDD_RECURSE, BDD_INVALID} ref_type_t;
 
 typedef word_t ref_t;
 
@@ -11,7 +12,8 @@ typedef word_t ref_t;
 #define REF_FIELD_TYPE 60
 #define REF_FIELD_VAR  44
 
-/* Optionally force a small hash signature to stress code that handles hash collisions */
+/* Optionally force a small hash signature to stress code
+   that handles hash collisions */
 #ifdef SMALL_HASH
 #define REF_FIELD_HASH 41
 #else
@@ -71,7 +73,8 @@ typedef word_t ref_t;
 
 /* Maintain an array of counters to keep track of statistics */
 /* These stats combine STATA's from agent with STATB's from here */
-enum {STATB_UNIQ_CURR = NSTATA, STATB_UNIQ_PEAK, STATB_UNIQ_TOTAL, STATB_UNIQ_COLLIDE,
+enum {STATB_UNIQ_CURR = NSTATA, STATB_UNIQ_PEAK, STATB_UNIQ_TOTAL,
+      STATB_UNIQ_COLLIDE,
       STATB_ITE_CNT, STATB_ITE_LOCAL_CNT, STATB_ITE_HIT_CNT, STATB_ITE_NEW_CNT,
       STATB_ITEC_CURR, STATB_ITEC_PEAK, STATB_ITEC_TOTAL,
       STATB_UOP_CNT, STATB_UOP_HIT_CNT, STATB_UOP_STORE_CNT, NSTAT};
@@ -149,21 +152,24 @@ keyvalue_table_ptr ref_equant(ref_mgr mgr, set_ptr roots, set_ptr vars);
 /* Create key-value table mapping set of root nodes to their shifted versions
    with respect to a mapping from old variables to new ones 
 */
-keyvalue_table_ptr ref_shift(ref_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap);
+keyvalue_table_ptr ref_shift(ref_mgr mgr, set_ptr roots,
+			     keyvalue_table_ptr vmap);
 
-/* Garbage collection.  Find all nodes reachable from roots and keep only those in unique table */
+/* Garbage collection.
+   Find all nodes reachable from roots and keep only those in unique table */
 void ref_collect(ref_mgr mgr, set_ptr roots);
 
 /* Show information about manager status */
 void ref_show_stat(ref_mgr mgr);
 
 
-/************************  Support for distributed implementation *****************************************/
+/****** Support for distributed implementation *******************************/
 
 /** 
 Supported Operations
 
-(Arguments marked with asterisk are possibly undetermined at the time the operator is created)
+(Arguments marked with asterisk are possibly
+ undetermined at the time the operator is created)
 
 
    Var(dest):
@@ -215,7 +221,8 @@ Supported Operations
 
 
 typedef enum { OP_VAR, OP_CANONIZE, OP_CANONIZE_LOOKUP, OP_RETRIEVE_LOOKUP,
-	       OP_ITE_LOOKUP, OP_ITE_RECURSE, OP_ITE_STORE, OP_UOP_DOWN, OP_UOP_UP, OP_UOP_STORE } opcode_t;
+	       OP_ITE_LOOKUP, OP_ITE_RECURSE, OP_ITE_STORE,
+	       OP_UOP_DOWN, OP_UOP_UP, OP_UOP_STORE } opcode_t;
 
 void init_dref_mgr();
 void free_dref_mgr();
@@ -225,15 +232,18 @@ chunk_ptr build_var(word_t dest);
 
 chunk_ptr build_canonize(word_t dest, ref_t vref);
 
-chunk_ptr build_canonize_lookup(word_t dest, word_t hash, ref_t vref, ref_t hiref, ref_t loref, bool negate);
+chunk_ptr build_canonize_lookup(word_t dest, word_t hash, ref_t vref,
+				ref_t hiref, ref_t loref, bool negate);
 
 chunk_ptr build_retrieve_lookup(word_t dest, ref_t ref);
 
-chunk_ptr build_ite_lookup(word_t dest, ref_t iref, ref_t tref, ref_t eref, bool negate);
+chunk_ptr build_ite_lookup(word_t dest, ref_t iref, ref_t tref,
+			   ref_t eref, bool negate);
 
 chunk_ptr build_ite_recurse(word_t dest, ref_t vref);
 
-chunk_ptr build_ite_store(word_t dest, word_t iref, word_t tref, word_t eref, bool negate);
+chunk_ptr build_ite_store(word_t dest, word_t iref,
+			  word_t tref, word_t eref, bool negate);
 
 chunk_ptr build_uop_down(word_t dest, unsigned uid, ref_t ref);
 
@@ -270,7 +280,8 @@ keyvalue_table_ptr dist_restrict(ref_mgr mgr, set_ptr roots, set_ptr lits);
 /* Create key-value table mapping set of root nodes to their shifted versions
    with respect to a mapping from old variables to new ones 
 */
-keyvalue_table_ptr dist_shift(ref_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap);
+keyvalue_table_ptr dist_shift(ref_mgr mgr, set_ptr roots,
+			      keyvalue_table_ptr vmap);
 
 
 /* Create key-value table mapping set of root nodes to their

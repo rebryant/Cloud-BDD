@@ -1,7 +1,10 @@
-/* Implementation of a very general hash tables to implement a key-value package and set packages.
-   keyvalue: Hashes word indicating key to store & retrieve words representing values.
+/* Implementation of a very general hash table
+   to implement a key-value package and set packages.
+   keyvalue: Hashes word indicating key to store
+             & retrieve words representing values.
    set: Hashes word indicating element.
-   set insertion does not check for duplicates, and therefore can use to represent multisets
+        set insertion does not check for duplicates,
+        and therefore can use to represent multisets
 */
 
 /* Entries in key/value table are a word key and a word value. */
@@ -60,7 +63,8 @@ void keyvalue_insert(keyvalue_table_ptr kvt, word_t key, word_t value);
 bool keyvalue_find(keyvalue_table_ptr kvt, word_t key, word_t *valp);
 
 /* Remove element from table.  Set key & value.  Return true if entry found */
-bool keyvalue_remove(keyvalue_table_ptr kvt, word_t key, word_t *oldkey, word_t *oldval);
+bool keyvalue_remove(keyvalue_table_ptr kvt, word_t key,
+		     word_t *oldkey, word_t *oldval);
 
 /*
   Implementation of an iterator.
@@ -82,11 +86,13 @@ bool keyvalue_iternext(keyvalue_table_ptr kvt, word_t *keyp, word_t *valp);
   Remove (k,v) values from kvt that match entries in okvt.
   Provide function to test whether value in kvt matches that in okvt.
  */
-void keyvalue_diff(keyvalue_table_ptr kvt, keyvalue_table_ptr okvt, eq_fun val_equal);
+void keyvalue_diff(keyvalue_table_ptr kvt, keyvalue_table_ptr okvt,
+		   eq_fun val_equal);
 
 /*
   Marshaling & unmarshaling.
-  This is not done recursively, and so only works when keys and values are simple words
+  This is not done recursively,
+  and so only works when keys and values are simple words
 */
 
 /* How many words are required to hold this table? */
@@ -172,7 +178,8 @@ void set_diff(set_ptr set, set_ptr oset);
 
 /*
   Marshaling & unmarshaling.
-  This is not done recursively, and so only works when keys and values are simple words
+  This is not done recursively,
+  and so only works when keys and values are simple words
 */
 
 /* How many words are required to hold this table? */

@@ -42,7 +42,8 @@ static unsigned snb = 16;
 static unsigned maxclients = 5;
 
 /* Set of connections from which have not received any messages.
-   Given as map from file descriptor to IP address (Since some of these will be routers)
+   Given as map from file descriptor to IP address
+   (Since some of these will be routers)
 */
 static keyvalue_table_ptr new_conn_map = NULL;
 
@@ -117,7 +118,8 @@ typedef enum {
 static gc_state_t gc_state = GC_READY;
 /* Can simply count down as workers respond */
 static size_t need_worker_cnt = 0;
-/* Must explicitly track client responses, since clients can connect/disconnect dynamically */
+/* Must explicitly track client responses,
+   since clients can connect/disconnect dynamically */
 static set_ptr need_client_fd_set = NULL;
 /* Clients that have attempted to connect while GC underway */
 static set_ptr defer_client_fd_set = NULL;
@@ -153,8 +155,9 @@ static void free_global_ops() {
     global_ops = NULL;
 }
 
-/* Called receive ACK for global operation from worker */
-/* Return client fd if all acks received (-1 otherwise).  Remove list entry when that's the case */
+/* Called receive ACK for global operation from worker
+   Return client fd if all acks received (-1 otherwise).
+   Remove list entry when that's the case */
 static int receive_global_op_worker_ack(unsigned id) {
     global_op_ptr prev = NULL;
     global_op_ptr ele = global_ops;
@@ -208,9 +211,12 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     worker_fd_set = word_set_new();
     client_fd_set = word_set_new();
     init_cmd();
-    add_cmd("status", do_controller_status_cmd,       "              | Determine status of connected nodes");
-    add_cmd("flush", do_controller_flush_cmd,         "              | Flush state of all agents");
-    add_cmd("collect", do_controller_collect_cmd,     "              | Initiate garbage collection");
+    add_cmd("status", do_controller_status_cmd,
+	    "              | Determine status of connected nodes");
+    add_cmd("flush", do_controller_flush_cmd,
+	    "              | Flush state of all agents");
+    add_cmd("collect", do_controller_collect_cmd,
+	    "              | Initiate garbage collection");
     add_quit_helper(quit_controller);
     need_routers = nrouters;
     need_workers = nworkers;
@@ -219,7 +225,8 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     maxclients = mc;
     stat_message_cnt = 0;
     flush_requestor_fd = -1;
-    stat_messages = calloc_or_fail(worker_cnt, sizeof(chunk_ptr), "init_controller");
+    stat_messages = calloc_or_fail(worker_cnt, sizeof(chunk_ptr),
+				   "init_controller");
     gc_state = GC_READY;
     need_worker_cnt = 0;
     need_client_fd_set = NULL;
@@ -229,8 +236,10 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
 
 bool do_controller_status_cmd(int argc, char *argv[]) {
     report(0, "Connections: %u routers, %u workers, %u clients",
-	   router_fd_set->nelements, worker_fd_set->nelements, client_fd_set->nelements);
-    report(0, "%d/%u worker stat messages received", stat_message_cnt, worker_fd_set->nelements);
+	   router_fd_set->nelements, worker_fd_set->nelements,
+	   client_fd_set->nelements);
+    report(0, "%d/%u worker stat messages received",
+	   stat_message_cnt, worker_fd_set->nelements);
     return true;
 }
 
@@ -243,7 +252,8 @@ bool do_controller_flush_cmd(int argc, char *argv[]) {
     while (set_iternext(worker_fd_set, &w)) {
 	fd = w;
 	if (!chunk_write(fd, msg)) {
-	    err(false, "Failed to send flush message to worker with descriptor %d", fd);
+	    err(false,
+		"Failed to send flush message to worker with descriptor %d", fd);
 	    ok = false;
 	}
     }
@@ -251,7 +261,8 @@ bool do_controller_flush_cmd(int argc, char *argv[]) {
     while (set_iternext(client_fd_set, &w)) {
 	fd = w;
 	if (!chunk_write(fd, msg)) {
-	    err(false, "Failed to send flush message to client with descriptor %d", fd);
+	    err(false,
+		"Failed to send flush message to client with descriptor %d", fd);
 	    ok = false;
 	}
     }
@@ -272,7 +283,8 @@ bool do_controller_collect_cmd(int argc, char *argv[]) {
     word_t w;
     bool ok = true;
     if (gc_state != GC_READY) {
-	err(false, "Cannot initiate garbage collection while one is still underway");
+	err(false,
+	    "Cannot initiate garbage collection while one is still underway");
 	return false;
     }
     gc_generation++;
@@ -281,7 +293,9 @@ bool do_controller_collect_cmd(int argc, char *argv[]) {
     while (set_iternext(worker_fd_set, &w)) {
 	int fd = (int) w;
 	if (!chunk_write(fd, msg)) {
-	    err(false, "Failed to send gc start message to worker with descriptor %d", fd);
+	    err(false,
+		"Failed to send gc start message to worker with descriptor %d",
+		fd);
 	    ok = false;
 	}
     }
@@ -307,21 +321,24 @@ bool quit_controller(int argc, char *argv[]) {
     while (set_iternext(router_fd_set, &w)) {
 	fd = w;
 	if (!chunk_write(fd, msg))
-	    err(false, "Failed to send kill message to router with descriptor %d", fd);
+	    err(false,
+		"Failed to send kill message to router with descriptor %d", fd);
 	close(fd);
     }
     set_iterstart(worker_fd_set);
     while (set_iternext(worker_fd_set, &w)) {
 	fd = w;
 	if (!chunk_write(fd, msg))
-	    err(false, "Failed to send kill message to worker with descriptor %d", fd);
+	    err(false,
+		"Failed to send kill message to worker with descriptor %d", fd);
 	close(fd);
     }
     set_iterstart(client_fd_set);
     while (set_iternext(client_fd_set, &w)) {
 	fd = w;
 	if (!chunk_write(fd, msg))
-	    err(false, "Failed to send kill message to client with descriptor %d", fd);
+	    err(false,
+		"Failed to send kill message to client with descriptor %d", fd);
 	close(fd);
     }
     /* Deallocate */
@@ -364,14 +381,15 @@ static void add_agent(int fd, bool isclient) {
 	/* Exceeded client limit */
 	chunk_ptr msg = msg_new_nack();
 	if (chunk_write(fd, msg))
-	    report(3, "Sent nack to potential client due to client limit being exceeded.  Fd = %d", fd);
+	    report(3,
+"Sent nack to potential client due to client limit being exceeded.  Fd = %d", fd);
 	else
 	    report(3, "Couldn't send nack to potential client.  Fd = %d", fd);
 	chunk_free(msg);
 	return;
     }
 
-    /* Need to break into sequence of messages according to maximum chunk length */
+    /* Need to break into sequence of messages according to max. chunk length */
     chunk_ptr msg = NULL;
     size_t bcount = 0;
     size_t ncount = router_addr_set->nelements;
@@ -391,7 +409,8 @@ static void add_agent(int fd, bool isclient) {
 	bcount++;
 	if (bcount == MAX_IDS) {
 	    /* This block is filled */
-	    size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) | ((word_t) worker_cnt << 16) | (snb << 8) | MSG_ACK_AGENT;
+	    size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) |
+		((word_t) worker_cnt << 16) | (snb << 8) | MSG_ACK_AGENT;
 	    chunk_insert_word(msg, h1, 0);
 	    ok = chunk_write(fd, msg);
 	    chunk_free(msg);
@@ -400,7 +419,8 @@ static void add_agent(int fd, bool isclient) {
 	}
     }
     if (ok && ncount > 0) {
-	size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) | ((word_t) worker_cnt << 16) | (snb << 8) | MSG_ACK_AGENT;
+	size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) |
+	    ((word_t) worker_cnt << 16) | (snb << 8) | MSG_ACK_AGENT;
 	chunk_insert_word(msg, h1, 0);
 	ok = chunk_write(fd, msg);
 	chunk_free(msg);
@@ -417,7 +437,8 @@ static void add_stat_message(chunk_ptr msg) {
     if (stat_message_cnt >= worker_cnt) {
 	size_t nstat = stat_messages[0]->length - 1;
 	if (flush_requestor_fd >= 0)
-	    stat_summary = calloc_or_fail(nstat * 3, sizeof(size_t), "add_stat_message");
+	    stat_summary = calloc_or_fail(nstat * 3, sizeof(size_t),
+					  "add_stat_message");
 	/* Accumulate and print */
 	report(1, "Worker statistics:");
 	size_t i, w;
@@ -439,15 +460,18 @@ static void add_stat_message(chunk_ptr msg) {
 		stat_summary[3*i + 1] = maxval;
 		stat_summary[3*i + 2] = sumval;
 	    }
-	    report(1, "Parameter %d\tMin: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
+	    report(1,
+"Parameter %d\tMin: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
 		   (int) i, minval, maxval, (double) sumval/worker_cnt, sumval);
 	}
 	if (flush_requestor_fd >= 0) {
 	    chunk_ptr msg = msg_new_stat(worker_cnt, nstat*3, stat_summary);
 	    if (chunk_write(flush_requestor_fd, msg)) {
-		report(5, "Sent statistical summary to client at fd %d", flush_requestor_fd);
+		report(5, "Sent statistical summary to client at fd %d",
+		       flush_requestor_fd);
 	    } else {
-		err(false, "Failed to send statistical summary to client at fd %d", flush_requestor_fd);
+		err(false, "Failed to send statistical summary to client at fd %d",
+		    flush_requestor_fd);
 	    }
 	    chunk_free(msg);
 	    free_array(stat_summary, nstat*3, sizeof(size_t));
@@ -501,7 +525,8 @@ static void run_controller(char *infile_name) {
 		unsigned ip;
 		int connfd = accept_connection(fd, &ip);
 		keyvalue_insert(new_conn_map, (word_t) connfd, (word_t) ip);
-		report(4, "Accepted new connection.  Connfd = %d, IP = 0x%x", connfd, ip);
+		report(4, "Accepted new connection.  Connfd = %d, IP = 0x%x",
+		       connfd, ip);
 		continue;
 	    }
 	    bool eof;
@@ -514,7 +539,8 @@ static void run_controller(char *infile_name) {
 		    err(false, "Unexpected EOF from connected worker, fd %d", fd);
 		} else if (set_member(client_fd_set, (word_t) fd, true)) {
 		    report(3, "Disconnection from client (fd %d)", fd);
-		    if (need_client_fd_set && set_member(need_client_fd_set, (word_t) fd, false)) {
+		    if (need_client_fd_set && set_member(need_client_fd_set,
+							 (word_t) fd, false)) {
 			report(3, "Removing client from GC activities");
 			handle_gc_msg(MSG_GC_FINISH, 0, fd, true);
 		    }
@@ -546,11 +572,13 @@ static void run_controller(char *infile_name) {
 		    word_t node_id = msg_build_node_id(port, ip);
 		    set_insert(router_addr_set, node_id);
 		    set_insert(router_fd_set, (word_t) fd);
-		    report(4, "Added router with fd %d.  IP 0x%x.  Port %u", fd, ip, port);
+		    report(4, "Added router with fd %d.  IP 0x%x.  Port %u",
+			   fd, ip, port);
 		    need_routers --;
 		    if (need_routers == 0) {
 			report(3, "All routers connected");
-			/* Have gotten all of the necessary routers.  Notify any registered workers */
+			/* Have gotten all of the necessary routers.
+			   Notify any registered workers */
 			set_iterstart(worker_fd_set);
 			int wfd;
 			while (set_iternext(worker_fd_set, &w)) {
@@ -581,11 +609,13 @@ static void run_controller(char *infile_name) {
 			    defer_client_fd_set = word_set_new();
 			}
 			set_insert(defer_client_fd_set, (word_t) fd);
-			report(3, "Deferring client with fd %d until GC completed", fd);
+			report(3, "Deferring client with fd %d until GC completed",
+			       fd);
 		    }
 		    break;
 		default:
-		    err(false, "Unexpected message code %u from new connection", code);
+		    err(false, "Unexpected message code %u from new connection",
+			code);
 		    break;
 		}
 	    } else if (set_member(worker_fd_set, (word_t) fd, false)) {
@@ -617,16 +647,19 @@ static void run_controller(char *infile_name) {
 		    add_stat_message(msg);
 		    break;
 		case MSG_CLIOP_ACK:
-		    /* Worker acknowledging receipt of global operation information */
+		    /* Worker acknowledging receipt of global operation info */
 		    agent = msg_get_header_agent(h);
 		    int client_fd = receive_global_op_worker_ack(agent);
 		    if (client_fd >= 0) {
 			/* Have received complete set of acknowledgements. */
 			/* Send ack to client */
 			if (chunk_write(client_fd, msg)) {
-			    report(6, "Sent ack to client for global operation with id %u", agent);
+			    report(6,
+"Sent ack to client for global operation with id %u", agent);
 			} else {
-			    err(false, "Failed to send ack to client for global operation with id %u.  Fd %d", agent, client_fd);
+			    err(false,
+"Failed to send ack to client for global operation with id %u.  Fd %d",
+				agent, client_fd);
 			}
 		    }
 		    chunk_free(msg);
@@ -671,10 +704,12 @@ static void run_controller(char *infile_name) {
 		    while (set_iternext(worker_fd_set, &w)) {
 			int worker_fd = (int) w;
 			if (chunk_write(worker_fd, msg)) {
-			    report(6, "Sent global operation information with id %u to worker with fd %d",
+			    report(6,
+"Sent global operation information with id %u to worker with fd %d",
 				   agent, worker_fd);
 			} else {
-			    err(false, "Failed to send global operation information with id %u to worker with fd %d",
+			    err(false,
+"Failed to send global operation information with id %u to worker with fd %d",
 				agent, worker_fd);
 			}
 		    }
@@ -688,10 +723,12 @@ static void run_controller(char *infile_name) {
 		    while (set_iternext(worker_fd_set, &w)) {
 			int worker_fd = (int) w;
 			if (chunk_write(worker_fd, msg)) {
-			    report(6, "Sent global operation acknowledgement with id %u to worker with fd %d",
+			    report(6,
+"Sent global operation acknowledgement with id %u to worker with fd %d",
 				   agent, worker_fd);
 			} else {
-			    err(false, "Failed to send global operation acknowledgement with id %u to worker with fd %d",
+			    err(false,
+"Failed to send global operation acknowledgement with id %u to worker with fd %d",
 				agent, worker_fd);
 			}
 		    }
@@ -718,7 +755,8 @@ static void run_controller(char *infile_name) {
 static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
     char *source = isclient ? "client" : "worker";
     word_t w;
-    report(5, "Received GC message with code %u from fd %d (%s), while in state %u",
+    report(5,
+"Received GC message with code %u from fd %d (%s), while in state %u",
 	   code, fd, source, gc_state);
     switch (gc_state) {
     case GC_READY:
@@ -731,10 +769,12 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 		report(4, "GC request by worker");
 		do_controller_collect_cmd(0, NULL);
 	    } else
-		report(4, "Outdated (gen = %u, current generation = %u) GC request by worker",
+		report(4,
+"Outdated (gen = %u, current generation = %u) GC request by worker",
 		       gen, gc_generation);
 	} else {
-	    err(false, "Unexpected GC message.  Code %u.  In GC_READY state", code);
+	    err(false,
+		"Unexpected GC message.  Code %u.  In GC_READY state", code);
 	}
 	break;
     case GC_WAIT_WORKER_START:
@@ -746,7 +786,8 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 		while (set_iternext(client_fd_set, &w)) {
 		    int cfd = (int) w;
 		    if (!chunk_write(cfd, msg)) {
-			err(false, "Failed to send GC start message to client with fd %d", cfd);
+			err(false,
+"Failed to send GC start message to client with fd %d", cfd);
 		    }
 		}
 		chunk_free(msg);
@@ -755,9 +796,11 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 		report(3, "GC waiting for clients to finish");
 	    }
 	} else if (code == MSG_GC_REQUEST) {
-	    report(4, "GC request by worker while waiting for workers to start.  Ignored.");
+	    report(4,
+"GC request by worker while waiting for workers to start.  Ignored.");
 	} else {
-	    err(false, "Unexpected code %u from %s while waiting for workers to start",
+	    err(false,
+"Unexpected code %u from %s while waiting for workers to start",
 		code, source);
 	}
 	break;
@@ -772,7 +815,8 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 		    while (set_iternext(worker_fd_set, &w)) {
 			int wfd = (int) w;
 			if (!chunk_write(wfd, msg)) {
-			    err(false, "Failed to send GC Finish message to worker with fd %d", wfd);
+			    err(false,
+"Failed to send GC Finish message to worker with fd %d", wfd);
 			}
 		    }
 		    chunk_free(msg);
@@ -781,12 +825,15 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 		    need_worker_cnt = worker_fd_set->nelements;
 		}
 	    } else {
-		err(false, "Got unexpected GC_FINISH message from client with fd %d", fd);
+		err(false,
+"Got unexpected GC_FINISH message from client with fd %d", fd);
 	    }
 	} else if (code == MSG_GC_REQUEST) {
-	    report(4, "GC request by worker while waiting for client.  Ignored.");
+	    report(4,
+"GC request by worker while waiting for client.  Ignored.");
 	} else {
-	    err(false, "Unexpected code %u from %s while waiting for clients to finish",
+	    err(false,
+"Unexpected code %u from %s while waiting for clients to finish",
 		code, source);
 	}
 	break;
@@ -799,7 +846,8 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 		while (set_iternext(client_fd_set, &w)) {
 		    int cfd = (int) w;
 		    if (!chunk_write(cfd, msg))
-			err(false, "Failed to send GC finish message to client with fd %d", fd);
+			err(false,
+"Failed to send GC finish message to client with fd %d", fd);
 		}
 		chunk_free(msg);
 		/* See if there are deferred client connections */
@@ -819,9 +867,11 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 		report(3, "GC completed");
 	    }
 	} else if (code == MSG_GC_REQUEST) {
-	    report(4, "GC request by worker while waiting for workers to finish.  Ignored.");
+	    report(4,
+"GC request by worker while waiting for workers to finish.  Ignored.");
 	} else {
-	    err(false, "Unexpected code %u from %s while waiting for workers to finish",
+	    err(false,
+"Unexpected code %u from %s while waiting for workers to finish",
 		code, source);
 	}
 	break;

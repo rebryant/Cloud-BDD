@@ -54,7 +54,8 @@ Agent Map:   8.  Agent (2) + Node ID (6)
 /** Constructors **/
 
 /* Create an operand destination */
-word_t msg_build_destination(unsigned agent, unsigned operator_id, unsigned offset) {
+word_t msg_build_destination(unsigned agent, unsigned operator_id,
+			     unsigned offset) {
     return
 	((word_t) (agent & MASK16) << 48) |
 	((word_t) (operator_id & MASK32) << 16) |
@@ -123,14 +124,16 @@ unsigned msg_get_header_generation(word_t header) {
 
 /* Create an empty operator */
 /* len specifies total message length, including header */
-chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, unsigned operator_id, unsigned len) {
+chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, unsigned operator_id,
+			   unsigned len) {
     if (len > OP_MAX_LENGTH) {
 	err(true, "Requested operator length %u > max allowable %u",
 	    len, (unsigned) OP_MAX_LENGTH);
 	return false;
     }
     chunk_ptr result = chunk_new(len);
-    word_t h1 = ((word_t) agent << 48) | ((word_t) operator_id) << 16 | (opcode << 8) | MSG_OPERATION;
+    word_t h1 = ((word_t) agent << 48) | ((word_t) operator_id) << 16 |
+	(opcode << 8) | MSG_OPERATION;
     chunk_insert_word(result, h1, 0);
     /* Add valid bits (Initially only header and valid mask) */
     word_t vmask = 0x3u;
@@ -233,7 +236,8 @@ chunk_ptr msg_new_flush() {
 
 /* Create message containing global operation data */
 /* nwords specifies number of data words (not including header) */
-chunk_ptr msg_new_cliop_data(unsigned agent, unsigned opcode, unsigned nword, word_t *data) {
+chunk_ptr msg_new_cliop_data(unsigned agent, unsigned opcode, unsigned nword,
+			     word_t *data) {
     chunk_ptr msg = chunk_new(nword+1);
     word_t h = ((word_t) agent << 48) | opcode << 8 | MSG_CLIOP_DATA;
     chunk_insert_word(msg, h, 0);
@@ -295,13 +299,15 @@ bool new_server(unsigned port, int *fdp, unsigned *portp) {
     } else {
 	int ntries = 5;
 	bool done = false;
-	/* Need to get make sure different nodes don't attempt the same random sequence */
+	/* Need to get make sure different nodes don't attempt
+	   the same random sequence */
 	srandom(getpid());
 	while (!done && ntries > 0) {
 	    port = 5000 + random() % 5000;
 	    addr.sin_port = htons((unsigned short) port);
 	    done = bind(listenfd, (struct sockaddr *) &addr, sizeof(addr)) >= 0;
-	    report(4, "Tried opening server on port %u: %s", port, done ? "OK" : "Failed");
+	    report(4, "Tried opening server on port %u: %s",
+		   port, done ? "OK" : "Failed");
 	    ntries--;
 	}
 	if (!done) {
@@ -346,7 +352,8 @@ int open_clientfd(char *hostname, unsigned port) {
     return clientfd;
 }
 
-/* Open connection to server based on IPv4 addrss.  Return socket file descriptor */
+/* Open connection to server based on IPv4 addrss.
+   Return socket file descriptor */
 int open_clientfd_ip(unsigned ip, unsigned port) {
     int clientfd;
     struct sockaddr_in serveraddr;
@@ -369,8 +376,9 @@ int open_clientfd_ip(unsigned ip, unsigned port) {
 }
 
 
-/* Accept a connection request from a client */
-/* Return connection socket descriptor.  (Optionally) update pointers to IP address */
+/* Accept a connection request from a client
+   Return connection socket descriptor.
+   (Optionally) update pointers to IP address */
 int accept_connection(int listenfd, unsigned *ipp) {
     struct sockaddr_in clientaddr;
     struct hostent *hp;

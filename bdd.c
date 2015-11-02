@@ -23,7 +23,8 @@
   Parameters controlling garbage collection
  */
 
-/* Max ratio between current number of unique nodes & number at end of previous GC */
+/* Max ratio between current number of unique nodes
+   and number at end of previous GC */
 #define GC_RATIO 2
 
 /* Minimum node count below which will not trigger GC */
@@ -32,7 +33,8 @@
 /* Unique table uses a linked list for each possible hash value. */
 
 /*
-  Distinguish among elements having same hash with unique ID, having value >= 1.
+  Distinguish among elements having same hash with unique ID,
+  having value >= 1.
   These are encoded as part of the ref for the function
 */
 
@@ -44,7 +46,8 @@ typedef struct LELE {
 
 /* Create new element for ulist */
 static ulist_ptr ulist_new(chunk_ptr data, ref_t ref) {
-    ulist_ptr result =  (ulist_ptr) malloc_or_fail(sizeof(ulist_ele), "ulist_new");
+    ulist_ptr result =  (ulist_ptr) malloc_or_fail(sizeof(ulist_ele),
+						   "ulist_new");
     result->data = data;
     result->ref = ref;
     result->next = NULL;
@@ -180,7 +183,8 @@ ref_t ref_canonize_local(ref_t vref, ref_t hiref, ref_t loref, chunk_ptr *ucpp) 
     word_t hilev = REF_GET_VAR(hiref);
     word_t lolev = REF_GET_VAR(loref);
     if (vlev >= hilev || vlev >= lolev) {
-	err(false, "Invalid levels for canonize.  var:%lu, hi:%lu, lo:%lu", vlev, hilev, lolev);
+	err(false, "Invalid levels for canonize.  var:%lu, hi:%lu, lo:%lu",
+	    vlev, hilev, lolev);
 	return REF_INVALID;
     }
     if (hiref==loref)
@@ -201,13 +205,15 @@ ref_t ref_canonize_local(ref_t vref, ref_t hiref, ref_t loref, chunk_ptr *ucpp) 
 }
 
 /* Perform lookup / creation portion of canonize.
-   Assumes arguments already fixed up and stored in form suitable for unique table
+   Assumes arguments already fixed up and stored in form
+   suitable for unique table
 */
 static ref_t ref_canonize_lookup(ref_mgr mgr, chunk_ptr ucp) {
     size_t h = utable_hash(ucp);
     ref_t vref = chunk_get_word(ucp, 0);
     ulist_ptr ls = NULL;
-    bool have_list = keyvalue_find(mgr->unique_table, (word_t) h, (word_t *) &ls);
+    bool have_list = keyvalue_find(mgr->unique_table,
+				   (word_t) h, (word_t *) &ls);
     bool found = false;
     /* Keep track of location pointing to last element in list */
     ulist_ptr *tailp = NULL;
@@ -232,7 +238,8 @@ static ref_t ref_canonize_lookup(ref_mgr mgr, chunk_ptr ucp) {
 	/* Don't need this chunk */
 	chunk_free(ucp);
     } else {
-	/* Came to end of list without finding matching entry.  Create a new one. */
+	/* Came to end of list without finding matching entry.
+	   Create a new one. */
 	size_t uniquifier = largest_used + 1;
 	/* See if have exceeded bounds for uniquifier */
 	if (uniquifier > REF_MASK_UNIQ)
@@ -252,8 +259,10 @@ static ref_t ref_canonize_lookup(ref_mgr mgr, chunk_ptr ucp) {
 		   vbuf, hibuf, lobuf, rbuf);
 	}
 	mgr->stat_counter[STATB_UNIQ_CURR]++;
-	if (mgr->stat_counter[STATB_UNIQ_CURR] > mgr->stat_counter[STATB_UNIQ_PEAK])
-	    mgr->stat_counter[STATB_UNIQ_PEAK] = mgr->stat_counter[STATB_UNIQ_CURR];
+	if (mgr->stat_counter[STATB_UNIQ_CURR]
+	    > mgr->stat_counter[STATB_UNIQ_PEAK])
+	    mgr->stat_counter[STATB_UNIQ_PEAK]
+		= mgr->stat_counter[STATB_UNIQ_CURR];
 	mgr->stat_counter[STATB_UNIQ_TOTAL]++;
 	if (have_list) {
 	    *tailp = ls;
@@ -278,7 +287,8 @@ ref_t ref_canonize(ref_mgr mgr, ref_t vref, ref_t hiref, ref_t loref) {
     return r;
 }
 
-/* Do dereferencing steps that can be done locally.  Return true if successful */
+/* Do dereferencing steps that can be done locally.
+   Return true if successful */
 bool ref_deref_local(ref_t r, ref_t *vrefp, ref_t *hirefp, ref_t *lorefp) {
     switch (REF_GET_TYPE(r)) {
     case BDD_CONSTANT:
@@ -322,7 +332,8 @@ chunk_ptr ref_deref_lookup(ref_mgr mgr, ref_t r) {
     if (ls && verblevel >= 3) {
 	char buf[24];
 	ref_show(r, buf);
-	report(3, "Looking for ref %s.  Found list in hash table, but no entry", buf);
+	report(3, "Looking for ref %s.  Found list in hash table, but no entry",
+	       buf);
 	ele = ls;
 	while (ele) {
 	    char ebuf[24];
@@ -334,7 +345,8 @@ chunk_ptr ref_deref_lookup(ref_mgr mgr, ref_t r) {
     return NULL;
 }
 
-void ref_deref(ref_mgr mgr, ref_t r, ref_t *vrefp, ref_t *hirefp, ref_t *lorefp) {
+void ref_deref(ref_mgr mgr, ref_t r,
+	       ref_t *vrefp, ref_t *hirefp, ref_t *lorefp) {
     if (ref_deref_local(r, vrefp, hirefp, lorefp))
 	return;
     ref_t ar = REF_ABSVAL(r);
@@ -356,10 +368,12 @@ void ref_deref(ref_mgr mgr, ref_t r, ref_t *vrefp, ref_t *hirefp, ref_t *lorefp)
     }
 }
 
-/* Perform local parts of ITE.  Return either result or (possibly negated) recurse ref.
+/* Perform local parts of ITE.
+   Return either result or (possibly negated) recurse ref.
    In latter case, set *iucpp to triple with ITE arguments
 */
-ref_t ref_ite_local(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref, chunk_ptr *ucpp) {
+ref_t ref_ite_local(ref_mgr mgr, ref_t iref,
+		    ref_t tref, ref_t eref, chunk_ptr *ucpp) {
     ref_t r;
     ref_t siref = iref;
     ref_t stref = tref;
@@ -508,8 +522,10 @@ void ref_ite_store(ref_mgr mgr, chunk_ptr ucp, ref_t r) {
 
 /* Recursive calls for ITE */
 static void ref_ite_recurse(ref_mgr mgr,
-		     ref_t irefhi, ref_t ireflo, ref_t trefhi, ref_t treflo, ref_t erefhi, ref_t ereflo,
-		     ref_t *newhip, ref_t *newlop) {
+			    ref_t irefhi, ref_t ireflo,
+			    ref_t trefhi, ref_t treflo,
+			    ref_t erefhi, ref_t ereflo,
+			    ref_t *newhip, ref_t *newlop) {
     *newhip = ref_ite(mgr, irefhi, trefhi, erefhi);
     *newlop = ref_ite(mgr, ireflo, treflo, ereflo);
     mgr->stat_counter[STATB_ITE_NEW_CNT]++;
@@ -574,7 +590,8 @@ ref_t ref_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     else
 	erefhi = ereflo = eref;
     ref_t newhi, newlo;
-    ref_ite_recurse(mgr, irefhi, ireflo, trefhi, treflo, erefhi, ereflo, &newhi, &newlo);
+    ref_ite_recurse(mgr, irefhi, ireflo, trefhi, treflo,
+		    erefhi, ereflo, &newhi, &newlo);
     ref_t vref = REF_VAR(var);
     r = ref_canonize(mgr, vref, newhi, newlo);
     ref_ite_store(mgr, ucp, r);
@@ -638,16 +655,24 @@ struct UELE {
 };
 
 /* Unary functions defined in terms of operation performed at each node */
-typedef word_t (*uop_node_fun)(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
+typedef word_t (*uop_node_fun)(uop_mgr_ptr umgr, ref_t r,
+			       word_t hival, word_t loval, void *auxinfo);
 
 /* Forward declarations */
-static word_t uop_node_mark(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
-static word_t uop_node_support(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
-static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
-static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
-static word_t uop_node_cofactor(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
-static word_t uop_node_equant(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
-static word_t uop_node_shift(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo);
+static word_t uop_node_mark(uop_mgr_ptr umgr, ref_t r,
+			    word_t hival, word_t loval, void *auxinfo);
+static word_t uop_node_support(uop_mgr_ptr umgr, ref_t r,
+			       word_t hival, word_t loval, void *auxinfo);
+static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r,
+			       word_t hival, word_t loval, void *auxinfo);
+static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r,
+			      word_t hival, word_t loval, void *auxinfo);
+static word_t uop_node_cofactor(uop_mgr_ptr umgr, ref_t r,
+				word_t hival, word_t loval, void *auxinfo);
+static word_t uop_node_equant(uop_mgr_ptr umgr, ref_t r,
+			      word_t hival, word_t loval, void *auxinfo);
+static word_t uop_node_shift(uop_mgr_ptr umgr, ref_t r,
+			     word_t hival, word_t loval, void *auxinfo);
 
 
 static uop_node_fun uop_node_functions[] = {
@@ -658,8 +683,10 @@ static uop_node_fun uop_node_functions[] = {
 
 
 /* Extra information included when distributed */
-static uop_mgr_ptr new_uop(ref_mgr mgr, unsigned id, uop_type_t op, void *auxinfo, bool dist) {
-    uop_mgr_ptr umgr = (uop_mgr_ptr) malloc_or_fail(sizeof(uop_mgr_ele), "new_uop");
+static uop_mgr_ptr new_uop(ref_mgr mgr, unsigned id,
+			   uop_type_t op, void *auxinfo, bool dist) {
+    uop_mgr_ptr umgr = (uop_mgr_ptr) malloc_or_fail(sizeof(uop_mgr_ele),
+						    "new_uop");
     umgr->mgr = mgr;
     umgr->id = id;
     umgr->operation = op;
@@ -733,7 +760,8 @@ static word_t uop_traverse(uop_mgr_ptr umgr, ref_t r) {
     }
     /* See if terminal case */
     if (REF_IS_CONST(r)) {
-	val = uop_node_functions[umgr->operation](umgr, r, (word_t) 0, (word_t) 0, umgr->auxinfo);
+	val = uop_node_functions[umgr->operation](umgr, r, (word_t) 0,
+						  (word_t) 0, umgr->auxinfo);
 	report(4, "\tConstant node yields 0x%llx", val);
     } else {
 	/* Apply recursively */
@@ -741,7 +769,8 @@ static word_t uop_traverse(uop_mgr_ptr umgr, ref_t r) {
 	ref_deref(umgr->mgr, r, &vref, &hiref, &loref);
 	word_t hival = uop_traverse(umgr, hiref);
 	word_t loval = uop_traverse(umgr, loref);
-	val = uop_node_functions[umgr->operation](umgr, r, hival, loval, umgr->auxinfo);
+	val = uop_node_functions[umgr->operation](umgr, r, hival, loval,
+						  umgr->auxinfo);
 	report(4, "\tComputed value 0x%llx", val);
     }
     keyvalue_insert(umgr->map, (word_t) r, val);
@@ -764,13 +793,15 @@ word_t uop_getval(uop_mgr_ptr umgr, ref_t r) {
     if (!keyvalue_find(umgr->map, (word_t) r, (word_t *) &val)) {
 	char buf[24];
 	ref_show(r, buf);
-	err(false, "Couldn't find ref %s in map for unary operation #%d", buf, umgr->id);
+	err(false, "Couldn't find ref %s in map for unary operation #%d",
+	    buf, umgr->id);
 	return (word_t) 0;
     }
     return val;
 }
 
-static word_t uop_node_mark(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
+static word_t uop_node_mark(uop_mgr_ptr umgr, ref_t r, word_t hival,
+			    word_t loval, void *auxinfo) {
     /* Aux info is a set indicating already reached nodes */
     ref_t ar = REF_ABSVAL(r);
     set_ptr rset = (set_ptr) auxinfo;
@@ -806,7 +837,8 @@ static set_ptr bv2vset(word_t vset) {
     return set;
 }
 
-static word_t uop_node_support(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
+static word_t uop_node_support(uop_mgr_ptr umgr, ref_t r, word_t hival,
+			       word_t loval, void *auxinfo) {
     /* Result is bit vector encoding local and downward support */
     /* Aux info is a set indicating already found support members */
     if (REF_IS_CONST(r))
@@ -840,7 +872,8 @@ static double w2d(word_t w) {
     return x.d;
 }
 
-static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
+static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r,
+			       word_t hival, word_t loval, void *auxinfo) {
     /* Aux info is null */
     double val;
     if (r == REF_ONE) {
@@ -855,7 +888,8 @@ static word_t uop_node_density(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t l
     return d2w(val);
 }
 
-/* Uop counting packs index and count (relative to that index) into single word */
+/* Uop counting packs index and count (relative to that index)
+   into single word */
 static word_t pack_count(unsigned idx, word_t cnt) {
     return ((word_t) idx << 48) | cnt;
 }
@@ -876,9 +910,11 @@ word_t pval2cnt(word_t pval, unsigned idx) {
     return wt * pcnt;
 }
 
-static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
+static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r, word_t hival,
+			      word_t loval, void *auxinfo) {
     /* Aux info is count of number of variables */
-    /* Compute count relative to top-level index.  Pack index into high-order 16 bits */
+    /* Compute count relative to top-level index.
+       Pack index into high-order 16 bits */
     word_t nvars = *(word_t *) auxinfo;
     word_t cnt;
     word_t idx = REF_GET_VAR(r);
@@ -904,7 +940,8 @@ static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t lo
     return pack_count(idx, cnt);
 }
 
-static word_t uop_node_cofactor(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
+static word_t uop_node_cofactor(uop_mgr_ptr umgr, ref_t r,
+				word_t hival, word_t loval, void *auxinfo) {
     if (REF_IS_CONST(r))
 	return (word_t) r;
     /* Auxinfo is a set of literals */
@@ -925,7 +962,8 @@ static word_t uop_node_cofactor(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t 
     return (word_t) nr;
 }
 
-static word_t uop_node_equant(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
+static word_t uop_node_equant(uop_mgr_ptr umgr, ref_t r,
+			      word_t hival, word_t loval, void *auxinfo) {
     if (REF_IS_CONST(r))
 	return (word_t) r;
     /* Auxinfo is a set of variables */
@@ -944,7 +982,8 @@ static word_t uop_node_equant(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t lo
 
 /* Relabel old variables to new.  Must maintain compatible variable ordering */
 /* Auxinfo is table mapping old vref's to new ones */
-static word_t uop_node_shift(uop_mgr_ptr umgr, ref_t r, word_t hival, word_t loval, void *auxinfo) {
+static word_t uop_node_shift(uop_mgr_ptr umgr, ref_t r,
+			     word_t hival, word_t loval, void *auxinfo) {
     if (REF_IS_CONST(r))
 	return (word_t) r;
     /* Return value is ref of shifted function */
@@ -1064,7 +1103,8 @@ keyvalue_table_ptr ref_equant(ref_mgr mgr, set_ptr roots, set_ptr vars) {
 /* Create key-value table mapping set of root nodes to their shifted versions
    with respect to a mapping from old variables to new ones 
 */
-keyvalue_table_ptr ref_shift(ref_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap) {
+keyvalue_table_ptr ref_shift(ref_mgr mgr, set_ptr roots,
+			     keyvalue_table_ptr vmap) {
     uop_mgr_ptr umgr = new_uop(mgr, 0, UOP_SHIFT, (void *) vmap, false);
     uop_go(umgr, roots);
     keyvalue_table_ptr result = map_subset(umgr->map, roots);
@@ -1121,7 +1161,8 @@ static void complete_collection(ref_mgr mgr, set_ptr rset) {
 }
 
 
-/* Local garbage collection.  Find all nodes reachable from roots and keep only those in unique table */
+/* Local garbage collection.
+   Find all nodes reachable from roots and keep only those in unique table */
 void ref_collect(ref_mgr mgr, set_ptr roots) {
     set_ptr rset = ref_reach(mgr, roots);
     complete_collection(mgr, rset);
@@ -1137,23 +1178,31 @@ void ref_show_stat(ref_mgr mgr) {
 	mgr->stat_counter[i] = agent_stat_counter[i];
     report(0, "Peak bytes %" PRIu64,
 	   mgr->stat_counter[STATA_BYTE_PEAK]);
-    report(0, "Operations.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
+    report(0,
+"Operations.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
 	   mgr->stat_counter[STATA_OPERATION_TOTAL],
 	   mgr->stat_counter[STATA_OPERATION_LOCAL]);
-    report(0, "Operands.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
+    report(0,
+"Operands.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
 	   mgr->stat_counter[STATA_OPERAND_TOTAL],
 	   mgr->stat_counter[STATA_OPERAND_LOCAL]);
-    report(0, "Unique table.  Total generated %" PRIu64 ".  Current %" PRIu64 ".  Peak %" PRIu64 ".  Collisions %" PRIu64,
+    report(0,
+"Unique table.  Total generated %" PRIu64 ".  Current %" PRIu64
+".  Peak %" PRIu64 ".  Collisions %" PRIu64,
 	   mgr->stat_counter[STATB_UNIQ_TOTAL],
 	   mgr->stat_counter[STATB_UNIQ_CURR],
 	   mgr->stat_counter[STATB_UNIQ_PEAK],
 	   mgr->stat_counter[STATB_UNIQ_COLLIDE]);
-    report(0, "ITEs. Total %" PRIu64 ".  Done Locally %" PRIu64 ".  Hit cache %" PRIu64 ".  Cause recursion %" PRIu64,
+    report(0,
+"ITEs. Total %" PRIu64 ".  Done Locally %" PRIu64 
+".  Hit cache %" PRIu64 ".  Cause recursion %" PRIu64,
 	   mgr->stat_counter[STATB_ITE_CNT],
 	   mgr->stat_counter[STATB_ITE_LOCAL_CNT],
 	   mgr->stat_counter[STATB_ITE_HIT_CNT],
 	   mgr->stat_counter[STATB_ITE_NEW_CNT]);
-    report(0, "ITE cache.  Total generated %" PRIu64 ".  Current %" PRIu64 ".  Peak %" PRIu64,
+    report(0,
+"ITE cache.  Total generated %" PRIu64 
+".  Current %" PRIu64 ".  Peak %" PRIu64,
 	   mgr->stat_counter[STATB_ITEC_TOTAL],
 	   mgr->stat_counter[STATB_ITEC_CURR],
 	   mgr->stat_counter[STATB_ITEC_PEAK]);
@@ -1164,9 +1213,9 @@ void ref_show_stat(ref_mgr mgr) {
 /* Information needed by agent performing distributed BDD operations */
 typedef struct {
     ref_mgr rmgr; /* Reference manager */
-    /* Operators waiting for completion of ITE operation stored in table */
-    /* Table provides mapping from chunk containing (iref, tref, eref) to ilist */
-    /* Use ilist entries to indicate destination & negation of each target */
+    /* Operators waiting for completion of ITE operation stored in table
+       Table provides mapping from chunk containing (iref, tref, eref) to ilist
+       Use ilist entries to indicate destination & negation of each target */
     keyvalue_table_ptr deferred_ite_table;
     /* List of all outstanding unary operations */
     uop_mgr_ptr umgr_list;
@@ -1234,7 +1283,8 @@ chunk_ptr build_var(word_t dest) {
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_VAR, worker, id, 1 + OP_HEADER_CNT);
     op_insert_word(op, dest, 0+OP_HEADER_CNT);
-    report(4, "Created Var operation.  Worker %u.  Operator ID 0x%x.", worker, id);
+    report(4, "Created Var operation.  Worker %u.  Operator ID 0x%x.",
+	   worker, id);
     return op;
 }
 
@@ -1244,21 +1294,26 @@ chunk_ptr build_canonize(word_t dest, ref_t vref) {
     chunk_ptr op = msg_new_operator(OP_CANONIZE, worker, id, 4 + OP_HEADER_CNT);
     op_insert_word(op, dest,            0+OP_HEADER_CNT);
     op_insert_word(op, (word_t) vref,   1+OP_HEADER_CNT);
-    report(4, "Created Canonize operation.  Worker %u.  Operator ID 0x%x.", worker, id);
+    report(4, "Created Canonize operation.  Worker %u.  Operator ID 0x%x.",
+	   worker, id);
     return op;
 }
 
-chunk_ptr build_canonize_lookup(word_t dest, word_t hash, ref_t vref, ref_t hiref, ref_t loref, bool negate) {
+chunk_ptr build_canonize_lookup(word_t dest, word_t hash, ref_t vref,
+				ref_t hiref, ref_t loref, bool negate) {
     word_t worker = choose_hashed_worker(hash);
     word_t id = new_operator_id();
-    chunk_ptr op = msg_new_operator(OP_CANONIZE_LOOKUP, worker, id, 6 + OP_HEADER_CNT);
+    chunk_ptr op = msg_new_operator(OP_CANONIZE_LOOKUP, worker,
+				    id, 6 + OP_HEADER_CNT);
     op_insert_word(op, dest,            0+OP_HEADER_CNT);
     op_insert_word(op, hash,            1+OP_HEADER_CNT);
     op_insert_word(op, (word_t) vref,   2+OP_HEADER_CNT);
     op_insert_word(op, (word_t) hiref,  3+OP_HEADER_CNT);
     op_insert_word(op, (word_t) loref,  4+OP_HEADER_CNT);
     op_insert_word(op, (word_t) negate, 5+OP_HEADER_CNT);
-    report(4, "Created Canonize Lookup operation.  Worker %u.  Operator ID 0x%x.", worker, id);
+    report(4,
+"Created Canonize Lookup operation.  Worker %u.  Operator ID 0x%x.",
+	   worker, id);
     return op;
 }
 
@@ -1266,25 +1321,31 @@ chunk_ptr build_retrieve_lookup(word_t dest, ref_t ref) {
     word_t hash = REF_GET_HASH(ref);
     word_t worker = choose_hashed_worker(hash);
     word_t id = new_operator_id();
-    chunk_ptr op = msg_new_operator(OP_RETRIEVE_LOOKUP, worker, id, 2 + OP_HEADER_CNT);
+    chunk_ptr op = msg_new_operator(OP_RETRIEVE_LOOKUP, worker, id,
+				    2 + OP_HEADER_CNT);
     op_insert_word(op, dest,            0+OP_HEADER_CNT);
     op_insert_word(op, (word_t) ref,    1+OP_HEADER_CNT);
-    report(4, "Created Retrieve Lookup operation.  Worker %u.  Operator ID 0x%x.", worker, id);
+    report(4,
+"Created Retrieve Lookup operation.  Worker %u.  Operator ID 0x%x.",
+	   worker, id);
     return op;
 }
 
-chunk_ptr build_ite_lookup(word_t dest, ref_t iref, ref_t tref, ref_t eref, bool negate) {
+chunk_ptr build_ite_lookup(word_t dest, ref_t iref,
+			   ref_t tref, ref_t eref, bool negate) {
     chunk_ptr ucp = ref3_encode(iref, tref, eref);
     word_t hash = chunk_hash((word_t) ucp);
     word_t worker = choose_hashed_worker(hash);
     word_t id = new_operator_id();
-    chunk_ptr op = msg_new_operator(OP_ITE_LOOKUP, worker, id, 5 + OP_HEADER_CNT);
+    chunk_ptr op = msg_new_operator(OP_ITE_LOOKUP, worker, id,
+				    5 + OP_HEADER_CNT);
     op_insert_word(op, dest,            0+OP_HEADER_CNT);
     op_insert_word(op, (word_t) iref,   1+OP_HEADER_CNT);
     op_insert_word(op, (word_t) tref,   2+OP_HEADER_CNT);
     op_insert_word(op, (word_t) eref,  3+OP_HEADER_CNT);
     op_insert_word(op, (word_t) negate, 4+OP_HEADER_CNT);
-    report(4, "Created ITE Lookup operation.  Worker %u.  Operator ID 0x%x.", worker, id);
+    report(4,
+"Created ITE Lookup operation.  Worker %u.  Operator ID 0x%x.", worker, id);
     chunk_free(ucp);
     return op;
 }
@@ -1292,14 +1353,17 @@ chunk_ptr build_ite_lookup(word_t dest, ref_t iref, ref_t tref, ref_t eref, bool
 chunk_ptr build_ite_recurse(word_t dest, ref_t vref) {
     word_t worker = choose_some_worker();
     word_t id = new_operator_id();
-    chunk_ptr op = msg_new_operator(OP_ITE_RECURSE, worker, id, 8 + OP_HEADER_CNT);
+    chunk_ptr op = msg_new_operator(OP_ITE_RECURSE, worker, id,
+				    8 + OP_HEADER_CNT);
     op_insert_word(op, dest,          0+OP_HEADER_CNT);
     op_insert_word(op, (word_t) vref, 1+OP_HEADER_CNT);
-    report(4, "Created ITE Recurse operation.  Worker %u.  Operator ID 0x%x.", worker, id);
+    report(4, "Created ITE Recurse operation.  Worker %u.  Operator ID 0x%x.",
+	   worker, id);
     return op;
 }
 
-chunk_ptr build_ite_store(word_t dest, word_t iref, word_t tref, word_t eref, bool negate) {
+chunk_ptr build_ite_store(word_t dest, word_t iref, word_t tref,
+			  word_t eref, bool negate) {
     word_t worker = choose_own_worker();
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_ITE_STORE, worker, id, 6 + OP_HEADER_CNT);
@@ -1308,7 +1372,8 @@ chunk_ptr build_ite_store(word_t dest, word_t iref, word_t tref, word_t eref, bo
     op_insert_word(op, (word_t) tref,   2+OP_HEADER_CNT);
     op_insert_word(op, (word_t) eref,  3+OP_HEADER_CNT);
     op_insert_word(op, (word_t) negate, 5+OP_HEADER_CNT);
-    report(4, "Created ITE Store operation.  Worker %u.  Operator ID 0x%x.", worker, id);
+    report(4, "Created ITE Store operation.  Worker %u.  Operator ID 0x%x.",
+	   worker, id);
     return op;
 }
 
@@ -1320,7 +1385,9 @@ chunk_ptr build_uop_down(word_t dest, unsigned uid, ref_t ref) {
     op_insert_word(op, dest,            0+OP_HEADER_CNT);
     op_insert_word(op, (word_t) uid,    1+OP_HEADER_CNT);
     op_insert_word(op, (word_t) ref,    2+OP_HEADER_CNT);
-    report(4, "Created UOP Down operation.  Uid %u.  Worker %u.  Operator ID 0x%x.", uid, worker, id);
+    report(4,
+"Created UOP Down operation.  Uid %u.  Worker %u.  Operator ID 0x%x.",
+	   uid, worker, id);
     return op;
 }
 
@@ -1331,7 +1398,9 @@ chunk_ptr build_uop_up(word_t dest, unsigned uid, ref_t ref) {
     op_insert_word(op, dest,            0+OP_HEADER_CNT);
     op_insert_word(op, (word_t) uid,    1+OP_HEADER_CNT);
     op_insert_word(op, (word_t) ref,    2+OP_HEADER_CNT);
-    report(4, "Created UOP Up operation.  Uid %u.  Worker %u.  Operator ID 0x%x.", uid, worker, id);
+    report(4,
+"Created UOP Up operation.  Uid %u.  Worker %u.  Operator ID 0x%x.",
+	   uid, worker, id);
     return op;
 }
 
@@ -1342,7 +1411,9 @@ chunk_ptr build_uop_store(word_t dest, unsigned uid, ref_t ref) {
     op_insert_word(op, dest,            0+OP_HEADER_CNT);
     op_insert_word(op, (word_t) uid,    1+OP_HEADER_CNT);
     op_insert_word(op, (word_t) ref,    2+OP_HEADER_CNT);
-    report(4, "Created UOP Store operation.  Uid %u.  Worker %u.  Operator ID 0x%x.", uid, worker, id);
+    report(4,
+"Created UOP Store operation.  Uid %u.  Worker %u.  Operator ID 0x%x.",
+	   uid, worker, id);
     return op;
 }
 
@@ -1384,7 +1455,8 @@ bool do_canonize_op(chunk_ptr op) {
     ref_t nvref = (ref_t) chunk_get_word(ucp, 0);
     ref_t nhiref = (ref_t) chunk_get_word(ucp, 1);
     ref_t nloref = (ref_t) chunk_get_word(ucp, 2);
-    chunk_ptr cop = build_canonize_lookup(dest, hash, nvref, nhiref, nloref, negate);
+    chunk_ptr cop = build_canonize_lookup(dest, hash, nvref,
+					  nhiref, nloref, negate);
     ok = send_op(cop);
     chunk_free(cop);
     chunk_free(ucp);
@@ -1473,7 +1545,8 @@ bool do_ite_lookup_op(chunk_ptr op) {
 	ilist_ptr ele = ilist_new(dest, negate);
 	/* Add to list */
 	ele->next = ls;
-	keyvalue_insert(dmgr->deferred_ite_table, (word_t) old_ucp, (word_t) ele);
+	keyvalue_insert(dmgr->deferred_ite_table, (word_t) old_ucp,
+			(word_t) ele);
 	chunk_free(ucp);
 	if (verblevel >= 4) {
 	    char ibuf[24], tbuf[24], ebuf[24];
@@ -1569,7 +1642,8 @@ bool do_ite_recurse_op(chunk_ptr op) {
     chunk_ptr hiucp, loucp;
     ref_t nhiref = ref_ite_local(mgr, irefhi, trefhi, erefhi, &hiucp);
     ref_t nloref = ref_ite_local(mgr, ireflo, treflo, ereflo, &loucp);
-    /* Note for future: Could begin canonization for case where both hiref & loref are valid */
+    /* Note for future:
+       Could begin canonization for case where both hiref & loref are valid */
     chunk_ptr cop = build_canonize(dest, vref);
     if (REF_IS_RECURSE(nhiref)) {
 	word_t hidest = msg_new_destination(cop, 2+OP_HEADER_CNT);
@@ -1637,7 +1711,8 @@ bool do_ite_store_op(chunk_ptr op) {
 		char *sn = lnegate ? "!" : "";
 		unsigned op_id = msg_get_dest_op_id(dest);
 		unsigned agent = msg_get_dest_agent(dest);
-		report(4, "\tSending deferred result %sITE(%s, %s, %s) --> %s.  Agent %u, Op Id 0x%x",
+		report(4,
+"\tSending deferred result %sITE(%s, %s, %s) --> %s.  Agent %u, Op Id 0x%x",
 		       sn, ibuf, tbuf, ebuf, rbuf, agent, op_id);
 	    
 	    }
@@ -1692,7 +1767,8 @@ bool do_uop_down_op(chunk_ptr op) {
     }
     /* See if terminal case */
     if (REF_IS_CONST(ref)) {
-	val = uop_node_functions[umgr->operation](umgr, ref, (word_t) 0, (word_t) 0, umgr->auxinfo);
+	val = uop_node_functions[umgr->operation](umgr, ref, (word_t) 0,
+						  (word_t) 0, umgr->auxinfo);
 	report(4, "\tConstant node yields 0x%llx", val);
 	return (send_as_operand(dest, val));
     }
@@ -1725,7 +1801,8 @@ bool do_uop_down_op(chunk_ptr op) {
     if (verblevel >= 4) {
 	char hibuf[24], lobuf[24];
 	ref_show(hiref, hibuf); ref_show(loref, lobuf);
-	report(4, "\tCreated downward calls for children %s and %s", hibuf, lobuf);
+	report(4, "\tCreated downward calls for children %s and %s",
+	       hibuf, lobuf);
     }
     return ok;
 }
@@ -1764,7 +1841,9 @@ static bool up_store(uop_mgr_ptr umgr, word_t dest, word_t ref, word_t val) {
 }
 
 /* Perform upward portion of cofactor operation */
-static bool complete_cofactor(uop_mgr_ptr umgr, word_t dest, unsigned uid, ref_t ref, ref_t hiref, ref_t loref, word_t *valp) {
+static bool complete_cofactor(uop_mgr_ptr umgr, word_t dest, unsigned uid,
+			      ref_t ref, ref_t hiref, ref_t loref,
+			      word_t *valp) {
     /* Auxinfo is a set of literals */
     /* Return value is ref of cofactored function */
     bool done = false;
@@ -1789,7 +1868,8 @@ static bool complete_cofactor(uop_mgr_ptr umgr, word_t dest, unsigned uid, ref_t
 	    word_t hash = utable_hash(ucp);
 	    chunk_ptr smsg = build_uop_store(dest, uid, ref);
 	    word_t sdest = msg_new_destination(smsg, 3+OP_HEADER_CNT);
-	    chunk_ptr cmsg = build_canonize_lookup(sdest, hash, vr, nhiref, nloref, negate);
+	    chunk_ptr cmsg = build_canonize_lookup(sdest, hash, vr,
+						   nhiref, nloref, negate);
 	    bool ok = send_op(cmsg);
 	    ok = ok && send_op(smsg);
 	    chunk_free(smsg);
@@ -1803,7 +1883,8 @@ static bool complete_cofactor(uop_mgr_ptr umgr, word_t dest, unsigned uid, ref_t
     return done;
 }
 
-static bool complete_equant(uop_mgr_ptr umgr, word_t dest, unsigned uid, ref_t ref, ref_t hiref, ref_t loref, word_t *valp) {
+static bool complete_equant(uop_mgr_ptr umgr, word_t dest, unsigned uid,
+			    ref_t ref, ref_t hiref, ref_t loref, word_t *valp) {
     /* Auxinfo is a set of variables */
     /* Return value is ref of shifted function */
     bool done = false;
@@ -1841,7 +1922,8 @@ static bool complete_equant(uop_mgr_ptr umgr, word_t dest, unsigned uid, ref_t r
 	    word_t hash = utable_hash(ucp);
 	    chunk_ptr smsg = build_uop_store(dest, uid, ref);
 	    word_t sdest = msg_new_destination(smsg, 3+OP_HEADER_CNT);
-	    chunk_ptr cmsg = build_canonize_lookup(sdest, hash, vr, nhiref, nloref, negate);
+	    chunk_ptr cmsg = build_canonize_lookup(sdest, hash, vr,
+						   nhiref, nloref, negate);
 	    bool ok = send_op(cmsg);
 	    ok = ok && send_op(smsg);
 	    chunk_free(smsg);
@@ -1855,7 +1937,8 @@ static bool complete_equant(uop_mgr_ptr umgr, word_t dest, unsigned uid, ref_t r
     return done;
 }
 
-static bool complete_shift(uop_mgr_ptr umgr, word_t dest, unsigned uid, ref_t ref, ref_t hiref, ref_t loref, word_t *valp) {
+static bool complete_shift(uop_mgr_ptr umgr, word_t dest, unsigned uid,
+			   ref_t ref, ref_t hiref, ref_t loref, word_t *valp) {
     bool done = false;
     /* Return value is ref of shifted function */
     keyvalue_table_ptr vmap = (keyvalue_table_ptr) umgr->auxinfo;
@@ -1875,7 +1958,8 @@ static bool complete_shift(uop_mgr_ptr umgr, word_t dest, unsigned uid, ref_t re
 	word_t hash = utable_hash(ucp);
 	chunk_ptr smsg = build_uop_store(dest, uid, ref);
 	word_t sdest = msg_new_destination(smsg, 3+OP_HEADER_CNT);
-	chunk_ptr cmsg = build_canonize_lookup(sdest, hash, vr, nhiref, nloref, negate);
+	chunk_ptr cmsg = build_canonize_lookup(sdest, hash, vr,
+					       nhiref, nloref, negate);
 	bool ok = send_op(cmsg);
 	ok = ok && send_op(smsg);
 	chunk_free(smsg);
@@ -1908,17 +1992,21 @@ bool do_uop_up_op(chunk_ptr op) {
     bool done = false;
     switch(opcode) {
     case UOP_COFACTOR:
-	done = complete_cofactor(umgr, dest, uid, ref, (ref_t) hival, (ref_t) loval, &val);
+	done = complete_cofactor(umgr, dest, uid, ref,
+				 (ref_t) hival, (ref_t) loval, &val);
 	break;
     case UOP_EQUANT:
-	done = complete_equant(umgr, dest, uid, ref, (ref_t) hival, (ref_t) loval, &val);
+	done = complete_equant(umgr, dest, uid, ref,
+			       (ref_t) hival, (ref_t) loval, &val);
 	break;
     case UOP_SHIFT:
-	done = complete_shift(umgr, dest, uid, ref, (ref_t) hival, (ref_t) loval, &val);
+	done = complete_shift(umgr, dest, uid, ref,
+			      (ref_t) hival, (ref_t) loval, &val);
 	break;
     default:
 	/* Other cases can use standard function */
-	val = uop_node_functions[umgr->operation](umgr, ref, hival, loval, umgr->auxinfo);
+	val = uop_node_functions[umgr->operation](umgr, ref,
+						  hival, loval, umgr->auxinfo);
 	done = true;
 	break;
     }
@@ -2163,7 +2251,8 @@ keyvalue_table_ptr dist_equant(ref_mgr mgr, set_ptr roots, set_ptr vars) {
 /* Create key-value table mapping set of root nodes to their shifted versions
    with respect to a mapping from old variables to new ones 
 */
-keyvalue_table_ptr dist_shift(ref_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap) {
+keyvalue_table_ptr dist_shift(ref_mgr mgr, set_ptr roots,
+			      keyvalue_table_ptr vmap) {
     keyvalue_table_ptr dtable = word_keyvalue_new();
     size_t nword = keyvalue_marshal_size(vmap);
     word_t *data = calloc_or_fail(nword, sizeof(word_t), "dist_shift");
@@ -2309,7 +2398,8 @@ void do_summary_stat(chunk_ptr smsg) {
 	word_t minval = chunk_get_word(smsg, 1 + i*3 + 0);
 	word_t maxval = chunk_get_word(smsg, 1 + i*3 + 1);
 	word_t sumval = chunk_get_word(smsg, 1 + i*3 + 2);
-	report(1, "%s: Min: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
+	report(1, "%s: Min: %" PRIu64 "\tMax: %" PRIu64
+	       "\tAvg: %.2f\tSum: %" PRIu64,
 	       stat_items[i], minval, maxval, (double) sumval/nworker, sumval);
     }
 }

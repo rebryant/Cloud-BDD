@@ -77,7 +77,8 @@ static void fill_empty_test(size_t nele) {
     size_t n = nele;
     while (n > 0) {
 	size_t *rp = random_perm(nele);
-	/* Make pass over all possible elements.  Randomly remove some, setting their values to 0 */
+	/* Make pass over all possible elements.
+	   Randomly remove some, setting their values to 0 */
 	for (j = 0; j < nele; j++) {
 	    size_t i = rp[j];
 	    if (val_set[i] == 0) {
@@ -87,14 +88,18 @@ static void fill_empty_test(size_t nele) {
 		bool mem = set_member(st_table, shadow_set[i], false);
 		find_cnt++;
 		if (mem) {
-		    err(true, "i = %lu.  Unexpectedly found value '0x%llx'", i, shadow_set[i]);
+		    err(true,
+			"i = %lu.  Unexpectedly found value '0x%llx'",
+			i, shadow_set[i]);
 		} else {
-		    report(4, "i = %lu.  Confirmed that '0x%llx' not in set", i, shadow_set[i]);
+		    report(4, "i = %lu.  Confirmed that '0x%llx' not in set",
+			   i, shadow_set[i]);
 		}
 		if (insert) {
 		    val_set[i] = shadow_set[i];
 		    set_insert(st_table, val_set[i]);
-		    report(3, "i = %d.  Reinserted value '0x%llx'", i, val_set[i]);
+		    report(3, "i = %d.  Reinserted value '0x%llx'",
+			   i, val_set[i]);
 		    reinsertion_cnt++;
 		    n++;
 		}
@@ -105,9 +110,11 @@ static void fill_empty_test(size_t nele) {
 		bool mem = set_member(st_table, val_set[i], remove);
 		find_cnt++;
 		if (mem) {
-		    report(4, "i = %d.  Found expected value '0x%llx'", i, val_set[i]);
+		    report(4, "i = %d.  Found expected value '0x%llx'",
+			   i, val_set[i]);
 		} else {
-		    err(true, "i = %lu.  Didn't find expected value '0x%llx'\n", i, val_set[i]);
+		    err(true, "i = %lu.  Didn't find expected value '0x%llx'\n",
+			i, val_set[i]);
 		}
 		if (remove) {
 		    word_t value = val_set[i];
@@ -120,7 +127,8 @@ static void fill_empty_test(size_t nele) {
 	}
 	free_array(rp, nele, sizeof(size_t));
     }
-    printf("Fill/Empty: Insertions %d.  Reinsertions %d.  Deletions %d.  Finds %d\n",
+    printf(
+"Fill/Empty: Insertions %d.  Reinsertions %d.  Deletions %d.  Finds %d\n",
 	   insertion_cnt, reinsertion_cnt, deletion_cnt, find_cnt);
 }
 
@@ -148,9 +156,11 @@ void apply_test(size_t nele) {
 
     set_apply(st_table, apply_fun);
     if (apply_cnt != st_table->nelements) {
-	err(true, "Applied function to %d elements.  Expected %d", apply_cnt, st_table->nelements);
+	err(true, "Applied function to %d elements.  Expected %d",
+	    apply_cnt, st_table->nelements);
     }
-    printf("Apply test.  Insertions: %d.  Evaluations: %d\n", insertion_cnt, apply_cnt);
+    printf("Apply test.  Insertions: %d.  Evaluations: %d\n",
+	   insertion_cnt, apply_cnt);
 }
 
 static set_ptr clone_word_set(set_ptr set) {
@@ -198,11 +208,14 @@ void iter_test(size_t nele) {
 	report(5, "Nondestructive iterator got value '0x%llx'", v);
 	iter_cnt++;
 	if (!set_member(st_table, v, false)) {
-	    err(true, "Nondestructive iterator found element '0x%llx', but not in set", v);
+	    err(true,
+"Nondestructive iterator found element '0x%llx', but not in set", v);
 	}
     }
     if (iter_cnt != nele)
-	err(true, "Inserted %d elements, but nondestructive iterator got %d values", insertion_cnt, iter_cnt);
+	err(true,
+"Inserted %d elements, but nondestructive iterator got %d values",
+	    insertion_cnt, iter_cnt);
     else
 	report(2, "Nondestructive iterator got %d elements", iter_cnt);
     while (set_removenext(st_table, (word_t *) &v)) {
@@ -210,7 +223,9 @@ void iter_test(size_t nele) {
 	remove_cnt++;
     }
     if (remove_cnt != nele)
-	err(true, "Inserted %d elements, but destructive iterator got %d values", insertion_cnt, remove_cnt);
+	err(true,
+"Inserted %d elements, but destructive iterator got %d values",
+	    insertion_cnt, remove_cnt);
     else
 	report(2, "Nondestructive iterator got %d elements", iter_cnt);
     printf("Iterator test.  Both iterators got %lu elements\n", nele);

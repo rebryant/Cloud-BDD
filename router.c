@@ -62,7 +62,8 @@ static void init_router(char *controller_name, unsigned controller_port) {
     report(3, "Listening socket has descriptor %d", listen_fd);
     controller_fd = open_clientfd(controller_name, controller_port);
     if (controller_fd < 0)
-	err(true, "Cannot create connection to controller at %s:%u", controller_name, controller_port);
+	err(true, "Cannot create connection to controller at %s:%u",
+	    controller_name, controller_port);
     else
 	report(3, "Connection to controller has descriptor %d", controller_fd);
     chunk_ptr msg = msg_new_register_router(myport);
@@ -177,7 +178,8 @@ static void run_router() {
 
 
     while (true) {
-	/* Inputs: Select among listening port, controller port, new connections, and connections to workers & clients */
+	/* Inputs: Select among listening port, controller port, new connections,
+	   and connections to workers & clients */
 	FD_ZERO(&inset);
 	add_infd(listen_fd);
 	add_infd(controller_fd);
@@ -258,7 +260,8 @@ static void run_router() {
 		    return;
 		default:
 		    chunk_free(msg);
-		    err(false, "Unknown message code %u from controller (ignored)", code);
+		    err(false,
+			"Unknown message code %u from controller (ignored)", code);
 		}
 	    } else if (set_member(new_conn_set, (word_t) fd, true)) {
 		/* New connection request */
@@ -267,11 +270,13 @@ static void run_router() {
 		    chunk_free(msg);
 		    keyvalue_insert(routing_table, (word_t) agent, (word_t) fd);
 		    keyvalue_insert(inverse_table, (word_t) fd, (word_t) agent);
-		    report(3, "Created routing table entry for agent %u, fd %d", agent, fd);
+		    report(3, "Created routing table entry for agent %u, fd %d",
+			   agent, fd);
 		    break;
 		default:
 		    chunk_free(msg);
-		    err(false, "Unknown message code %u from newly connected agent %u (ignored)", code, agent);
+		    err(false,
+"Unknown message code %u from newly connected agent %u (ignored)", code, agent);
 		}
 	    } else {
 		/* Should be a routing request */
@@ -282,7 +287,8 @@ static void run_router() {
 		    break;
 		default:
 		    chunk_free(msg);
-		    err(false, "Unknown message code %u from agent %u", code, agent);
+		    err(false, "Unknown message code %u from agent %u",
+			code, agent);
 		}
 	    }
 	}
@@ -310,10 +316,12 @@ static void run_router() {
 		if (chunk_write(fd, outmsg)) {
 		    word_t h = chunk_get_word(outmsg, 0);
 		    unsigned id = msg_get_header_op_id(h);
-		    report(2, "Routed message with id 0x%x to agent %u", id, agent);
+		    report(2, "Routed message with id 0x%x to agent %u",
+			   id, agent);
 		}
 		else
-		    err(false, "Couldn't send message to agent %u (ignored)", agent);
+		    err(false, "Couldn't send message to agent %u (ignored)",
+			agent);
 		free_block(ele, sizeof(queue_ele));
 		chunk_free(outmsg);
 	    } else {
@@ -359,7 +367,8 @@ int main(int argc, char *argv[]) {
 	    port = atoi(optarg);
 	    break;
         case 'b':
-            bufferingEnabled = (((atoi(optarg) & 1) == atoi(optarg)) ? atoi(optarg) : 1);
+            bufferingEnabled = (((atoi(optarg) & 1) == atoi(optarg)) ?
+				atoi(optarg) : 1);
             break;
 	default:
 	    printf("Unknown option '%c'\n", c);

@@ -66,7 +66,8 @@ chunk_ptr build_ifork(word_t dest, word_t width, word_t val, word_t cnt) {
     op_insert_word(op, width, 1+OP_HEADER_CNT);
     op_insert_word(op, val,   2+OP_HEADER_CNT);
     op_insert_word(op, cnt,   3+OP_HEADER_CNT);
-    report(5, "Created fork operation.  Worker %u.  Operator Id 0x%x.  Width %u, val %u, cnt %u",
+    report(5,
+"Created fork operation.  Worker %u.  Operator Id 0x%x.  Width %u, val %u, cnt %u",
 	   worker, id, width, val, cnt);
     return op;
 }
@@ -78,7 +79,8 @@ chunk_ptr build_incr(word_t dest, word_t val, word_t cnt) {
     op_insert_word(op, dest, 0+OP_HEADER_CNT);
     op_insert_word(op, val,  1+OP_HEADER_CNT);
     op_insert_word(op, cnt,  2+OP_HEADER_CNT);
-    report(5, "Created incr operation.  Worker %u.  Operator Id 0x%x.  val %u, cnt %u",
+    report(5,
+"Created incr operation.  Worker %u.  Operator Id 0x%x.  val %u, cnt %u",
 	   worker, id, val, cnt);
     return op;
 }
@@ -127,7 +129,9 @@ bool do_ifork_op(chunk_ptr op) {
 	    chunk_ptr fork_op = build_ifork(ndest, w, val, cnt);
 	    word_t h = chunk_get_word(fork_op, 0);
 	    unsigned id = msg_get_header_op_id(h);
-	    report(5, "Fork op spawned fork op.  width %u, val %u, cnt %u, Id 0x%x", w, val, cnt, id);
+	    report(5,
+"Fork op spawned fork op.  width %u, val %u, cnt %u, Id 0x%x",
+		   w, val, cnt, id);
 	    if (send_op(fork_op))
 		report(5, "Sent fork operation.  Id 0x%x", id);
 	    else {
@@ -154,9 +158,13 @@ bool do_incr_op(chunk_ptr op) {
 	chunk_insert_word(result, val, 0+OPER_HEADER_CNT);
 	ok = ok && send_op(result);
 	if (ok)
-	    report(5, "Sent incr result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u", val, agent, operator_id, offset);
+	    report(5, 
+"Sent incr result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u",
+		   val, agent, operator_id, offset);
 	else
-	    err(false, "Couldn't send result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u", val, agent, operator_id, offset);
+	    err(false,
+"Couldn't send result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u",
+		val, agent, operator_id, offset);
 	chunk_free(result);
     } else {
 	chunk_ptr incr_op = build_incr(dest, val+1, cnt-1);
@@ -183,9 +191,13 @@ bool do_join_op(chunk_ptr op) {
     chunk_insert_word(result, val, 0+OPER_HEADER_CNT);
     bool ok = send_op(result);
     if (ok)
-	report(5, "Sent join result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u", val, agent, operator_id, offset);
+	report(5,
+"Sent join result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u",
+	       val, agent, operator_id, offset);
     else
-	err(false, "Couldn't send result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u", val, agent, operator_id, offset);
+	err(false,
+"Couldn't send result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u",
+	    val, agent, operator_id, offset);
     chunk_free(result);
     return ok;
 }
@@ -215,7 +227,8 @@ void do_summary_stat(chunk_ptr smsg) {
 	word_t minval = chunk_get_word(smsg, 1 + i*3 + 0);
 	word_t maxval = chunk_get_word(smsg, 1 + i*3 + 1);
 	word_t sumval = chunk_get_word(smsg, 1 + i*3 + 2);
-	report(1, "%s: Min: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
+	report(1,
+"%s: Min: %" PRIu64 "\tMax: %" PRIu64 "\tAvg: %.2f\tSum: %" PRIu64,
 	       stat_items[i], minval, maxval, (double) sumval/nworker, sumval);
     }
 }
@@ -236,7 +249,8 @@ void start_global(unsigned id, unsigned opcode, unsigned nword, word_t *data) {
 	}
 	set_free(dset);
     }
-    report(0, "Starting global operation with id %u, opcode %u.  Sum = %d", id, opcode, sum);
+    report(0, "Starting global operation with id %u, opcode %u.  Sum = %d",
+	   id, opcode, sum);
 }
 
 void finish_global(unsigned id) {

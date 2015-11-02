@@ -51,7 +51,8 @@ static DdNode *get_ddnode(shadow_mgr mgr, ref_t r) {
 	char buf[24];
 	shadow_show(mgr, r, buf);
 	err(fatal, "No node associated with ref %s (0x%llx)", buf, r);
-	n = mgr->do_cudd ? Cudd_ReadLogicZero(mgr->bdd_manager) : (DdNode *) REF_ZERO;
+	n = mgr->do_cudd ? Cudd_ReadLogicZero(mgr->bdd_manager) :
+	    (DdNode *) REF_ZERO;
     } 
     return n;
 }
@@ -67,8 +68,10 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 	r = (ref_t) n;
     if (!mgr->do_cudd)
 	n = (DdNode *) r;
-    bool rother_found = keyvalue_find(mgr->c2r_table, (word_t ) n, (word_t *) &rother);
-    bool nother_found = keyvalue_find(mgr->r2c_table, (word_t ) r, (word_t *) &nother);
+    bool rother_found = keyvalue_find(mgr->c2r_table, (word_t ) n,
+				      (word_t *) &rother);
+    bool nother_found = keyvalue_find(mgr->r2c_table, (word_t ) r,
+				      (word_t *) &nother);
     char buf1[24];
     char buf2[24];
     /* See if already found entry */
@@ -78,18 +81,21 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 	    if (nother != n || rother != r) {
 		shadow_show(mgr, r, buf1);
 		shadow_show(mgr, rother, buf2);
-		err(fatal, "Inconsistency.  New node 0x%p.  Old node 0x%p.  New ref %s.  Old ref %s",
+		err(fatal,
+"Inconsistency.  New node 0x%p.  Old node 0x%p.  New ref %s.  Old ref %s",
 		    n, nother, buf1, buf2);
 	    }
 	} else {
 	    shadow_show(mgr, r, buf1);
 	    shadow_show(mgr, rother, buf2);
-	    err(fatal, "Ref Collision.  Refs %s and %s map to BDD node 0x%p", buf1, buf2, nother);
+	    err(fatal, "Ref Collision.  Refs %s and %s map to BDD node 0x%p",
+		buf1, buf2, nother);
 	}
     } else {
 	if (nother_found) {
 	    shadow_show(mgr, r, buf1);
-	    err(fatal, "Node collision.  Nodes 0x%p and 0x%p map to ref %s\n", n, nother, buf1);
+	    err(fatal, "Node collision.  Nodes 0x%p and 0x%p map to ref %s\n",
+		n, nother, buf1);
 	} else {
 	    /* Normal case.  Create both entries */
 	    if (verblevel >= 5) {
@@ -138,7 +144,8 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist) {
     if (!(do_cudd || do_local || do_dist)) {
 	err(true, "Must have at least one active evaluation mode");
     }
-    shadow_mgr mgr = (shadow_mgr) malloc_or_fail(sizeof(shadow_ele), "new_shadow_mgr");
+    shadow_mgr mgr = (shadow_mgr) malloc_or_fail(sizeof(shadow_ele),
+						 "new_shadow_mgr");
     mgr->do_cudd = do_cudd;
     mgr->do_local = do_local;
     mgr->do_dist = do_dist;
@@ -405,7 +412,8 @@ keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots) {
 	    shadow_show(mgr, r, buf);
 	    if (keyvalue_find(density, wk, &wv2)) {
 		double d2 = w2d(wv2);
-		err(false, "Density mismatch for %s.  local = %.2f, distance = %.2f",
+		err(false,
+		    "Density mismatch for %s.  local = %.2f, distance = %.2f",
 		    buf, d2, d1);
 	    } else {
 		err(false, "Density error for %s.  No local entry", buf);
@@ -454,7 +462,8 @@ static keyvalue_table_ptr cudd_count(shadow_mgr mgr, set_ptr roots) {
     set_iterstart(roots);
     while (set_iternext(roots, &wk)) {
 	DdNode *n = (DdNode *) wk;
-	DdApaNumber num = Cudd_ApaCountMinterm(mgr->bdd_manager, n, nvars, &digits);
+	DdApaNumber num = Cudd_ApaCountMinterm(mgr->bdd_manager, n, nvars,
+					       &digits);
 	wv = apa2word(num, digits);
 	FREE(num);
 	keyvalue_insert(result, wk, wv);
@@ -526,7 +535,8 @@ keyvalue_table_ptr shadow_count(shadow_mgr mgr, set_ptr roots) {
 /* Uses CUDD to determine refs for all variable in support set of root functions */
 static set_ptr cudd_support(shadow_mgr mgr, set_ptr roots) {
     /* Create vector of nodes */
-    DdNode **vector = calloc_or_fail(roots->nelements, sizeof(DdNode *), "cudd_support");
+    DdNode **vector = calloc_or_fail(roots->nelements, sizeof(DdNode *),
+				     "cudd_support");
     size_t i = 0;
     word_t w;
     set_iterstart(roots);
@@ -535,7 +545,8 @@ static set_ptr cudd_support(shadow_mgr mgr, set_ptr roots) {
 	vector[i++] = get_ddnode(mgr, r);
     }
     int *indices = NULL;
-    int cnt = Cudd_VectorSupportIndices(mgr->bdd_manager, vector, roots->nelements, &indices);
+    int cnt = Cudd_VectorSupportIndices(mgr->bdd_manager, vector,
+					roots->nelements, &indices);
     set_ptr sset = word_set_new();
     for (i = 0; i < cnt; i++) {
 	ref_t rv = shadow_get_variable(mgr, indices[i]);
@@ -644,7 +655,8 @@ static DdNode *cudd_lit_cube(shadow_mgr mgr, set_ptr lits) {
     return cube;
 }
 
-static keyvalue_table_ptr cudd_restrict(shadow_mgr mgr, set_ptr roots, set_ptr lits) {
+static keyvalue_table_ptr cudd_restrict(shadow_mgr mgr, set_ptr roots,
+					set_ptr lits) {
     DdNode *cube = cudd_lit_cube(mgr, lits);
     keyvalue_table_ptr rtable = word_keyvalue_new();
     word_t w;
@@ -662,7 +674,8 @@ static keyvalue_table_ptr cudd_restrict(shadow_mgr mgr, set_ptr roots, set_ptr l
 
 /* Reconcile various maps that have created */
 static keyvalue_table_ptr reconcile_maps(shadow_mgr mgr, keyvalue_table_ptr lmap,
-					 keyvalue_table_ptr dmap, keyvalue_table_ptr cmap) {
+					 keyvalue_table_ptr dmap,
+					 keyvalue_table_ptr cmap) {
     keyvalue_table_ptr map = lmap ? lmap : dmap;
     if (dmap && map != dmap) {
 	/* Have both local and dist results */
@@ -675,7 +688,9 @@ static keyvalue_table_ptr reconcile_maps(shadow_mgr mgr, keyvalue_table_ptr lmap
 	    if (keyvalue_find(map, wk, &wv2)) {
 		char buf1[24], buf2[24];
 		ref_show((ref_t) wv1, buf1); ref_show((ref_t) wv2, buf2);
-		err(false, "Unary operation on %s gives %s in local, but %s in dist", buf, buf2, buf1);
+		err(false,
+		    "Unary operation on %s gives %s in local, but %s in dist",
+		    buf, buf2, buf1);
 	    } else {
 		err(false, "Could not find %s in unary op map", buf);
 	    }
@@ -739,7 +754,8 @@ keyvalue_table_ptr shadow_restrict(shadow_mgr mgr, set_ptr roots, set_ptr lits) 
     return reconcile_maps(mgr, lmap, dmap, cmap);
 }
 
-static keyvalue_table_ptr cudd_equant(shadow_mgr mgr, set_ptr roots, set_ptr vars) {
+static keyvalue_table_ptr cudd_equant(shadow_mgr mgr,
+				      set_ptr roots, set_ptr vars) {
     DdNode *cube = cudd_lit_cube(mgr, vars);
     keyvalue_table_ptr etable = word_keyvalue_new();
     word_t w;
@@ -776,7 +792,8 @@ keyvalue_table_ptr shadow_equant(shadow_mgr mgr, set_ptr roots, set_ptr vars) {
     return reconcile_maps(mgr, lmap, dmap, cmap);
 }
 
-static keyvalue_table_ptr cudd_shift(shadow_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap) {
+static keyvalue_table_ptr cudd_shift(shadow_mgr mgr, set_ptr roots,
+				     keyvalue_table_ptr vmap) {
     DdNode **vector = calloc_or_fail(mgr->nvars, sizeof(DdNode *), "cudd_shift");
     size_t i;
     /* Must build up vector of composition functions */
@@ -807,7 +824,8 @@ static keyvalue_table_ptr cudd_shift(shadow_mgr mgr, set_ptr roots, keyvalue_tab
 /* Create key-value table mapping set of root nodes to their shifted versions
    with respect to a mapping from old variables to new ones 
 */
-keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots, keyvalue_table_ptr vmap) {
+keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots,
+				keyvalue_table_ptr vmap) {
     keyvalue_table_ptr lmap = NULL;
     keyvalue_table_ptr dmap = NULL;
     keyvalue_table_ptr cmap = NULL;

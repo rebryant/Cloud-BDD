@@ -68,7 +68,8 @@ static void clone_test(char *s, chunk_ptr cp) {
 
 /* Test ability to construct chunk from subchunks */
 static void reassemble_test(char *s, chunk_ptr cp) {
-    size_t *split_pos = calloc_or_fail(cp->length+1, sizeof(size_t), "reassemble_test");
+    size_t *split_pos = calloc_or_fail(cp->length+1, sizeof(size_t),
+				       "reassemble_test");
     size_t sidx;
     size_t cnt = 0;
     for (sidx = 0; sidx < cp->length; sidx += 1 + random() % (cp->length - sidx)) {
@@ -81,12 +82,14 @@ static void reassemble_test(char *s, chunk_ptr cp) {
     for (idx = 0; idx < cnt; idx++) {
 	size_t len = split_pos[idx+1] - split_pos[idx];
 	if (len > cp->length) {
-	    err(true, "Impossible length %lu.  idx = %lu, split_pos[idx] = %lu, split_pos[idx+1] = %lu\n",
+	    err(true,
+"Impossible len %lu.  idx = %lu, split_pos[idx] = %lu, split_pos[idx+1] = %lu\n",
 		len, idx, split_pos[idx], split_pos[idx+1]);
 	}
 	scp[idx] = chunk_get_chunk(cp, split_pos[idx], len);
 	char *ss = chunk2str(scp[idx]);
-	report(2, "Created:\tOffset %lu\tLength %lu\tString '%s'", split_pos[idx], len, ss);
+	report(2, "Created:\tOffset %lu\tLength %lu\tString '%s'",
+	       split_pos[idx], len, ss);
 	free_string(ss);
     }
     /* Reassemble */
@@ -99,7 +102,8 @@ static void reassemble_test(char *s, chunk_ptr cp) {
 	report(1, "Split chunk into parts:");
 	for (idx = 0; idx < cnt; idx++) {
 	    char *ss = chunk2str(scp[idx]);
-	    report(1, "\tOffset %lu\tLength %lu\tString '%s'", split_pos[idx], split_pos[idx+1] - split_pos[idx], ss);
+	    report(1, "\tOffset %lu\tLength %lu\tString '%s'", split_pos[idx],
+		   split_pos[idx+1] - split_pos[idx], ss);
 	    free_string(ss);
 	}
 	err(false, "reassemble mismatch. '%s' --> '%s'", s, t);
@@ -107,7 +111,8 @@ static void reassemble_test(char *s, chunk_ptr cp) {
 	report(2, "Split chunk into parts:");
 	for (idx = 0; idx < cnt; idx++) {
 	    char *ss = chunk2str(scp[idx]);
-	    report(2, "\tOffset %lu\tLength %lu\tString '%s'", split_pos[idx], split_pos[idx+1] - split_pos[idx], ss);
+	    report(2, "\tOffset %lu\tLength %lu\tString '%s'", split_pos[idx],
+		   split_pos[idx+1] - split_pos[idx], ss);
 	    free_string(ss);
 	}
 	report(2, "reassemble success. '%s' --> '%s'", s, t);

@@ -48,8 +48,8 @@ void set_prompt(char *prompt);
 
 /*
   Some console commands require network activity to complete.
-  Program maintains a flag indicating whether console is ready to execute a new command (unblocked)
-  or it must wait for pending network activity (blocked).
+  Program maintains a flag indicating whether console is ready to execute a new
+  command (unblocked) or it must wait for pending network activity (blocked).
 
   The following calls set/clear that flag
 */
@@ -81,7 +81,8 @@ void finish_cmd();
    If nfds == 0, this indicates that there is no pending network activity
 */
 
-int cmd_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+int cmd_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+	       struct timeval *timeout);
 
 /* Run command loop.  Non-null infile_name implies read commands from that file */
 void run_console(char *infile_name);

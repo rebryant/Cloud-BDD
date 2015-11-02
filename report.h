@@ -27,7 +27,8 @@ void *malloc_or_fail(size_t bytes, char *fun_name);
 void *calloc_or_fail(size_t cnt, size_t bytes, char *fun_name);
 
 /* Attempt to call realloc.  Fail when returns NULL */
-void *realloc_or_fail(void *old, size_t old_bytes, size_t new_bytes, char *fun_name);
+void *realloc_or_fail(void *old, size_t old_bytes, size_t new_bytes,
+		      char *fun_name);
 
 /* Attempt to save string.  Fail when malloc returns NULL */
 char *strsave_or_fail(char *s, char *fun_name);

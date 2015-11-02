@@ -64,7 +64,8 @@ Agent Map:   8.  Agent (2) + Node ID (6)
 **********************************************************/
 /** Constants **/
 
-/* Operator header has two words: one for control information and one for valid mask */
+/* Operator header has two words:
+   one for control information and one for valid mask */
 #define OP_HEADER_CNT 2
 /* Use of bit vector for valid mask limits maximum operator length */
 #define OP_MAX_LENGTH WORD_BITS
@@ -75,7 +76,8 @@ Agent Map:   8.  Agent (2) + Node ID (6)
 /** Constructors **/
 
 /* Create an operand destination */
-word_t msg_build_destination(unsigned agent, unsigned operator_id, unsigned offset);
+word_t msg_build_destination(unsigned agent, unsigned operator_id,
+			     unsigned offset);
 
 /* Create IP address from port and host */
 word_t msg_build_node_id(unsigned port, unsigned ip);
@@ -107,7 +109,8 @@ unsigned msg_get_dest_offset(word_t dest);
 
 /* Create an empty operator */
 /* len specifies total message size, including header */
-chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, unsigned operator_id, unsigned len);
+chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, unsigned operator_id,
+			   unsigned len);
 
 /* Create destination from operator.  Offset includes header size */
 word_t msg_new_destination(chunk_ptr operator, unsigned offset);
@@ -132,7 +135,8 @@ chunk_ptr msg_new_flush();
 
 /*
   Create a message containing worker statistics.
-  Specify number of workers, number of values and provide pointer to array of values.
+  Specify number of workers, number of values
+  and provide pointer to array of values.
  */
 chunk_ptr msg_new_stat(unsigned nworker, unsigned nstat, size_t *vals);
 
@@ -140,7 +144,8 @@ chunk_ptr msg_new_stat(unsigned nworker, unsigned nstat, size_t *vals);
 
 /* Create message containing global operation data */
 /* nwords specifies number of data words (not including header) */
-chunk_ptr msg_new_cliop_data(unsigned agent, unsigned opcode, unsigned nword, word_t *data);
+chunk_ptr msg_new_cliop_data(unsigned agent, unsigned opcode, unsigned nword,
+			     word_t *data);
 
 chunk_ptr msg_new_cliop_ack(unsigned agent);
 chunk_ptr msg_new_gc_request(unsigned gen);
@@ -163,12 +168,14 @@ bool new_server(unsigned port, int *fdp, unsigned *portp);
  */
 int open_clientfd(char *hostname, unsigned port);
 
-/* Open connection to server given IPv4 host address.  Return socket file descriptor
+/* Open connection to server given IPv4 host address.
+ *   Return socket file descriptor
  *   Returns -1 and sets errno on Unix error. 
  *   Returns -2 and sets h_errno on DNS (gethostbyname) error.
  */
 int open_clientfd_ip(unsigned ip, unsigned port);
 
 /* Accept a connection request from a client */
-/* Return connection socket descriptor.  (Optionally) update pointer to IP address */
+/* Return connection socket descriptor.
+   (Optionally) update pointer to IP address */
 int accept_connection(int listenfd, unsigned *ipp);

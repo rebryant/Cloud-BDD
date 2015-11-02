@@ -63,9 +63,11 @@ static size_t  primes[] = {
 
 keyvalue_table_ptr keyvalue_new(hash_fun h, eq_fun eq)
 {
-    keyvalue_table_ptr result = malloc_or_fail(sizeof(keyvalue_table_ele), "keyvalue_new");
+    keyvalue_table_ptr result = malloc_or_fail(sizeof(keyvalue_table_ele),
+					       "keyvalue_new");
     size_t nbuckets = primes[INIT_PI];
-    result->buckets = calloc_or_fail(nbuckets, sizeof(hash_ele_ptr), "keyvalue_new");
+    result->buckets = calloc_or_fail(nbuckets, sizeof(hash_ele_ptr),
+				     "keyvalue_new");
     result->nbuckets = nbuckets;
     result->nelements = 0;
     result->minindex = nbuckets;
@@ -137,7 +139,8 @@ static void kv_check_for_resize(keyvalue_table_ptr kvt, bool growing)
 	return;
     report(5, "Resizing hash table from %lu to %lu buckets", old_size, new_size);
     /* Generate new table of size new_size */
-    new_buckets = calloc_or_fail(new_size, sizeof(hash_ele_ptr), "kv_check_for_resize");
+    new_buckets = calloc_or_fail(new_size, sizeof(hash_ele_ptr),
+				 "kv_check_for_resize");
     kvt->minindex = new_size;
     /* Rehash all of the entries into the new set of buckets */
     for (i = 0; i < old_size; i++) {
@@ -164,7 +167,8 @@ static void kv_check_for_resize(keyvalue_table_ptr kvt, bool growing)
 void keyvalue_insert(keyvalue_table_ptr kvt, word_t key, word_t value)
 {
     size_t pos;
-    hash_ele_ptr ele = (hash_ele_ptr) malloc_or_fail(sizeof(hash_ele), "keyvalue_insert");
+    hash_ele_ptr ele = (hash_ele_ptr) malloc_or_fail(sizeof(hash_ele),
+						     "keyvalue_insert");
     ele->key = key;
     ele->value = value;
     kv_check_for_resize(kvt, true);
@@ -202,7 +206,8 @@ bool keyvalue_find(keyvalue_table_ptr kvt, word_t key, word_t *valp)
    If found, sets *valp to its value.
    if remove true, then also removes table entry.
 */
-bool keyvalue_remove(keyvalue_table_ptr kvt, word_t key, word_t *oldkeyp, word_t *valp)
+bool keyvalue_remove(keyvalue_table_ptr kvt, word_t key,
+		     word_t *oldkeyp, word_t *valp)
 {
     size_t pos = kvt->h(key) % kvt->nbuckets;
     hash_ele_ptr pele = NULL;
@@ -293,7 +298,8 @@ bool keyvalue_iternext(keyvalue_table_ptr kvt, word_t *keyp, word_t *valp) {
 }
 
 /* Remove (k,v) values from kvt that match entries in okvt */
-void keyvalue_diff(keyvalue_table_ptr kvt, keyvalue_table_ptr okvt, eq_fun val_equal) {
+void keyvalue_diff(keyvalue_table_ptr kvt, keyvalue_table_ptr okvt,
+		   eq_fun val_equal) {
     word_t wk, wv, xwk, xwv;
     keyvalue_iterstart(okvt);
     while (keyvalue_iternext(okvt, &wk, &wv)) {
@@ -417,7 +423,8 @@ static void set_check_for_resize(set_ptr set, bool growing)
 	return;
     report(5, "Resizing set from %lu to %lu buckets", old_size, new_size);
     /* Generate new table of size new_size */
-    new_buckets = calloc_or_fail(new_size, sizeof(set_list_ptr), "set_check_for_resize");
+    new_buckets = calloc_or_fail(new_size, sizeof(set_list_ptr),
+				 "set_check_for_resize");
     set->minindex = new_size;
     /* Rehash all of the entries into the new set of buckets */
     for (i = 0; i < old_size; i++) {
@@ -458,7 +465,8 @@ set_ptr set_clone(set_ptr set, copy_fun_t cfun) {
 void set_insert(set_ptr set, word_t value)
 {
     size_t pos;
-    set_list_ptr list = (set_list_ptr) malloc_or_fail(sizeof(set_list_ele), "set_insert");
+    set_list_ptr list = (set_list_ptr) malloc_or_fail(sizeof(set_list_ele),
+						      "set_insert");
     list->value = value;
     set_check_for_resize(set, true);
     pos = set->h(value) % set->nbuckets;

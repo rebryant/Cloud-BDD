@@ -92,25 +92,42 @@ static void bdd_init() {
 }
 
 static void console_init(bool do_dist) {
-    add_cmd("and", do_and,                 " fd f1 f2 ...   | fd <- f1 & f2 & ...");
-    add_cmd("cofactor", do_cofactor,       " fd f l1 ...    | fd <- cofactor(f, l1, ...");
+    add_cmd("and", do_and,
+	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
+    add_cmd("cofactor", do_cofactor,
+	    " fd f l1 ...    | fd <- cofactor(f, l1, ...");
     if (!do_dist)
-	add_cmd("collect", do_local_collect,         "                | Perform garbage collection");
-    add_cmd("count", do_count,             " f1 f2 ...      | Display function counts");
-    add_cmd("delete", do_delete,           " f1 f2 ...      | Delete functions");
-    add_cmd("equal", do_equal,             " f1 f2          | Test for equality");
-    add_cmd("equant", do_equant,           " fd f v1 ...    | Existential quantification");
+	add_cmd("collect", do_local_collect,
+		"                | Perform garbage collection");
+    add_cmd("count", do_count,
+	    " f1 f2 ...      | Display function counts");
+    add_cmd("delete", do_delete,
+	    " f1 f2 ...      | Delete functions");
+    add_cmd("equal", do_equal,
+	    " f1 f2          | Test for equality");
+    add_cmd("equant", do_equant,
+	    " fd f v1 ...    | Existential quantification");
     if (!do_dist)
-	add_cmd("flush", do_local_flush,   "                | Flush local state");
-    add_cmd("ite", do_ite,                 " fd fi ft fe    | fd <- ITE(fi, ft, fe)");
-    add_cmd("or", do_or,                   " fd f1 f2 ...   | fd <- f1 | f2 | ...");
-    add_cmd("info", do_information,        " f1 ..          | Display combined information about functions");
-    add_cmd("shift", do_shift,             " fd f v1' v1 ...| Variable shift");
-    add_cmd("size", do_nothing,            "                | Show number of nodes for each variable"); 
-    add_cmd("status", do_status,           "                | Print statistics");
-    add_cmd("uquant", do_uquant,           " fd f v1 ...    | Universal quantification");
-    add_cmd("var", do_var,                 " v1 v2 ...      | Create variables");
-    add_cmd("xor", do_xor,                 " fd f1 f2 ...   | fd <- f1 ^ f2 ^ ...");
+	add_cmd("flush", do_local_flush,
+		"                | Flush local state");
+    add_cmd("ite", do_ite,
+	    " fd fi ft fe    | fd <- ITE(fi, ft, fe)");
+    add_cmd("or", do_or,
+	    " fd f1 f2 ...   | fd <- f1 | f2 | ...");
+    add_cmd("info", do_information,
+	    " f1 ..          | Display combined information about functions");
+    add_cmd("shift", do_shift,
+	    " fd f v1' v1 ...| Variable shift");
+    add_cmd("size", do_nothing,
+	    "                | Show number of nodes for each variable"); 
+    add_cmd("status", do_status,
+	    "                | Print statistics");
+    add_cmd("uquant", do_uquant,
+	    " fd f v1 ...    | Universal quantification");
+    add_cmd("var", do_var,
+	    " v1 v2 ...      | Create variables");
+    add_cmd("xor", do_xor,
+	    " fd f1 f2 ...   | fd <- f1 ^ f2 ^ ...");
     add_param("collect", &enable_collect, "Enable garbage collection");
     add_param("allvars", &all_vars, "Count all variables in support");
 }
@@ -140,7 +157,8 @@ static bool bdd_quit(int argc, char *argv[]) {
 }
 
 static void usage(char *cmd) {
-    printf("Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT]\n", cmd);
+    printf("Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT]\n",
+	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
     printf("\t-v VLEVEL  Set verbosity level\n");
@@ -439,7 +457,8 @@ bool do_ite(int argc, char *argv[]) {
     ref_t ri = get_ref(argv[2]);
     ref_t rt = get_ref(argv[3]);
     ref_t re = get_ref(argv[4]);
-    if (do_ref(smgr) && (REF_IS_INVALID(ri) || REF_IS_INVALID(rt) || REF_IS_INVALID(re)))
+    if (do_ref(smgr) &&
+	(REF_IS_INVALID(ri) || REF_IS_INVALID(rt) || REF_IS_INVALID(re)))
 	return false;
     ref_t rval = shadow_ite(smgr, ri, rt, re);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
@@ -570,7 +589,8 @@ bool do_count(int argc, char *argv[]) {
 	report(0, "");
 	word_t wt = ((word_t) 1) << supset->nelements;
 	for (i = 1; i < argc; i++)
-	    report(1, "%s:\t%.0f", argv[i], wt * get_double(map, get_ref(argv[i])));
+	    report(1, "%s:\t%.0f",
+		   argv[i], wt * get_double(map, get_ref(argv[i])));
 	keyvalue_free(map);
 	set_free(supset);
     }
@@ -724,12 +744,14 @@ bool do_shift(int argc, char *argv[]) {
     bool ok = true;
     for (i = 3; i < argc; i+=2) {
 	ref_t vnew = get_ref(argv[i]);
-	if (do_ref(smgr) && (REF_IS_INVALID(vnew) || REF_VAR(REF_GET_VAR(vnew)) != vnew)) {
+	if (do_ref(smgr)
+	    && (REF_IS_INVALID(vnew) || REF_VAR(REF_GET_VAR(vnew)) != vnew)) {
 	    err(false, "Invalid variable: %s", argv[i]);
 	    ok = false;
 	}
 	ref_t vold = get_ref(argv[i+1]);
-	if (do_ref(smgr) && (REF_IS_INVALID(vold) || REF_VAR(REF_GET_VAR(vold)) != vold)) {
+	if (do_ref(smgr)
+	    && (REF_IS_INVALID(vold) || REF_VAR(REF_GET_VAR(vold)) != vold)) {
 	    err(false, "Invalid variable: %s", argv[i+1]);
 	    ok = false;
 	}

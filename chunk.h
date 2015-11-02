@@ -6,8 +6,10 @@ Data structure for representing data as a sequence of 64-bit words
 /* Possible levels:
    0: Nothing.
    1: Allocation/deallocation.
-   2: Null pointer detection & bounds checking.  Make sure don't exceed maximum length constraints
-   3: Overlap checking.  Invalid to insert data into chunk position that is already filled.
+   2: Null pointer detection & bounds checking.
+      Make sure don't exceed maximum length constraints
+   3: Overlap checking.
+   Invalid to insert data into chunk position that is already filled.
  */
 unsigned chunk_check_level;
 
@@ -17,9 +19,11 @@ unsigned chunk_check_level;
 */
 
 typedef struct {
-    size_t length;   /* Number of data words in chunk.  Maximum value = 64 */
+    /* Number of data words in chunk.  Maximum value = 64 */
+    size_t length;
 #ifdef VMASK
-    word_t vmask;    /* Bit vector indicating which words of this chunk are valid */
+    /* Bit vector indicating which words of this chunk are valid */
+    word_t vmask;    
 #endif
     word_t words[1]; /* First data word. */
 } chunk_t, *chunk_ptr;
@@ -34,7 +38,8 @@ typedef struct {
 #endif
 
 /* Total number of bytes in longest possible chunk */
-#define CHUNK_MAX_SIZE   (sizeof(chunk_t) + sizeof(word_t) * ((CHUNK_MAX_LENGTH) - 1))
+#define CHUNK_MAX_SIZE  \
+ (sizeof(chunk_t) + sizeof(word_t) * ((CHUNK_MAX_LENGTH) - 1))
 
 /* Create a new chunk */
 chunk_ptr chunk_new(size_t len);
@@ -63,11 +68,12 @@ void chunk_insert_chunk(chunk_ptr cdestp, chunk_ptr csrcp, size_t offset);
 /* Extract subchunk */
 chunk_ptr chunk_get_chunk(chunk_ptr cp, size_t offset, size_t length);
 
-/* File I/O based on low-level Unix file descriptors.  These can be files or network connections */
+/* File I/O based on low-level Unix file descriptors.
+   These can be files or network connections */
 /* Read chunk from file.  Return null pointer if fail.
    Set flag if EOF encountered.
-   This is legacy code - no buffering is used AT ALL. Do not intersperse with the chunk_read
-   functions below!
+   This is legacy code - no buffering is used AT ALL.
+   Do not intersperse with the chunk_read functions below!
  */
 
 chunk_ptr chunk_read_legacy(int fd, bool *eofp);
@@ -147,18 +153,24 @@ typedef struct buffer_node {
 extern buf_node* buf_list_head;
 
 
-//DO NOT INTERSPERSE THESE FUNCTIONS WITH THE STANDARD select() AND chunk_read_legacy()!
+/*** DO NOT INTERSPERSE THESE FUNCTIONS WITH THE STANDARD select()
+     AND chunk_read_legacy()!
+***/
 
-/* A version of select that takes into account whether there are chunks waiting in one or more
-   buffers, and blocks only when needed */
-int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);
+/* A version of select that takes into account whether there are chunks waiting
+   in one or more buffers, and blocks only when needed */
+int buf_select(int nfds, fd_set *readfds, fd_set *writefds,
+	       fd_set *exceptfds, struct timeval *timeout);
 
-
-/* default read operation. sets up a buffer for the fd if necessary, fills it if possible, then reads a chunk from the buffer, refilling it as necessary */
+/* default read operation. sets up a buffer for the fd if necessary,
+   fills it if possible, then reads a chunk from the buffer,
+   refilling it as necessary */
 chunk_ptr chunk_read(int fd, bool *eofp);
 
-/* read operation that does not fill the buffer at random. This provides PSEUDO-UNBUFFERED reading
-   if you are worried about calling read without necessarily knowing if the socket has input for you - i.e., if you're reading without calling buf_select().
+/* read operation that does not fill the buffer at random.
+   This provides PSEUDO-UNBUFFERED reading if you are worried about calling
+   read without necessarily knowing if the socket has input for you
+   i.e., if you're reading without calling buf_select().
 */
 
 chunk_ptr chunk_read_unbuffered(int fd, bool *eofp);

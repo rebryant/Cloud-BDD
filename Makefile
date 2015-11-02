@@ -45,9 +45,6 @@ test_df.o: test_df.c dtype.h table.h chunk.h report.h msg.h console.h agent.h te
 chunk_test: chunk_test.c dtype.h table.h chunk.h report.h chunk.o report.o table.o
 	$(CC) $(CFLAGS) -o chunk_test chunk_test.c chunk.o report.o table.o
 
-keyvalue_test: keyvalue_test.c dtype.h table.h report.h table.o report.o
-	$(CC) $(CFLAGS) -o keyvalue_test keyvalue_test.c table.o report.o
-
 set_test: set_test.c dtype.h table.h report.h table.o report.o
 	$(CC) $(CFLAGS) -o set_test set_test.c table.o report.o
 
@@ -60,8 +57,8 @@ chunktable_test: chunktable_test.c dtype.h table.h chunk.h report.h chunk.o repo
 shadow_test: shadow_test.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
 	$(CC) $(CFLAGS) $(BDDFLAGS) $(CUDDINC) -o shadow_test shadow_test.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS)
 
-console_test: console_test.c console.h report.h console.o report.o
-	$(CC) $(CFLAGS) -o console_test console_test.c console.o report.o
+console_test: console_test.c console.h report.h console.o report.o chunk.o table.o
+	$(CC) $(CFLAGS) -o console_test console_test.c console.o report.o chunk.o table.o
 
 runbdd: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
 	$(CC) $(CFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS)

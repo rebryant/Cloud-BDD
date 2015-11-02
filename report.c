@@ -116,7 +116,8 @@ void *calloc_or_fail(size_t cnt, size_t bytes, char *fun_name) {
 
 /* Call realloc returns NULL & exit if fails.
    Require explicit indication of current allocation */
-void * realloc_or_fail(void *old, size_t old_bytes, size_t new_bytes, char *fun_name) {
+void * realloc_or_fail(void *old, size_t old_bytes, size_t new_bytes,
+		       char *fun_name) {
   void *p = realloc(old, new_bytes);
   if (!p) {
     fail_fun("Realloc returned NULL in %s", fun_name);
@@ -183,7 +184,9 @@ void free_string(char *s) {
 
 /* Report current allocation status */
 void mem_status(FILE *fp) {
-    fprintf(fp, "Allocated cnt/bytes: %lu/%lu.  Freed cnt/bytes: %lu/%lu.  Peak bytes %lu, Last peak bytes %ld, Current bytes %ld\n",
+    fprintf(fp,
+"Allocated cnt/bytes: %lu/%lu.  Freed cnt/bytes: %lu/%lu.\n"
+"  Peak bytes %lu, Last peak bytes %ld, Current bytes %ld\n",
 	    (long unsigned) allocate_cnt, (long unsigned) allocate_bytes,
 	    (long unsigned) free_cnt, (long unsigned) free_bytes,
 	    (long unsigned) peak_bytes, 

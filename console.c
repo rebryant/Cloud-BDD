@@ -115,7 +115,8 @@ void init_cmd() {
     add_cmd("help", do_help_cmd,       "              | Show documentation");
     add_cmd("option", do_option_cmd,   "     name val | Display & set options");
     add_cmd("quit", do_quit_cmd,       "              | Exit program");
-    add_cmd("source", do_source_cmd,   " file         | Read commands from source file");
+    add_cmd("source", do_source_cmd,
+	    " file         | Read commands from source file");
     add_cmd("time", do_time_cmd,       " cmd arg ...  | Time command execution");
     add_cmd("#", do_comment_cmd,       " ...          | Display comment");
     add_param("verbose", &verblevel, "Verbosity level");
@@ -326,7 +327,8 @@ bool do_option_cmd(int argc, char *argv[]) {
 	param_ptr plist = param_list;
 	report(0, "Options:");
 	while (plist) {
-	    report(0, "\t%s\t%d\t%s", plist->name, *plist->valp, plist->documentation);
+	    report(0, "\t%s\t%d\t%s", plist->name, *plist->valp,
+		   plist->documentation);
 	    plist = plist->next;
 	}
 	return true;
@@ -526,7 +528,8 @@ static bool read_ready() {
    If nfds == 0, this indicates that there is no pending network activity
 */
 
-int cmd_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout) {
+int cmd_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+	       struct timeval *timeout) {
     char *cmdline;
     int infd;
     fd_set local_readset;

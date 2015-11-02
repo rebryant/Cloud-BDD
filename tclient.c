@@ -38,11 +38,16 @@ static void init(char *controller_name, unsigned controller_port) {
     init_agent(true, controller_name, controller_port);
     set_agent_stat_helper(do_summary_stat);
     set_gc_handlers(gc_start, gc_finish);
-    add_cmd("incr", do_incr_cmd,               " val cnt      | Increment val cnt times");
-    add_cmd("fork", do_fork_cmd,               " wdth val cnt | Perform width incrs and join results");
-    add_cmd("join", do_join_cmd,               " v1 v2        | Compute v1+v2");
-    add_cmd("status", do_status_cmd,           "              | Print statistics");
-    add_cmd("global", do_global_cmd,           "              | Perform test of global command capability");
+    add_cmd("incr", do_incr_cmd,
+	    " val cnt      | Increment val cnt times");
+    add_cmd("fork", do_fork_cmd,
+	    " wdth val cnt | Perform width incrs and join results");
+    add_cmd("join", do_join_cmd,
+	    " v1 v2        | Compute v1+v2");
+    add_cmd("status", do_status_cmd,
+	    "              | Print statistics");
+    add_cmd("global", do_global_cmd,
+	    "              | Perform test of global command capability");
 }
 
 static void usage(char *cmd) {
@@ -91,7 +96,8 @@ bool do_fork_cmd(int argc, char *argv[]) {
 	return false;
     }
     int width, val, cnt;
-    if (!get_int(argv[1], &width) || !get_int(argv[2], &val) || !get_int(argv[3], &cnt)) {
+    if (!get_int(argv[1], &width) || !get_int(argv[2], &val) ||
+	!get_int(argv[3], &cnt)) {
 	return false;
     }
     word_t d = msg_build_destination(own_agent, new_operator_id(), 0);

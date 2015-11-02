@@ -50,7 +50,8 @@ bool send_op(chunk_ptr msg);
 /* Send single-valued operand */
 bool send_as_operand(word_t dest, word_t val);
 
-/* Insert word into operator, updating its valid mask.  Offset includes header size */
+/* Insert word into operator, updating its valid mask.
+   Offset includes header size */
 void op_insert_word(chunk_ptr op, word_t wd, size_t offset);
 
 /*
@@ -83,7 +84,8 @@ void set_agent_stat_helper(stat_function ff);
 /* Fire an operation and wait for returned operand.  Starts any deferred GC */
 chunk_ptr fire_and_wait(chunk_ptr msg);
 
-/* Fire an operation and wait for returned operand.  Does not start any deferred GC */
+/* Fire an operation and wait for returned operand.
+   Does not start any deferred GC */
 chunk_ptr fire_and_wait_defer(chunk_ptr msg);
 
 /* Enable a deferred garbage collection */
@@ -104,14 +106,17 @@ void run_worker();
 
 
 /* Functions to handle global operations */
-/* Start function includes opcode to specify operation + application specific data */
+/* Start function includes opcode to specify operation
+   + application specific data */
 /* This function should NOT deallocate the array indicated by argument data */
-typedef void (*global_op_start_function)(unsigned id, unsigned opcode, unsigned nword, word_t *data);
+typedef void (*global_op_start_function)
+(unsigned id, unsigned opcode, unsigned nword, word_t *data);
 /* Finish function */
 typedef void (*global_op_finish_function)(unsigned id);
 
 /* Provide handlers to perform global operation by worker */
-void set_agent_global_helpers(global_op_start_function gosf, global_op_finish_function goff);
+void set_agent_global_helpers(global_op_start_function gosf,
+			      global_op_finish_function goff);
 
 /*
   Initiate global operation from client.

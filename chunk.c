@@ -50,8 +50,10 @@ void chunk_at_error(err_fun f) {
 /* Possible levels:
    0: Nothing.
    1: Allocation/deallocation.
-   2: Null pointer detection & bounds checking.  Make sure don't exceed maximum length constraints
-   3: Overlap checking.  Invalid to insert data into chunk position that is already filled.
+   2: Null pointer detection & bounds checking.
+      Make sure don't exceed maximum length constraints
+   3: Overlap checking.
+      Invalid to insert data into chunk position that is already filled.
  */
 unsigned chunk_check_level = 3;
 
@@ -75,7 +77,8 @@ static void chunk_error(char *reason, chunk_ptr cp) {
 /* Create a new chunk */
 chunk_ptr chunk_new(size_t len) {
     size_t more_bytes = len == 0  ? 0 : WORD_BYTES * (len - 1);
-    chunk_ptr cp = (chunk_ptr) malloc_or_fail(sizeof(chunk_t) + more_bytes, "chunk_new");
+    chunk_ptr cp = (chunk_ptr) malloc_or_fail(sizeof(chunk_t) + more_bytes,
+					      "chunk_new");
     if (cp == NULL && chunk_check_level >= 1) {
 	chunk_error("Could not allocate chunk", cp);
     }
@@ -144,7 +147,8 @@ void chunk_insert_word(chunk_ptr cp, word_t wd, size_t offset) {
 #ifdef VMASK
     if (chunk_check_level >= 3 && CHUNK_WORD_VALID(cp, offset)) {
 	char buf[128];
-	sprintf(buf, "Insertion into occupied word.  Offset %u", (unsigned) offset);
+	sprintf(buf, "Insertion into occupied word.  Offset %u",
+		(unsigned) offset);
 	chunk_error(buf, cp);
 	return;
     }
@@ -218,7 +222,8 @@ chunk_ptr chunk_get_chunk(chunk_ptr cp, size_t offset, size_t length) {
 
 
 
-/* File I/O based on low-level Unix file descriptors.  These can be files or network connections */
+/* File I/O based on low-level Unix file descriptors.
+   These can be files or network connections */
 /* Read chunk from file.  Return null pointer if fail. */
 chunk_ptr chunk_read_legacy(int fd, bool *eofp) {
     unsigned char buf[CHUNK_MAX_SIZE];
@@ -268,7 +273,8 @@ static fd_set buf_set;
 static fd_set in_set;
 static int maxfd = 0;
 
-int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+int buf_select(int nfds, fd_set *readfds, fd_set *writefds,
+	       fd_set *exceptfds, struct timeval *timeout)
 {
     int returnVal;
     if (nfds > maxfd)
@@ -328,7 +334,8 @@ int buf_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, s
         }
 
         report(3, "buffered select on up through %d", maxfd);
-        returnVal = select(maxfd+1, &in_set, writefds, exceptfds, (timeout == NULL ? &zeroval : timeout));
+        returnVal = select(maxfd+1, &in_set, writefds, exceptfds,
+			   (timeout == NULL ? &zeroval : timeout));
 
         if (returnVal >= 0)
             returnVal = 0;
@@ -363,7 +370,8 @@ static void toggle_buffered_in_set(buf_node* curr_node)
     }
 }
 
-static ssize_t buf_read(buf_node* curr_node, bool* eofp, unsigned char* buf, int len)
+static ssize_t buf_read(buf_node* curr_node, bool* eofp,
+			unsigned char* buf, int len)
 {
     int cnt = 0;
     int copyLen = 0;
@@ -373,10 +381,15 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp, unsigned char* buf, int
         //if there's stuff in the buffer, copy it over
         if (curr_node->length > 0)
         {
-            copyLen = ((len - cnt) < curr_node->length ? (len - cnt) : curr_node->length);
-            report(3, "copying a buffer of length %d from total length %d, to the return buffer", copyLen, curr_node->length);
-            report(3, "old length = %d, new length = %d", curr_node->length, curr_node->length - copyLen);
-            memcpy((buf + cnt), ((curr_node->buf) + (curr_node->location)), copyLen);
+            copyLen = ((len - cnt) < curr_node->length ? (len - cnt) :
+		       curr_node->length);
+            report(3,
+"copying a buffer of length %d from total length %d, to the return buffer",
+		   copyLen, curr_node->length);
+            report(3, "old length = %d, new length = %d",
+		   curr_node->length, curr_node->length - copyLen);
+            memcpy((buf + cnt), ((curr_node->buf) + (curr_node->location)),
+		   copyLen);
             cnt = cnt + copyLen;
             curr_node->length = curr_node->length - copyLen;
             if (curr_node->length == 0)
@@ -394,7 +407,9 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp, unsigned char* buf, int
         else
         {
             report(3, "fill the saved buffer!");
-            ssize_t n = read(curr_node->fd, ((curr_node->buf) + (curr_node->location) + (curr_node->length)), CHUNK_MAX_SIZE);
+            ssize_t n = read(curr_node->fd,
+			     curr_node->buf + curr_node->location
+			     + curr_node->length, CHUNK_MAX_SIZE);
             if (n < 0) {
                 chunk_error("Failed read", NULL);
                 if (eofp)
@@ -411,7 +426,9 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp, unsigned char* buf, int
                 return n;
             }
             curr_node->length = curr_node->length + n;
-            report(3, "added %d bytes to the saved buffer; length is now %d at location %d\n", n, curr_node->length, curr_node->location);
+            report(3,
+"added %d bytes to the saved buffer; length is now %d at location %d\n",
+		   n, curr_node->length, curr_node->location);
         }
     }
 
@@ -437,12 +454,14 @@ chunk_ptr chunk_read(int fd, bool* eofp)
     buf_node* temp_node = NULL;
     //create new head
     if (buf_list_head == NULL) {
-        buf_list_head = calloc_or_fail(sizeof(buf_node), 1, "chunk_read create head");
+        buf_list_head = calloc_or_fail(sizeof(buf_node), 1,
+				       "chunk_read create head");
         buf_list_head->fd = fd;
         report(3, "created a node for fd %d as head\n", fd);
         buf_list_head->length = 0;
         buf_list_head->location = 0;
-        buf_list_head->buf = calloc_or_fail(CHUNK_MAX_SIZE, 2, "chunk_read create head buf");
+        buf_list_head->buf = calloc_or_fail(CHUNK_MAX_SIZE, 2,
+					    "chunk_read create head buf");
         curr_node = buf_list_head;
     }
     // search for the fd in the buffer list, if it exists
@@ -463,7 +482,8 @@ chunk_ptr chunk_read(int fd, bool* eofp)
         curr_node->length = 0;
         curr_node->location = 0;
         curr_node->next = buf_list_head;
-        curr_node->buf = calloc_or_fail(CHUNK_MAX_SIZE, 2, "chunk_read create head buf");
+        curr_node->buf = calloc_or_fail(CHUNK_MAX_SIZE, 2,
+					"chunk_read create head buf");
         report(3, "created a node for fd %d at head\n", fd);
         buf_list_head = curr_node;
     }
@@ -471,18 +491,23 @@ chunk_ptr chunk_read(int fd, bool* eofp)
     // if we can copy to the beginning, then we copy to the beginning
     // (if the read point is past the beginning, and if the end of
     // the buffered data is past the midway point of the buffer)
-    if (curr_node->length + curr_node->location >= CHUNK_MAX_SIZE && curr_node->location > 0)
+    if (curr_node->length + curr_node->location >= CHUNK_MAX_SIZE
+	&& curr_node->location > 0)
     {
-        memmove(curr_node->buf, (char *)((curr_node->buf + curr_node->location)), curr_node->length);
+        memmove(curr_node->buf, (char *)(curr_node->buf + curr_node->location),
+		curr_node->length);
         curr_node->location = 0;
     }
 
     // read if possible - if there is space, if the inset contains it, and if we
     // want to use buffering (otherwise we don't want random buffer refills)
-    if (((curr_node->length + curr_node->location) < CHUNK_MAX_SIZE) && bufferReadBool && !(!(FD_ISSET(fd, &in_set))) )
+    if (((curr_node->length + curr_node->location) < CHUNK_MAX_SIZE)
+	&& bufferReadBool && !(!(FD_ISSET(fd, &in_set))) )
     {
         report(3, "reading for %d\n", curr_node->fd);
-        ssize_t n = read(curr_node->fd, ((curr_node->buf) + (curr_node->location) + (curr_node->length)), CHUNK_MAX_SIZE);
+        ssize_t n = read(curr_node->fd,
+			 curr_node->buf + curr_node->location + curr_node->length,
+			 CHUNK_MAX_SIZE);
         curr_node->length += n;
     }
 
@@ -573,7 +598,8 @@ bool chunk_write(int fd, chunk_ptr cp) {
 /* Convert a string into a chunk.  Limited to strings of length <= WORD_BYTES */
 chunk_ptr str2chunk(char *s) {
     char buf[WORD_BYTES * CHUNK_MAX_LENGTH];
-    size_t len = (strnlen(s, WORD_BYTES * CHUNK_MAX_LENGTH) + WORD_BYTES - 1) / WORD_BYTES;
+    size_t len = (strnlen(s, WORD_BYTES * CHUNK_MAX_LENGTH)
+		  + WORD_BYTES - 1) / WORD_BYTES;
     chunk_ptr cp = chunk_new(len);
     size_t cidx, bidx;
     size_t sidx = 0;
@@ -625,7 +651,8 @@ bool chunk_equal(word_t vcp1, word_t vcp2) {
     word_t vmask1 = cp1->vmask;
     word_t vmask2 = cp2->vmask;
     size_t i;
-    /* OK for chunks to have different lengths, as long as mask bits cover same words */
+    /* OK for chunks to have different lengths,
+       as long as mask bits cover same words */
     size_t len = cp1->length < cp2->length ? cp1->length : cp2->length;
     for (i = 0; ok && i < len; i++) {
 	int check1 = vmask1 & 0x1;
@@ -712,12 +739,14 @@ void chunk_queue_insert(chunk_queue_ptr cq, chunk_ptr item) {
     check_err(pthread_mutex_lock(&cq->mutex), "chunk_queue_insert");
     if (cq->length == 0) {
 	/* Going from empty to nonempty */
-	cq->elements = calloc_or_fail(CQ_ALLOC, sizeof(chunk_ptr), "chunk_queue_insert");
+	cq->elements = calloc_or_fail(CQ_ALLOC, sizeof(chunk_ptr),
+				      "chunk_queue_insert");
 	cq->alloc_length = CQ_ALLOC;
     } else if (cq->length == cq->alloc_length) {
 	/* Must expand queue.  Reset so that head is at 0 */
 	cq->alloc_length *= 2;
-	chunk_ptr *nelements = calloc_or_fail(cq->alloc_length, sizeof(chunk_ptr), "chunk_queue_insert");
+	chunk_ptr *nelements = calloc_or_fail(cq->alloc_length, sizeof(chunk_ptr),
+					      "chunk_queue_insert");
 	size_t i;
 	size_t n = cq->length;
 	for (i = 0; i < n; i++) {

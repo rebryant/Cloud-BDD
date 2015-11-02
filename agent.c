@@ -110,7 +110,8 @@ void set_agent_stat_helper(stat_function sf) {
 }
 
 /* Provide handlers to perform global operation by worker */
-void set_agent_global_helpers(global_op_start_function gosf, global_op_finish_function goff) {
+void set_agent_global_helpers(global_op_start_function gosf,
+			      global_op_finish_function goff) {
     gop_start_helper = gosf;
     gop_finish_helper = goff;
 }
@@ -154,25 +155,30 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
     isclient = iscli;
     controller_fd = open_clientfd(controller_name, controller_port);
     if (controller_fd < 0)
-	err(true, "Cannot create connection to controller at %s:%u", controller_name, controller_port);
+	err(true, 
+	    "Cannot create connection to controller at %s:%u",
+	    controller_name, controller_port);
     else
 	report(2, "Connection to controller has descriptor %d", controller_fd);
     msg = isclient ? msg_new_register_client() : msg_new_register_worker();
     bool sok = chunk_write(controller_fd, msg);
-    report(3, "Sent %s registration to controller", isclient ? "client" : "worker");
+    report(3, "Sent %s registration to controller",
+	   isclient ? "client" : "worker");
     chunk_free(msg);
     if (!sok)
 	err(true, "Could not send registration message to controller");
     /* Get acknowledgement from controller */
     bool first = true;
-    /* Anticipated number of routers (Will be updated when get first message from controller) */
+    /* Anticipated number of routers 
+      (Will be updated when get first message from controller) */
     nrouters = 1;
     chunk_ptr amsg = NULL;
     unsigned ridx = 0;;
     while (ridx < nrouters) {
 	msg = chunk_read_unbuffered(controller_fd, &eof);
 	if (eof) {
-	    err(true, "Unexpected EOF from controller while getting router map");
+	    err(true,
+		"Unexpected EOF from controller while getting router map");
 	}
 	word_t h = chunk_get_word(msg, 0);
 	unsigned code = msg_get_header_code(h);
@@ -184,8 +190,11 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
 		nworkers = msg_get_header_workercount(h);
 		nrouters = msg_get_header_wordcount(h);
 		snb = msg_get_header_snb(h);
-		router_fd_array = calloc_or_fail(nrouters, sizeof(int), "init_agent");
-		report(3, "Ack from controller.  Agent Id %u.  %d workers.  %d routers.", own_agent, nworkers, nrouters);
+		router_fd_array = calloc_or_fail(nrouters, sizeof(int),
+						 "init_agent");
+		report(3,
+"Ack from controller.  Agent Id %u.  %d workers.  %d routers.",
+		       own_agent, nworkers, nrouters);
 		first = false;
 	    }
 	    int i;
@@ -197,12 +206,16 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
 		unsigned port = msg_get_header_port(h);
 		fd = open_clientfd_ip(ip, port);
 		if (fd < 0) {
-		    err(true, "Couldn't add router with ip 0x%x, port %d", ip, port);
+		    err(true, "Couldn't add router with ip 0x%x, port %d",
+			ip, port);
 		} else {
 		    router_fd_array[ridx++] = fd;
-		    report(3, "Added router %u with ip 0x%x, port %d, fd %d", ridx, ip, port, fd);
+		    report(3, "Added router %u with ip 0x%x, port %d, fd %d",
+			   ridx, ip, port, fd);
 		    if (!chunk_write(fd, amsg)) {
-			err(true, "Couldn't send agent registration message to router with ip 0x%x, port %u", ip, port);
+			err(true, 
+"Couldn't send agent registration message to router with ip 0x%x, port %u",
+			    ip, port);
 		    }
 		}
 	    }
@@ -212,7 +225,8 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
 	    err(true, "Connection request refused.");
 	    break;
 	default:
-	    err(false, "Unexpected message code %u while getting router information", code);
+	    err(false,
+"Unexpected message code %u while getting router information", code);
 	    chunk_free(msg);
 	    break;
 	}
@@ -221,9 +235,12 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
     report(2, "All %d routers connected", nrouters);
     if (isclient) {
 	add_quit_helper(quit_agent);
-	add_cmd("kill", do_agent_kill,     "              | Shutdown system");
-	add_cmd("flush", do_agent_flush,   "              | Flush system");
-	add_cmd("collect", do_agent_gc,    "              | Initiate garbage collection");
+	add_cmd("kill", do_agent_kill,
+		"              | Shutdown system");
+	add_cmd("flush", do_agent_flush,   
+		"              | Flush system");
+	add_cmd("collect", do_agent_gc,
+		"              | Initiate garbage collection");
     } else {
 	/* Worker must notify controller that it's ready */
 	chunk_ptr rmsg = msg_new_worker_ready(own_agent);
@@ -273,10 +290,12 @@ void agent_show_stat() {
     agent_stat_counter[STATA_BYTE_PEAK] = last_peak_bytes;
     report(0, "Peak bytes %" PRIu64,
 	   agent_stat_counter[STATA_BYTE_PEAK]);
-    report(0, "Operations.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
+    report(0,
+"Operations.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
 	   agent_stat_counter[STATA_OPERATION_TOTAL],
 	   agent_stat_counter[STATA_OPERATION_LOCAL]);
-    report(0, "Operands.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
+    report(0,
+"Operands.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
 	   agent_stat_counter[STATA_OPERAND_TOTAL],
 	   agent_stat_counter[STATA_OPERAND_LOCAL]);
 }
@@ -312,7 +331,8 @@ bool do_agent_gc(int argc, char *argv[]) {
     if (ok)
 	report(4, "Notified controller that want to run garbage collection");
     else
-	err(false, "Couldn't notify controller that want to run garbage collection");
+	err(false,
+	    "Couldn't notify controller that want to run garbage collection");
     return ok;
 }
 
@@ -392,7 +412,8 @@ bool send_op(chunk_ptr msg) {
     }
     unsigned idx = random() % nrouters;
     int rfd = router_fd_array[idx];
-    report(5, "Sending message with id 0x%x through router %u (fd %d)", id, idx, rfd);
+    report(5, "Sending message with id 0x%x through router %u (fd %d)",
+	   id, idx, rfd);
     bool ok = chunk_write(rfd, msg);
     if (ok)
 	report(5, "Message sent");
@@ -401,12 +422,14 @@ bool send_op(chunk_ptr msg) {
     return ok;
 }
 
-/* Insert word into operator, updating its valid mask.  Offset includes header size */
+/* Insert word into operator, updating its valid mask.
+   Offset includes header size */
 void op_insert_word(chunk_ptr op, word_t wd, size_t offset) {
     word_t vmask = chunk_get_word(op, 1);
     word_t idx = 0x1llu << offset;
     if (vmask & idx) {
-	err(false, "Inserting into already filled position in operator.  Offset = %lu", offset);
+	err(false,
+"Inserting into already filled position in operator.  Offset = %lu", offset);
     }
     chunk_insert_word(op, wd, offset);
     vmask |= idx;
@@ -421,7 +444,8 @@ void op_insert_operand(chunk_ptr op, chunk_ptr oper, unsigned offset) {
 	word_t h = chunk_get_word(op, 0);
 	word_t vmask = chunk_get_word(op, 1);
 	unsigned opcode = msg_get_header_opcode(h);
-	report(6, "Inserting operand with %u words into operation with opcode %u at offset %u.  Mask 0x%lx",
+	report(6,
+"Inserting opand with %u words into oper w/ opcode %u at offset %u.  Mask 0x%lx",
 	       (unsigned) n, opcode, offset, vmask);
     }
     for (i = 0; i < n; i++) {
@@ -465,9 +489,11 @@ static void add_rfd(int fd) {
 	maxrfd = fd;
 }
 
-static void add_deferred_operand(unsigned operator_id, chunk_ptr operand, unsigned offset) {
+static void add_deferred_operand(unsigned operator_id, chunk_ptr operand,
+				 unsigned offset) {
     word_t w;
-    operand_ptr ele = malloc_or_fail(sizeof(operand_ele), "add_deferred_operand");
+    operand_ptr ele = malloc_or_fail(sizeof(operand_ele),
+				     "add_deferred_operand");
     ele->operand = operand;
     ele->offset = offset;
     ele->next = NULL;
@@ -536,7 +562,8 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
 	switch (code) {
 	case MSG_DO_FLUSH:
 	    chunk_free(msg);
-	    report(5, "Received flush message from controller, superceding client global operation");
+	    report(5,
+"Received flush message from controller, superceding client global operation");
 	    if (flush_helper) {
 		flush_helper();
 	    }
@@ -552,13 +579,15 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
 	    break;
 	case MSG_KILL:
 	    chunk_free(msg);
-	    report(5, "Received kill message from controller, superceding client global operation");
+	    report(5,
+"Received kill message from controller, superceding client global operation");
 	    finish_cmd();
 	    done = true; ok = false;
 	    break;
 	case MSG_CLIOP_ACK:
 	    chunk_free(msg);
-	    report(5, "Received acknowledgement for client global operation");
+	    report(5,
+"Received acknowledgement for client global operation");
 	    done = true; ok = true;
 	    break;
 	case MSG_GC_START:
@@ -570,7 +599,8 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
 	    break;
 	default:
 	    chunk_free(msg);
-	    err(false, "Unknown message code %u from controller (ignored)", code);
+	    err(false,
+"Unknown message code %u from controller (ignored)", code);
 	}
     }
     return ok;
@@ -607,14 +637,17 @@ static void receive_operation(chunk_ptr op) {
 	while (ls) {
 	    operand_ptr ele = ls;
 	    op_insert_operand(op, ls->operand, ls->offset);
-	    report(5, "Inserted operand with offset %u into received operator with id 0x%x", ls->offset, id);
+	    report(5,
+"Inserted operand with offset %u into received operator with id 0x%x",
+		   ls->offset, id);
 	    chunk_free(ls->operand);
 	    ls = ls->next;
 	    free_block(ele, sizeof(operand_ele));
 	}
     }
     if (check_fire(op)) {
-	report(5, "Completed firing of newly received operation with id 0x%x", id);
+	report(5,
+	       "Completed firing of newly received operation with id 0x%x", id);
 	chunk_free(op);
     } else {
 	keyvalue_insert(operator_table, (word_t) id, (word_t) op);
@@ -632,7 +665,9 @@ static void receive_operand(chunk_ptr oper) {
 	/* Operation exists */
 	chunk_ptr op = (chunk_ptr) w;
 	op_insert_operand(op, oper, offset);
-	report(5, "Inserted operand with offset %u into existing operator with id 0x%x", offset, id);
+	report(5,
+"Inserted operand with offset %u into existing operator with id 0x%x",
+	       offset, id);
 	chunk_free(oper);
 	if (check_fire(op)) {
 	    report(5, "Completed firing of dequeued operation with id 0x%x", id);
@@ -668,7 +703,8 @@ void run_worker() {
 		if (fd == controller_fd) {
 		    err(false, "Unexpected EOF from controller (ignored)");
 		} else {
-		    err(false, "Unexpected EOF from router with fd %d (ignored)", fd);
+		    err(false,
+			"Unexpected EOF from router with fd %d (ignored)", fd);
 		}
 		close(fd);
 		continue;
@@ -697,9 +733,11 @@ void run_worker() {
 			if (!msg)
 			    break;
 			if (chunk_write(controller_fd, msg)) {
-			    report(5, "Sent statistics information to controller");
+			    report(5,
+				   "Sent statistics information to controller");
 			} else {
-			    err(false, "Failed to send statistics information to controller");
+			    err(false,
+"Failed to send statistics information to controller");
 			}
 			chunk_free(msg);
 		    }
@@ -708,7 +746,7 @@ void run_worker() {
 		    h = chunk_get_word(msg, 0);
 		    agent = msg_get_header_agent(h);
 		    unsigned opcode = msg_get_header_opcode(h);
-		    report(5, "Received client operation data.  Id = %u", agent);
+		    report(5, "Recvd client operation data.  Id = %u", agent);
 		    word_t *data = &msg->words[1];
 		    unsigned nword = msg->length - 1;
 		    if (gop_start_helper)
@@ -716,9 +754,11 @@ void run_worker() {
 		    chunk_free(msg);
 		    chunk_ptr rmsg = msg_new_cliop_ack(agent);
 		    if (chunk_write(controller_fd, rmsg)) {
-			report(5, "Acknowledged client operation data.  Id = %u", agent);
+			report(5,
+			       "Acked client operation data.  Id = %u", agent);
 		    } else {
-			err(false, "Failed to acknowledge client operation data.  Id = %u", agent);
+			err(false,
+"Failed to acknowledge client operation data.  Id = %u", agent);
 		    }
 		    chunk_free(rmsg);
 		    break;
@@ -740,7 +780,8 @@ void run_worker() {
 		    break;
 		default:
 		    chunk_free(msg);
-		    err(false, "Unknown message code %u from controller (ignored)", code);
+		    err(false,
+"Unknown message code %u from controller (ignored)", code);
 		}
 	    } else {
 		/* Must be message from router */
@@ -753,7 +794,8 @@ void run_worker() {
 		    break;
 		default:
 		    chunk_free(msg);
-		    err(false, "Received message with unknown code %u (ignored)", code);
+		    err(false,
+"Received message with unknown code %u (ignored)", code);
 		}
 	    }
 	}
@@ -777,7 +819,8 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
     }
     bool local_done = false;
     while (!(local_done || cmd_done())) {
-	/* Select among controller port, and connections to routers.  Do not accept console input */
+	/* Select among controller port, and connections to routers.
+	   Do not accept console input */
 	FD_ZERO(&rset);
 	maxrfd = 0;
 	add_rfd(controller_fd);
@@ -797,7 +840,8 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		if (fd == controller_fd) {
 		    err(false, "Unexpected EOF from controller (ignored)");
 		} else {
-		    err(false, "Unexpected EOF from router with fd %d (ignored)", fd);
+		    err(false,
+			"Unexpected EOF from router with fd %d (ignored)", fd);
 		}
 		close(fd);
 		continue;
@@ -832,11 +876,13 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		    gc_state = GC_DEFER;
 		    break;
 		case MSG_GC_FINISH:
-		    err(false, "Unexpected GC_FINISH message from controller when waiting for result (ignored)");
+		    err(false,
+"Unexpected GC_FINISH msg from controller when waiting for result (ignored)");
 		    break;
 		default:
 		    chunk_free(msg);
-		    err(false, "Unknown message code %u from controller (ignored)", code);
+		    err(false,
+"Unknown message code %u from controller (ignored)", code);
 		}
 	    } else {
 		/* Must be message from router */
@@ -853,7 +899,8 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		    break;
 		default:
 		    chunk_free(msg);
-		    err(false, "Received message with unknown code %u (ignored)", code);
+		    err(false,
+"Received message with unknown code %u (ignored)", code);
 		    local_done = true;
 		}
 	    }
@@ -878,7 +925,8 @@ void request_gc() {
     if (chunk_write(controller_fd, msg))
 	report(4, "Requested garbage collection with generation %u", gen);
     else
-	err(false, "Failed to request garbage collection with generation %u", gen);
+	err(false,
+	    "Failed to request garbage collection with generation %u", gen);
     chunk_free(msg);
     gc_state = GC_REQUESTED;
 }
@@ -904,7 +952,8 @@ void run_client(char *infile_name) {
 		if (fd == controller_fd) {
 		    err(false, "Unexpected EOF from controller (ignored)");
 		} else {
-		    err(false, "Unexpected EOF from unexpected source. fd %d (ignored)", fd);
+		    err(false,
+"Unexpected EOF from unexpected source. fd %d (ignored)", fd);
 		}
 		close(fd);
 		continue;
@@ -928,7 +977,7 @@ void run_client(char *infile_name) {
 		case MSG_STAT:
 		    report(5, "Received summary statistics from controller");
 		    if (stat_helper) {
-			/* Get a copy of the byte usage from memory allocator */
+			/* Get a copy of the byte usage from mem. allocator */
 			stat_helper(msg);
 		    }
 		    chunk_free(msg);
@@ -948,10 +997,14 @@ void run_client(char *infile_name) {
 		    break;
 		default:
 		    chunk_free(msg);
-		    err(false, "Unknown message code %u from controller (ignored)", code);
+		    err(false,
+			"Unknown message code %u from controller (ignored)",
+			code);
 		}
 	    } else {
-		err(false, "Received message from unknown source.  fd %d (ignored)", fd);
+		err(false,
+		    "Received message from unknown source.  fd %d (ignored)",
+		    fd);
 		close(fd);
 		continue;
 	    }
