@@ -149,7 +149,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist) {
     mgr->do_cudd = do_cudd;
     mgr->do_local = do_local;
     mgr->do_dist = do_dist;
-    ref_t r;
+    ref_t r = REF_ZERO;
     DdNode *n = NULL;
     if (do_cudd) {
 	mgr->bdd_manager = Cudd_Init(0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
@@ -157,7 +157,6 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist) {
     }
     if (do_ref(mgr)) {
 	mgr->ref_mgr = new_ref_mgr();
-	r = REF_ZERO;
 	if (!do_cudd) {
 	    n = (DdNode *) r;
 	}
