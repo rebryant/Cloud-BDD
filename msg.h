@@ -46,6 +46,12 @@ Operation opcode: 1
 Message code: 2
 Port: 2
 IP Address: 4
+** Format of all messages **
+
+Most messages have single-word headers.  Only operation and operands have two-word headers.
+
+Single-word header formats
+
 Word count: 2
 Worker count: 2
 Generation count: 4
@@ -59,25 +65,30 @@ Operand ID:  5.  Operator ID (4) + Offset (1)
 Node ID:     6.  Port (2) + IP Address (4)
 Agent Map:   8.  Agent (2) + Node ID (6)
 
+*** Double word header formats ***
 
 
 **********************************************************/
 /** Constants **/
 
-/* Operator header has two words:
-   one for control information and one for valid mask */
-#define OP_HEADER_CNT 2
+/* Operator header has three words:
+   two for control information and one for valid mask */
+#define OP_HEADER_CNT 3
+
 /* Use of bit vector for valid mask limits maximum operator length */
 #define OP_MAX_LENGTH WORD_BITS
 
-/* Operand header has one word for control information */
-#define OPER_HEADER_CNT 1
+/* Operand header has two words for control information */
+#define OPER_HEADER_CNT 2
+
+/* Size of operand */
+#define OPER_SIZE 2
 
 /** Constructors **/
 
 /* Create an operand destination */
-word_t msg_build_destination(unsigned agent, unsigned operator_id,
-			     unsigned offset);
+dword_t msg_build_destination(unsigned agent, word_t operator_id,
+			      unsigned offset);
 
 /* Create IP address from port and host */
 word_t msg_build_node_id(unsigned port, unsigned ip);
@@ -86,9 +97,9 @@ word_t msg_build_node_id(unsigned port, unsigned ip);
 
 bool msg_is_client_agent(unsigned agent);
 
+/* For single-word headers */
 unsigned msg_get_header_code(word_t header);
 unsigned msg_get_header_agent(word_t header);
-unsigned msg_get_header_op_id(word_t header);
 unsigned msg_get_header_opcode(word_t header);
 unsigned msg_get_header_offset(word_t header);
 
@@ -97,26 +108,33 @@ unsigned msg_get_header_ip(word_t header);
 
 unsigned msg_get_header_wordcount(word_t header);
 unsigned msg_get_header_workercount(word_t header);
-unsigned msg_get_header_snb(word_t header);
 unsigned msg_get_header_generation(word_t header);
 
-/* Extracting information from destination */
-unsigned msg_get_dest_agent(word_t dest);
-unsigned msg_get_dest_op_id(word_t dest);
-unsigned msg_get_dest_offset(word_t dest);
+/* For double-word headers */
+
+unsigned msg_get_dheader_code(dword_t header);
+unsigned msg_get_dheader_agent(dword_t header);
+word_t   msg_get_dheader_op_id(dword_t header);
+unsigned msg_get_dheader_opcode(dword_t header);
+unsigned msg_get_dheader_offset(dword_t header);
+
+/* Extracting information from destination (double word) */
+unsigned msg_get_dest_agent(dword_t dest);
+word_t    msg_get_dest_op_id(dword_t dest);
+unsigned msg_get_dest_offset(dword_t dest);
 
 /** Message builders **/
 
 /* Create an empty operator */
 /* len specifies total message size, including header */
-chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, unsigned operator_id,
-			   unsigned len);
+chunk_ptr msg_new_operator(unsigned opcode, unsigned agent,
+			   word_t operator_id, unsigned len);
 
 /* Create destination from operator.  Offset includes header size */
-word_t msg_new_destination(chunk_ptr operator, unsigned offset);
+dword_t msg_new_destination(chunk_ptr operator, unsigned offset);
 
 /* Create empty operand.  len specifies total message size, including header */
-chunk_ptr msg_new_operand(word_t dest, unsigned len);
+chunk_ptr msg_new_operand(dword_t dest, unsigned len);
 
 /* Create message to register client, router, worker, or agent */
 chunk_ptr msg_new_register_router(unsigned port);

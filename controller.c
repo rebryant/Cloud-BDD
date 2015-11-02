@@ -35,11 +35,8 @@ static int worker_cnt = 0;
 
 static int need_workers = 100000;
 
-/* How many bits are available for sequence numbers */
-static unsigned snb = 16;
-
 /* How many clients are allowed */
-static unsigned maxclients = 5;
+static unsigned maxclients = 1024;
 
 /* Set of connections from which have not received any messages.
    Given as map from file descriptor to IP address
@@ -201,7 +198,7 @@ unsigned biglog2(unsigned v) {
 }
 
 
-static void init_controller(int port, int nrouters, int nworkers, int mc) {
+static void init_controller(int port, int nrouters, int nworkers) {
     if (!new_server(port, &listen_fd, NULL))
 	err(true, "Cannot set up server on port %u", port);
     report(2, "Listening socket has descriptor %d", listen_fd);
@@ -220,9 +217,7 @@ static void init_controller(int port, int nrouters, int nworkers, int mc) {
     add_quit_helper(quit_controller);
     need_routers = nrouters;
     need_workers = nworkers;
-    snb = 32-biglog2(nworkers+maxclients);
     worker_cnt = nworkers;
-    maxclients = mc;
     stat_message_cnt = 0;
     flush_requestor_fd = -1;
     stat_messages = calloc_or_fail(worker_cnt, sizeof(chunk_ptr),
@@ -374,14 +369,14 @@ static void add_fd(int fd) {
 
 #define MAX_IDS (CHUNK_MAX_LENGTH-1)
 
-/* Add new agent.  Send agent ID + number of workers + snb + router map */
+/* Add new agent.  Send agent ID + number of workers +  router map */
 static void add_agent(int fd, bool isclient) {
     unsigned agent = next_agent++;
     if (agent >= worker_cnt + maxclients) {
 	/* Exceeded client limit */
 	chunk_ptr msg = msg_new_nack();
 	if (chunk_write(fd, msg))
-	    report(3,
+	    report(1,
 "Sent nack to potential client due to client limit being exceeded.  Fd = %d", fd);
 	else
 	    report(3, "Couldn't send nack to potential client.  Fd = %d", fd);
@@ -410,7 +405,7 @@ static void add_agent(int fd, bool isclient) {
 	if (bcount == MAX_IDS) {
 	    /* This block is filled */
 	    size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) |
-		((word_t) worker_cnt << 16) | (snb << 8) | MSG_ACK_AGENT;
+		((word_t) worker_cnt << 16) | MSG_ACK_AGENT;
 	    chunk_insert_word(msg, h1, 0);
 	    ok = chunk_write(fd, msg);
 	    chunk_free(msg);
@@ -420,7 +415,7 @@ static void add_agent(int fd, bool isclient) {
     }
     if (ok && ncount > 0) {
 	size_t h1 = ((word_t) agent << 48) | ((word_t) ncount << 32) |
-	    ((word_t) worker_cnt << 16) | (snb << 8) | MSG_ACK_AGENT;
+	    ((word_t) worker_cnt << 16) | MSG_ACK_AGENT;
 	chunk_insert_word(msg, h1, 0);
 	ok = chunk_write(fd, msg);
 	chunk_free(msg);
@@ -882,12 +877,13 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 
 
 static void usage(char *cmd) {
-    printf("Usage: %s [-h] [-v VLEVEL] [-p port] [-r RCNT] [-w WCNT]\n", cmd);
+    printf("Usage: %s [-h] [-v VLEVEL] [-p port] [-r RCNT] [-w WCNT] [-c CCNT]\n", cmd);
     printf("\t-h         Print this information\n");
     printf("\t-v VLEVEL  Set verbosity level\n");
     printf("\t-p PORT    Use PORT as controller port\n");
     printf("\t-r RCNT    Specify number of routers\n");
     printf("\t-w WCNT    Specify number of workers\n");
+    printf("\t-c CCNT    Specify maximum number of clients\n");
     exit(0);
 }
 
@@ -897,7 +893,6 @@ int main(int argc, char *argv[]) {
     int nworkers = 1;
     int nrouters = 1;
     /* Max number of clients */
-    int maxclients = 5;
     int c;
     int level = 1;
     while ((c = getopt(argc, argv, "hv:p:r:w:c:")) != -1) {
@@ -927,7 +922,7 @@ int main(int argc, char *argv[]) {
 	}
     }
     set_verblevel(level);
-    init_controller(port, nrouters, nworkers, maxclients);
+    init_controller(port, nrouters, nworkers);
     run_controller(NULL);
     mem_status(stdout);
     return 0;

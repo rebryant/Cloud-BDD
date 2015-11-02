@@ -45,11 +45,6 @@ static void to_from_test(char *s, chunk_ptr cp) {
     } else {
 	report(2, "to_from success. '%s' --> '%s'", s, t);
     }
-#ifdef VMASK
-    if (!chunk_filled(cp)) {
-	err(false, "Generating chunk from '%s' yielded incomplete chunk\n", s);
-    }
-#endif
     free_string(t);
 }
 
@@ -63,6 +58,32 @@ static void clone_test(char *s, chunk_ptr cp) {
 	report(2, "clone success. '%s' --> '%s'", s, t);
     }
     chunk_free(ccp);
+    free_string(t);
+}
+
+/* Test ability to reconstruct chunk from single & double word parts */
+static void reconstruct_test(char *s, chunk_ptr cp) {
+    size_t len = cp->length;
+    chunk_ptr ncp = chunk_new(len);
+    size_t i = 0;
+    while (i < len) {
+	if (i < len-1) {
+	    dword_t w = chunk_get_dword(cp, i);
+	    chunk_insert_dword(ncp, w, i);
+	    i++;
+	} else {
+	    word_t w = chunk_get_word(cp, i);
+	    chunk_insert_word(ncp, w, i);
+	    i++;
+	}
+    }
+    char *t = chunk2str(ncp);
+    if (strcmp(s, t) != 0) {
+	err(false, "reconstruct mismatch. '%s' --> '%s'", s, t);
+    } else {
+	report(2, "reconstruct success. '%s' --> '%s'", s, t);
+    }
+    chunk_free(ncp);
     free_string(t);
 }
 
@@ -129,7 +150,7 @@ static void reassemble_test(char *s, chunk_ptr cp) {
 /* Test ability to write and read chunks as files */
 static void write_read_test(char *s, chunk_ptr cp) {
     char *fname = "chunk_test.dat";
-    int fd = open(fname, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR);
+    int fd = open(fname, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
     if (fd < 0) {
 	err(true, "Couldn't open file '%s' for write", fname);
     }
@@ -168,6 +189,7 @@ void test_string(int maxlen) {
     size_t h = chunk_hash((word_t) cp);
     report(2, "Random string '%s'.  Hashes to 0x%lx", s, h);
     to_from_test(s, cp);
+    reconstruct_test(s, cp);
     clone_test(s, cp);
     reassemble_test(s, cp);
     write_read_test(s, cp);
@@ -211,7 +233,7 @@ int main(int argc, char *argv[]) {
 	}
     }
     size_t i;
-    for (i = 0; i < tcount; i++) 
+    for (i = 0; i < tcount; i++)
 	test_string(maxlen);
     printf("Completed %d tests\n", tcount);
     mem_status(stdout);

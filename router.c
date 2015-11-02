@@ -125,9 +125,9 @@ static size_t outq_len() {
 #endif
 
 static void insert_queue(chunk_ptr msg) {
-    word_t h = chunk_get_word(msg, 0);
-    unsigned agent = msg_get_header_agent(h);
-    unsigned id = msg_get_header_op_id(h);
+    dword_t dh = chunk_get_dword(msg, 0);
+    unsigned agent = msg_get_dheader_agent(dh);
+    word_t id = msg_get_dheader_op_id(dh);
     int fd;
     word_t w;
     if (keyvalue_find(routing_table, agent, &w)) {
@@ -149,7 +149,7 @@ static void insert_queue(chunk_ptr msg) {
     } else {
 	outq_head = outq_tail = ele;
     }
-    report(2, "Queued message with id 0x%x for agent %u.", id, agent);
+    report(2, "Queued message with id 0x%lx for agent %u.", id, agent);
 }
 
 static fd_set inset;
@@ -314,9 +314,9 @@ static void run_router() {
 		ls = ls->next;
 		/* Send the message */
 		if (chunk_write(fd, outmsg)) {
-		    word_t h = chunk_get_word(outmsg, 0);
-		    unsigned id = msg_get_header_op_id(h);
-		    report(2, "Routed message with id 0x%x to agent %u",
+		    dword_t dh = chunk_get_dword(outmsg, 0);
+		    word_t id = msg_get_dheader_op_id(dh);
+		    report(2, "Routed message with id 0x%lx to agent %u",
 			   id, agent);
 		}
 		else

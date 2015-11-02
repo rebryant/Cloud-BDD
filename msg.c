@@ -54,12 +54,14 @@ Agent Map:   8.  Agent (2) + Node ID (6)
 /** Constructors **/
 
 /* Create an operand destination */
-word_t msg_build_destination(unsigned agent, unsigned operator_id,
-			     unsigned offset) {
-    return
+dword_t msg_build_destination(unsigned agent, word_t operator_id,
+			      unsigned offset) {
+    dword_t result;
+    result.w0 = 
 	((word_t) (agent & MASK16) << 48) |
-	((word_t) (operator_id & MASK32) << 16) |
 	((offset & MASK8) << 8);
+    result.w1 = operator_id;
+    return result;
 }
 
 
@@ -71,7 +73,7 @@ word_t msg_build_node_id(unsigned port, unsigned ip) {
 }
 
 
-/** Extractors **/
+/** Single-word header extractors **/
 bool msg_is_client_agent(unsigned agent) {
     return agent >= (1<<15);
 }
@@ -83,10 +85,6 @@ unsigned msg_get_header_code(word_t header) {
 /* Agent from upper 16 bits */
 unsigned msg_get_header_agent(word_t header) {
     return (unsigned) (header >> 48) & MASK16;
-}
-
-unsigned msg_get_header_op_id(word_t header) {
-    return (unsigned) (header >> 16) & MASK32;    
 }
 
 unsigned msg_get_header_opcode(word_t header) {
@@ -120,11 +118,35 @@ unsigned msg_get_header_generation(word_t header) {
     return (unsigned) (header >> 8) & MASK32;
 }
 
+/** Double-word header extractors **/
+
+unsigned msg_get_dheader_code(dword_t header) {
+    return msg_get_header_code(header.w0);
+}
+
+/* Agent from upper 16 bits */
+unsigned msg_get_dheader_agent(dword_t header) {
+    return msg_get_header_agent(header.w0);
+}
+
+word_t msg_get_dheader_op_id(dword_t header) {
+    return header.w1;
+}
+
+unsigned msg_get_dheader_opcode(dword_t header) {
+    return msg_get_header_opcode(header.w0);
+}
+
+unsigned msg_get_dheader_offset(dword_t header) {
+    return msg_get_header_offset(header.w0);
+}
+
+
 /** Message builders **/
 
 /* Create an empty operator */
 /* len specifies total message length, including header */
-chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, unsigned operator_id,
+chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, word_t operator_id,
 			   unsigned len) {
     if (len > OP_MAX_LENGTH) {
 	err(true, "Requested operator length %u > max allowable %u",
@@ -132,41 +154,41 @@ chunk_ptr msg_new_operator(unsigned opcode, unsigned agent, unsigned operator_id
 	return false;
     }
     chunk_ptr result = chunk_new(len);
-    word_t h1 = ((word_t) agent << 48) | ((word_t) operator_id) << 16 |
-	(opcode << 8) | MSG_OPERATION;
-    chunk_insert_word(result, h1, 0);
+    word_t h0 = ((word_t) agent << 48) | (opcode << 8) | MSG_OPERATION;
+    chunk_insert_word(result, h0, 0);
+    chunk_insert_word(result, operator_id, 1);
     /* Add valid bits (Initially only header and valid mask) */
-    word_t vmask = 0x3u;
-    chunk_insert_word(result, vmask, 1);
+    word_t vmask = 0x7u;
+    chunk_insert_word(result, vmask, 2);
     return result;
 }
 
 /* Create destination from operator */
-word_t msg_new_destination(chunk_ptr operator, unsigned offset) {
-    word_t h = chunk_get_word(operator, 0);
+dword_t msg_new_destination(chunk_ptr operator, unsigned offset) {
+    dword_t dh = chunk_get_dword(operator, 0);
     /* Replace opcode and code of header */
-    h = (h & ~MASK16) | (offset << 8);
-    return h;
+    dh.w0 = (dh.w0 & ~MASK16) | (offset << 8);
+    return dh;
 }
 
 /* Extracting information from destination */
-unsigned msg_get_dest_agent(word_t dest) {
-    return msg_get_header_agent(dest);
+unsigned msg_get_dest_agent(dword_t dest) {
+    return msg_get_dheader_agent(dest);
 }
 
-unsigned msg_get_dest_op_id(word_t dest) {
-    return msg_get_header_op_id(dest);
+word_t msg_get_dest_op_id(dword_t dest) {
+    return msg_get_dheader_op_id(dest);
 }
-unsigned msg_get_dest_offset(word_t dest) {
-    return (dest >> 8) & MASK8;
+unsigned msg_get_dest_offset(dword_t dest) {
+    return msg_get_dheader_offset(dest);
 }
 
 
 /* Create an empty operand.  len specifies total message size, including header */
-chunk_ptr msg_new_operand(word_t dest, unsigned len) {
+chunk_ptr msg_new_operand(dword_t dest, unsigned len) {
     chunk_ptr result = chunk_new(len);
-    word_t h1 = dest | MSG_OPERAND;
-    chunk_insert_word(result, h1, 0);
+    dest.w0 |= MSG_OPERAND;
+    chunk_insert_dword(result, dest, 0);
     return result;
 }
 

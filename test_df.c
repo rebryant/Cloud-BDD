@@ -58,49 +58,50 @@ chunk_ptr flush_worker() {
     return msg;
 }
 
-chunk_ptr build_ifork(word_t dest, word_t width, word_t val, word_t cnt) {
+chunk_ptr build_ifork(dword_t dest, word_t width, word_t val, word_t cnt) {
     word_t worker = choose_random_worker();
     word_t id = new_operator_id();
-    chunk_ptr op = msg_new_operator(OP_IFORK, worker, id, 4 + OP_HEADER_CNT);
-    op_insert_word(op, dest,  0+OP_HEADER_CNT);
-    op_insert_word(op, width, 1+OP_HEADER_CNT);
-    op_insert_word(op, val,   2+OP_HEADER_CNT);
-    op_insert_word(op, cnt,   3+OP_HEADER_CNT);
-    report(5,
-"Created fork operation.  Worker %u.  Operator Id 0x%x.  Width %u, val %u, cnt %u",
+    chunk_ptr op = msg_new_operator(OP_IFORK, worker, id, 1*OPER_SIZE + 3 + OP_HEADER_CNT);
+    op_insert_dword(op, dest,  0*OPER_SIZE + 0 + OP_HEADER_CNT);
+    op_insert_word(op, width, 1*OPER_SIZE + 0 + OP_HEADER_CNT);
+    op_insert_word(op, val,   1*OPER_SIZE + 1 + OP_HEADER_CNT);
+    op_insert_word(op, cnt,   1*OPER_SIZE + 2 + OP_HEADER_CNT);
+    report(3,
+"Created fork op.  Worker %u.  Operator Id 0x%lx.  Width %u, val %u, cnt %u",
 	   worker, id, width, val, cnt);
     return op;
 }
 
-chunk_ptr build_incr(word_t dest, word_t val, word_t cnt) {
+chunk_ptr build_incr(dword_t dest, word_t val, word_t cnt) {
     word_t worker = choose_random_worker();
     word_t id = new_operator_id();
-    chunk_ptr op = msg_new_operator(OP_INCR, worker, id, 3 + OP_HEADER_CNT);
-    op_insert_word(op, dest, 0+OP_HEADER_CNT);
-    op_insert_word(op, val,  1+OP_HEADER_CNT);
-    op_insert_word(op, cnt,  2+OP_HEADER_CNT);
-    report(5,
-"Created incr operation.  Worker %u.  Operator Id 0x%x.  val %u, cnt %u",
+    chunk_ptr op = msg_new_operator(OP_INCR, worker, id,
+				    1*OPER_SIZE + 2 + OP_HEADER_CNT);
+    op_insert_dword(op, dest, 0*OPER_SIZE + 0 + OP_HEADER_CNT);
+    op_insert_word(op, val,  1*OPER_SIZE + 0 + OP_HEADER_CNT);
+    op_insert_word(op, cnt,  1*OPER_SIZE + 1 + OP_HEADER_CNT);
+    report(3,
+"Created incr operation.  Worker %u.  Operator Id 0x%lx.  val %u, cnt %u",
 	   worker, id, val, cnt);
     return op;
 }
 
-chunk_ptr build_join(word_t dest) {
+chunk_ptr build_join(dword_t dest) {
     word_t worker = choose_random_worker();
     word_t id = new_operator_id();
-    chunk_ptr op = msg_new_operator(OP_JOIN, worker, id, 3 + OP_HEADER_CNT);
-    op_insert_word(op, dest, 0+OP_HEADER_CNT);
-    report(5, "Created join operation.  Worker %u.  Operator Id 0x%x", worker, id);
+    chunk_ptr op = msg_new_operator(OP_JOIN, worker, id, 1*OPER_SIZE + 2 + OP_HEADER_CNT);
+    op_insert_dword(op, dest, 0*OPER_SIZE + OP_HEADER_CNT);
+    report(3, "Created join operation.  Worker %u.  Operator Id 0x%lx", worker, id);
     return op;
 }
 
 bool do_ifork_op(chunk_ptr op) {
-    word_t h = chunk_get_word(op, 0);
-    word_t id = msg_get_header_op_id(h);
-    word_t dest = chunk_get_word(op, 0+OP_HEADER_CNT);
-    word_t width = chunk_get_word(op, 1+OP_HEADER_CNT);
-    word_t val = chunk_get_word(op, 2+OP_HEADER_CNT);
-    word_t cnt = chunk_get_word(op, 3+OP_HEADER_CNT);
+    dword_t dh = chunk_get_dword(op, 0);
+    word_t id = msg_get_dheader_op_id(dh);
+    dword_t dest = chunk_get_dword(op, 0*OPER_SIZE + 0 + OP_HEADER_CNT);
+    word_t width = chunk_get_word(op, 1*OPER_SIZE + 0 + OP_HEADER_CNT);
+    word_t val = chunk_get_word(op, 1*OPER_SIZE + 1 + OP_HEADER_CNT);
+    word_t cnt = chunk_get_word(op, 1*OPER_SIZE + 2 + OP_HEADER_CNT);
     bool ok = true;
     report(5, "Starting fork op.  Id 0x%x", id);
     if (width == 1) {
@@ -125,18 +126,17 @@ bool do_ifork_op(chunk_ptr op) {
 	unsigned i;
 	for (i = 0; ok && i < 2; i++) {
 	    word_t w = i == 0 ? width/2 : (width - width/2);
-	    word_t ndest = msg_new_destination(join_op, i+1+OP_HEADER_CNT);
+	    dword_t ndest = msg_new_destination(join_op, 1*OPER_SIZE + i + OP_HEADER_CNT);
 	    chunk_ptr fork_op = build_ifork(ndest, w, val, cnt);
-	    word_t h = chunk_get_word(fork_op, 0);
-	    unsigned id = msg_get_header_op_id(h);
+	    dword_t dh = chunk_get_dword(fork_op, 0);
+	    word_t id = msg_get_dheader_op_id(dh);
 	    report(5,
-"Fork op spawned fork op.  width %u, val %u, cnt %u, Id 0x%x",
-		   w, val, cnt, id);
+"Fork op spawned fork op.  width %u, val %u, cnt %u, Id 0x%lx", w, val, cnt, id);
 	    if (send_op(fork_op))
-		report(5, "Sent fork operation.  Id 0x%x", id);
+		report(5, "Sent fork operation.  Id 0x%lx", id);
 	    else {
 		ok = false;
-		err(false, "Couldn't send fork operation.  Id 0x%x", id);
+		err(false, "Couldn't send fork operation.  Id 0x%lx", id);
 	    }
 	    chunk_free(fork_op);
 	}
@@ -146,24 +146,24 @@ bool do_ifork_op(chunk_ptr op) {
 }
 
 bool do_incr_op(chunk_ptr op) {
-    word_t dest = chunk_get_word(op, 0+OP_HEADER_CNT);
-    unsigned agent = msg_get_header_agent(dest);
-    unsigned operator_id = msg_get_dest_op_id(dest);
-    unsigned offset = msg_get_header_offset(dest);
-    word_t val = chunk_get_word(op, 1+OP_HEADER_CNT);
-    word_t cnt = chunk_get_word(op, 2+OP_HEADER_CNT);
+    dword_t dest = chunk_get_dword(op, 0*OPER_SIZE + OP_HEADER_CNT);
+    unsigned agent = msg_get_dest_agent(dest);
+    word_t operator_id = msg_get_dest_op_id(dest);
+    unsigned offset = msg_get_dest_offset(dest);
+    word_t val = chunk_get_word(op, 1*OPER_SIZE + 0 + OP_HEADER_CNT);
+    word_t cnt = chunk_get_word(op, 1*OPER_SIZE + 1 + OP_HEADER_CNT);
     bool ok = true;
     if (cnt == 0) {
-	chunk_ptr result = msg_new_operand(dest, 1+OPER_HEADER_CNT);
-	chunk_insert_word(result, val, 0+OPER_HEADER_CNT);
+	chunk_ptr result = msg_new_operand(dest, 1 + OPER_HEADER_CNT);
+	chunk_insert_word(result, val, 0 + OPER_HEADER_CNT);
 	ok = ok && send_op(result);
 	if (ok)
-	    report(5, 
-"Sent incr result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u",
+	    report(5,
+"Sent incr result %lu.  Agent %u.  Operator Id 0x%lx.  Offset %u",
 		   val, agent, operator_id, offset);
 	else
-	    err(false,
-"Couldn't send result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u",
+	    err(false, 
+"Couldn't send result %lu.  Agent %u.  Operator Id 0x%lx.  Offset %u",
 		val, agent, operator_id, offset);
 	chunk_free(result);
     } else {
@@ -180,23 +180,23 @@ bool do_incr_op(chunk_ptr op) {
 }
 
 bool do_join_op(chunk_ptr op) {
-    word_t dest = chunk_get_word(op, 0+OP_HEADER_CNT);
-    unsigned agent = msg_get_header_agent(dest);
-    unsigned operator_id = msg_get_dest_op_id(dest);
-    unsigned offset = msg_get_header_offset(dest);
-    word_t val1 = chunk_get_word(op, 1+OP_HEADER_CNT);
-    word_t val2 = chunk_get_word(op, 2+OP_HEADER_CNT);
+    dword_t dest = chunk_get_dword(op, 0*OPER_SIZE + OP_HEADER_CNT);
+    unsigned agent = msg_get_dheader_agent(dest);
+    word_t operator_id = msg_get_dest_op_id(dest);
+    unsigned offset = msg_get_dest_offset(dest);
+    word_t val1 = chunk_get_word(op, 1*OPER_SIZE + 0 + OP_HEADER_CNT);
+    word_t val2 = chunk_get_word(op, 1*OPER_SIZE + 1 + OP_HEADER_CNT);
     word_t val = val1+val2;
-    chunk_ptr result = msg_new_operand(dest, 1+OPER_HEADER_CNT);
-    chunk_insert_word(result, val, 0+OPER_HEADER_CNT);
+    chunk_ptr result = msg_new_operand(dest, 1 + OPER_HEADER_CNT);
+    chunk_insert_word(result, val, 0 + OPER_HEADER_CNT);
     bool ok = send_op(result);
     if (ok)
 	report(5,
-"Sent join result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u",
+"Sent join result %lu.  Agent %u.  Operator Id 0x%lx.  Offset %u",
 	       val, agent, operator_id, offset);
     else
 	err(false,
-"Couldn't send result %lu.  Agent %u.  Operator Id 0x%x.  Offset %u",
+"Couldn't send result %lu.  Agent %u.  Operator Id 0x%lx.  Offset %u",
 	    val, agent, operator_id, offset);
     chunk_free(result);
     return ok;

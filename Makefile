@@ -15,6 +15,8 @@ b: runbdd bworker controller router
 
 dft: controller router tworker tclient
 
+tests: chunk_test set_test word_set_test chunktable_test shadow_test console_test 
+
 chunk.o: chunk.c chunk.h dtype.h
 	$(CC) $(CFLAGS) -c chunk.c
 
