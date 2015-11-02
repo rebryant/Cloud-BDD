@@ -11,9 +11,17 @@ CFLAGS = -Wall -O2
 BDDFLAGS=
 #BDDFLAGS=-DSMALL_HASH
 
+PFILES = agent.h bdd.h chunk.h console.h dtype.h msg.h report.h shadow.h table.h \
+	agent.c bdd.c bworker.c chunk.c console.c controller.c msg.c report.c \
+	router.c runbdd.c shadow.c table.c 
+
 b: runbdd bworker controller router
 
 dft: controller router tworker tclient
+
+code.pdf: $(PFILES)
+	enscript -E -2r $(PFILES) -o code.ps
+	ps2pdf code.ps
 
 tests: chunk_test set_test word_set_test chunktable_test shadow_test console_test 
 

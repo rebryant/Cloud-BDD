@@ -61,7 +61,8 @@ chunk_ptr flush_worker() {
 chunk_ptr build_ifork(dword_t dest, word_t width, word_t val, word_t cnt) {
     word_t worker = choose_random_worker();
     word_t id = new_operator_id();
-    chunk_ptr op = msg_new_operator(OP_IFORK, worker, id, 1*OPER_SIZE + 3 + OP_HEADER_CNT);
+    chunk_ptr op = msg_new_operator(OP_IFORK, worker, id,
+				    1*OPER_SIZE + 3 + OP_HEADER_CNT);
     op_insert_dword(op, dest,  0*OPER_SIZE + 0 + OP_HEADER_CNT);
     op_insert_word(op, width, 1*OPER_SIZE + 0 + OP_HEADER_CNT);
     op_insert_word(op, val,   1*OPER_SIZE + 1 + OP_HEADER_CNT);
@@ -89,9 +90,12 @@ chunk_ptr build_incr(dword_t dest, word_t val, word_t cnt) {
 chunk_ptr build_join(dword_t dest) {
     word_t worker = choose_random_worker();
     word_t id = new_operator_id();
-    chunk_ptr op = msg_new_operator(OP_JOIN, worker, id, 1*OPER_SIZE + 2 + OP_HEADER_CNT);
+    chunk_ptr op = msg_new_operator(OP_JOIN, worker, id,
+				    1*OPER_SIZE + 2 + OP_HEADER_CNT);
     op_insert_dword(op, dest, 0*OPER_SIZE + OP_HEADER_CNT);
-    report(3, "Created join operation.  Worker %u.  Operator Id 0x%lx", worker, id);
+    report(3,
+	   "Created join operation.  Worker %u.  Operator Id 0x%lx",
+	   worker, id);
     return op;
 }
 
@@ -126,7 +130,8 @@ bool do_ifork_op(chunk_ptr op) {
 	unsigned i;
 	for (i = 0; ok && i < 2; i++) {
 	    word_t w = i == 0 ? width/2 : (width - width/2);
-	    dword_t ndest = msg_new_destination(join_op, 1*OPER_SIZE + i + OP_HEADER_CNT);
+	    dword_t ndest = msg_new_destination(join_op,
+						1*OPER_SIZE + i + OP_HEADER_CNT);
 	    chunk_ptr fork_op = build_ifork(ndest, w, val, cnt);
 	    dword_t dh = chunk_get_dword(fork_op, 0);
 	    word_t id = msg_get_dheader_op_id(dh);

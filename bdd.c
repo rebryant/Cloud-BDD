@@ -1386,7 +1386,9 @@ chunk_ptr build_uop_down(dword_t dest, unsigned uid, ref_t ref) {
     op_insert_dword(op, dest,           OP_HEADER_CNT);
     op_insert_word(op, (word_t) uid,    0+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) ref,    1+OPER_SIZE+OP_HEADER_CNT);
-    report(4, "Created UOP Down operation.  Uid %u.  Worker %u.  Operator ID 0x%lx.", uid, worker, id);
+    report(4,
+"Created UOP Down operation.  Uid %u.  Worker %u.  Operator ID 0x%lx.",
+	   uid, worker, id);
     return op;
 }
 

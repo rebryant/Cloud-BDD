@@ -48,7 +48,8 @@ Port: 2
 IP Address: 4
 ** Format of all messages **
 
-Most messages have single-word headers.  Only operation and operands have two-word headers.
+Most messages have single-word headers.
+Only operation and operands have two-word headers.
 
 Single-word header formats
 

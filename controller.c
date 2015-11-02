@@ -877,7 +877,8 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 
 
 static void usage(char *cmd) {
-    printf("Usage: %s [-h] [-v VLEVEL] [-p port] [-r RCNT] [-w WCNT] [-c CCNT]\n", cmd);
+    printf("Usage: %s [-h] [-v VLEVEL] [-p port] [-r RCNT] [-w WCNT] [-c CCNT]\n",
+	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-v VLEVEL  Set verbosity level\n");
     printf("\t-p PORT    Use PORT as controller port\n");

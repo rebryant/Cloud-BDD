@@ -135,7 +135,8 @@ gc_state_t gc_state = GC_IDLE;
 /* Sequence number for garbage collection phases */
 unsigned gc_generation = 0;
 
-/* Number representing the file descriptor of the router running on the same system, or -1 if no such router exists (by default) */
+/* Number representing the file descriptor of the router running
+   on the same system, or -1 if no such router exists (by default) */
 int local_router_fd = -1;
 
 /* Add an operation */
@@ -169,7 +170,8 @@ int match_self_ip(unsigned hip) {
     {
         if (((struct sockaddr_in *)(curr->ifa_addr))->sin_family == AF_INET)
         {
-            interface_ip = ((struct sockaddr_in *)(curr->ifa_addr))->sin_addr.s_addr;
+            interface_ip =
+		((struct sockaddr_in *)(curr->ifa_addr))->sin_addr.s_addr;
             inet_ntop(AF_INET, &interface_ip, ipv4str, INET_ADDRSTRLEN);
             report(5, "System's IP is: %s\n", ipv4str);
 
@@ -258,7 +260,9 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
                     if (local_router_fd == -1 && match_self_ip(ip))
                     {
                         local_router_fd = fd;
-                        report(5, "Router with fd %d is designated the local router and prioritized for sending packets", fd);
+                        report(5,
+"Router with fd %d designated as local router and prioritized for sending packets",
+			       fd);
                     }
 		}
 	    }
@@ -493,7 +497,9 @@ void op_insert_word(chunk_ptr op, word_t wd, size_t offset) {
     if (verblevel >= 6) {
 	dword_t dh = chunk_get_dword(op, 0);
 	word_t id = msg_get_dheader_op_id(dh);
-	report(6, "Inserted word at offset %d into operation with id 0x%lx.  Total size = %d.  Vmask 0x%lx --> 0x%lx",
+	report(6,
+	       "Inserted word, offset %d, operation with id 0x%lx.\n"
+	       "  Total size = %d.  Vmask 0x%lx --> 0x%lx",
 	       (int) offset, id, op->length, vmask, nvmask);
     }
 }
@@ -507,7 +513,9 @@ void op_insert_dword(chunk_ptr op, dword_t dwd, size_t offset) {
     word_t nvmask;
     word_t imask = (word_t) 3 << offset;
     if (vmask & imask) {
-	err(false, "Inserting into already filled position in operator.  Offsets = %lu,%lu", offset, offset+1);
+	err(false,
+"Inserting into already filled position in operator.  Offsets = %lu,%lu",
+	    offset, offset+1);
     }
     chunk_insert_dword(op, dwd, offset);
     nvmask = vmask | imask;
@@ -515,7 +523,9 @@ void op_insert_dword(chunk_ptr op, dword_t dwd, size_t offset) {
     if (verblevel >= 6) {
 	dword_t dh = chunk_get_dword(op, 0);
 	word_t id = msg_get_dheader_op_id(dh);
-	report(6, "Inserted double word at offset %d into operation with id 0x%lx.  Total size = %d.  Vmask 0x%lx --> 0x%lx",
+	report(6,
+"Inserted double word at offset %d into operation with id 0x%lx.\n"
+"  Total size = %d.  Vmask 0x%lx --> 0x%lx",
 	       (int) offset, id, op->length, vmask, nvmask);
     }
 }
@@ -798,7 +808,8 @@ void run_worker() {
 		continue;
 	    }
 	    word_t h = chunk_get_word(msg, 0);
-	    /* Rely on fact that following message fields in same location for both single and double-word headers */
+	    /* Rely on fact that following message fields in same location
+	       for both single and double-word headers */
 	    unsigned code = msg_get_header_code(h);
 	    unsigned agent = msg_get_header_agent(h); 
 	    unsigned opcode = msg_get_header_opcode(h);

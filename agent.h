@@ -53,7 +53,8 @@ bool send_as_operand(dword_t dest, word_t val);
    Offset includes header size */
 void op_insert_word(chunk_ptr op, word_t wd, size_t offset);
 
-/* Insert double word into operator, updating its valid mask.  Offset includes header size */
+/* Insert double word into operator, updating its valid mask.
+   Offset includes header size */
 /* Offset is for first word */
 void op_insert_dword(chunk_ptr op, dword_t wd, size_t offset);
 
