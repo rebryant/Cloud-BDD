@@ -183,7 +183,7 @@ int match_self_ip(unsigned hip) {
     return 0;
 }
 
-void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
+void init_agent(bool iscli, char *controller_name, unsigned controller_port, bool try_local_router) {
     operator_table = word_keyvalue_new();
     deferred_operand_table = word_keyvalue_new();
     size_t i;
@@ -257,7 +257,7 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port) {
 			    ip, port);
 		    }
 
-                    if (local_router_fd == -1 && match_self_ip(ip))
+                    if (try_local_router && local_router_fd == -1 && match_self_ip(ip))
                     {
                         local_router_fd = fd;
                         report(5,

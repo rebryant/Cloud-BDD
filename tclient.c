@@ -33,9 +33,9 @@ bool do_global_cmd(int argc, char *argv[]);
 void gc_start();
 void gc_finish();
 
-static void init(char *controller_name, unsigned controller_port) {
+static void init(char *controller_name, unsigned controller_port, bool try_local_router) {
     init_cmd();
-    init_agent(true, controller_name, controller_port);
+    init_agent(true, controller_name, controller_port, try_local_router);
     set_agent_stat_helper(do_summary_stat);
     set_gc_handlers(gc_start, gc_finish);
     add_cmd("incr", do_incr_cmd,
@@ -51,12 +51,13 @@ static void init(char *controller_name, unsigned controller_port) {
 }
 
 static void usage(char *cmd) {
-    printf("Usage: %s [-h] [-v VLEVEL] [-H HOST] [-P PORT] [-f FILE]\n", cmd);
+    printf("Usage: %s [-h] [-v VLEVEL] [-H HOST] [-P PORT] [-f FILE][-r]\n", cmd);
     printf("\t-h         Print this information\n");
     printf("\t-v VLEVEL  Set verbosity level\n");
     printf("\t-H HOST    Use HOST as controller host\n");
     printf("\t-P PORT    Use PORT as controller port\n");
     printf("\t-F FILE    Read commands from FILE\n");
+    printf("\t-r         Try to use local router\n");
     exit(0);
 }
 
@@ -160,7 +161,8 @@ int main(int argc, char *argv[]) {
     unsigned port = CPORT;
     int c;
     int level = 1;
-    while ((c = getopt(argc, argv, "hv:H:P:")) != -1) {
+    bool try_local_router = false;
+    while ((c = getopt(argc, argv, "hv:H:P:r")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage(argv[0]);
@@ -179,6 +181,9 @@ int main(int argc, char *argv[]) {
 	    strncpy(fbuf, optarg, BUFSIZE-1);
 	    fbuf[BUFSIZE-1] = '\0';
 	    infilename = fbuf;
+	case 'r':
+	    try_local_router = true;
+	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);
@@ -186,7 +191,7 @@ int main(int argc, char *argv[]) {
 	}
     }
     set_verblevel(level);
-    init(buf, port);
+    init(buf, port, try_local_router);
     run_client(infilename);
     finish_cmd();
     mem_status(stdout);

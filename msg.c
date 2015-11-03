@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+//#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <fcntl.h>
@@ -296,7 +296,7 @@ chunk_ptr msg_new_gc_finish() {
    If successful, set fdp to fd for listening socket and portp to port.
  */
 
-bool new_server(unsigned port, int *fdp, unsigned *portp) {
+bool new_server_old(unsigned port, int *fdp, unsigned *portp) {
     int listenfd;
     int optval = 1;
     struct sockaddr_in addr;
@@ -348,10 +348,74 @@ bool new_server(unsigned port, int *fdp, unsigned *portp) {
     return true;
 }
 
+/* Create listening socket.
+   Port value of 0 indicates that port can be chosen arbitrarily.
+   If successful, set fdp to fd for listening socket and portp to port.
+ */
 
+#define MAXTRIES 5
 
-/* Open connection to server.  Return socket file descriptor */
-int open_clientfd(char *hostname, unsigned port) {
+bool new_server(unsigned port, int *fdp, unsigned *portp) {
+    int listenfd;
+    int optval = 1;
+    struct addrinfo hints, *listp, *p;
+    unsigned ports[MAXTRIES];
+    char sport[10];
+    char ntries;
+    int i;
+
+    if (port == 0) {
+	/* Generate multiple choices for ports */
+	/* Make sure different nodes don't attempt the same random sequence */
+	srandom(getpid());
+	for (i = 0; i < MAXTRIES; i++) {
+	    ports[i] = 5000 + random() % 5000;
+	}
+	ntries = MAXTRIES;
+	
+    } else {
+	ntries = 1;
+	ports[0] = port;
+    }
+    for (i = 0; i < ntries; i++) {
+	sprintf(sport, "%d", ports[i]);
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+	hints.ai_flags |= AI_NUMERICSERV;
+	hints.ai_flags |= AI_ADDRCONFIG;
+	if (getaddrinfo(NULL, sport, &hints, &listp) != 0) {
+	    err(false, "Couldn't call getaddrinfo");
+	    return false; 
+	}
+	for (p = listp; p; p = p->ai_next) {
+	    if ((listenfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0)
+		continue;
+	    if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, 
+			   (const void *) &optval, sizeof(int)) < 0) {
+		close(listenfd);
+		continue;
+	    }
+	    if (bind(listenfd, p->ai_addr, p->ai_addrlen) == 0)
+		if (listen(listenfd, 1024) >= 0)
+		    break;
+	    close(listenfd);
+	}
+	freeaddrinfo(listp);
+	if (p) {
+	    if (fdp)
+		*fdp = listenfd;
+	    if (portp)
+		*portp = ports[i];
+	    return true;
+	}
+    }
+    err(false, "Failed %d tries to set up server", ntries);
+    return false;
+}
+
+/* Open connection to server.  Return socket file descriptor (LEGACY) */
+int open_clientfd_old(char *hostname, unsigned port) {
     int clientfd;
     struct hostent *hp;
     struct sockaddr_in serveraddr;
@@ -374,27 +438,51 @@ int open_clientfd(char *hostname, unsigned port) {
     return clientfd;
 }
 
+/* Open connection to server.  Return socket file descriptor */
+int open_clientfd(char *hostname, unsigned port) {
+    int clientfd;
+    struct addrinfo hints, *listp, *p;
+    char sport[10];
+    sprintf(sport, "%d", port);
+
+    /* Get list of potential server addresses */
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_NUMERICSERV | AI_ADDRCONFIG;
+    if (getaddrinfo(hostname, sport, &hints, &listp) != 0) {
+	err(false, "Couldn't call getaddrinfo");
+	return -1; /* Check errno for cause of error */
+    }
+
+    /* Walk the list until obtain successful connection */
+    for (p = listp; p; p = p->ai_next) {
+	if ((clientfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0)
+	    continue; /* Socket failed */
+	if (connect(clientfd, p->ai_addr, p->ai_addrlen) != -1)
+	    break; /* Success */
+	if (close(clientfd) != 0) {
+	    return -1;
+	}
+    }
+    freeaddrinfo(listp);
+    if (p) {
+	report(4, "Opened connection to  %s:%s.", hostname, sport);
+	return clientfd;
+    } else {
+	err(false, "Couldn't open connection to %s:%s", hostname, sport);
+	return -1;
+    }
+}
+
 /* Open connection to server based on IPv4 addrss.
    Return socket file descriptor */
 int open_clientfd_ip(unsigned ip, unsigned port) {
-    int clientfd;
-    struct sockaddr_in serveraddr;
-
-    if ((clientfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-	return -1; /* check errno for cause of error */
-
-    /* Fill in the server's IP address and port */
-    bzero((char *) &serveraddr, sizeof(serveraddr));
-    serveraddr.sin_family = AF_INET;
-    unsigned nip = htonl(ip);
-    bcopy((char *) &nip, 
-	  (char *)&serveraddr.sin_addr.s_addr, 4);
-    serveraddr.sin_port = htons(port);
-
-    /* Establish a connection with the server */
-    if (connect(clientfd, (struct sockaddr *) &serveraddr, sizeof(serveraddr)) < 0)
-	return -1;
-    return clientfd;
+    char sip[INET_ADDRSTRLEN];
+    struct in_addr ina;
+    /* Convert ip to dotted decimal form */
+    ina.s_addr = htonl(ip);
+    char *name = inet_ntop(AF_INET, &ina, sip, INET_ADDRSTRLEN);
+    return open_clientfd(name, port);
 }
 
 
@@ -402,6 +490,31 @@ int open_clientfd_ip(unsigned ip, unsigned port) {
    Return connection socket descriptor.
    (Optionally) update pointers to IP address */
 int accept_connection(int listenfd, unsigned *ipp) {
+    struct sockaddr_storage clientaddr;
+    socklen_t clientlen = sizeof(clientaddr);
+    char hostname[INET_ADDRSTRLEN];
+    char sport[10];
+    
+    int clientfd = accept(listenfd, (struct sockaddr *) &clientaddr, &clientlen);
+    if (clientfd < 0) {
+	err(false, "Accept failed");
+	return clientfd;
+    }
+    if (getnameinfo((struct sockaddr *) &clientaddr, clientlen, hostname, INET_ADDRSTRLEN,
+		    sport, 10, NI_NUMERICHOST | NI_NUMERICSERV) == 0) {
+	report(3, "Accepted connection from %s:%s", hostname, sport);
+    }
+    if (ipp) {
+	struct sockaddr_in *cap = (struct sockaddr_in *) &clientaddr;
+	*ipp = ntohl(cap->sin_addr.s_addr);
+    }
+    return clientfd;
+}
+
+/* Accept a connection request from a client
+   Return connection socket descriptor.
+   (Optionally) update pointers to IP address */
+int accept_connection_old(int listenfd, unsigned *ipp) {
     struct sockaddr_in clientaddr;
     struct hostent *hp;
     char *haddrp;
