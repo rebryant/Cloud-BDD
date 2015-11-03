@@ -25,7 +25,8 @@
 #include "bdd.h"
 
 
-static void init(char *controller_name, unsigned controller_port, bool try_local_router) {
+static void init(char *controller_name, unsigned controller_port,
+		 bool try_local_router) {
     init_agent(false, controller_name, controller_port, try_local_router);
     init_dref_mgr();
     set_agent_flush_helper(flush_dref_mgr);

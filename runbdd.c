@@ -157,7 +157,8 @@ static bool bdd_quit(int argc, char *argv[]) {
 }
 
 static void usage(char *cmd) {
-    printf("Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r]\n",
+    printf(
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");

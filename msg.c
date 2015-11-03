@@ -296,63 +296,6 @@ chunk_ptr msg_new_gc_finish() {
    If successful, set fdp to fd for listening socket and portp to port.
  */
 
-bool new_server_old(unsigned port, int *fdp, unsigned *portp) {
-    int listenfd;
-    int optval = 1;
-    struct sockaddr_in addr;
-    if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-	err(false, "Couldn't create listening socket");
-	return false;
-    }
-    if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
-		   (const void *) &optval, sizeof(int)) < 0) {
-	err(false, "Couldn't set socket option");
-	return false;
-    }
-    bzero((char *) &addr, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (port > 0) {
-	addr.sin_port = htons((unsigned short) port);
-	if (bind(listenfd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-	    err(false, "Couldn't bind to port %u", port);
-	    return false;
-	}
-    } else {
-	int ntries = 5;
-	bool done = false;
-	/* Need to get make sure different nodes don't attempt
-	   the same random sequence */
-	srandom(getpid());
-	while (!done && ntries > 0) {
-	    port = 5000 + random() % 5000;
-	    addr.sin_port = htons((unsigned short) port);
-	    done = bind(listenfd, (struct sockaddr *) &addr, sizeof(addr)) >= 0;
-	    report(4, "Tried opening server on port %u: %s",
-		   port, done ? "OK" : "Failed");
-	    ntries--;
-	}
-	if (!done) {
-	    err(false, "Failed to set up server");
-	    return false;
-	}
-    }
-    if (listen(listenfd, 1024) < 0) {
-	err(false, "Couldn't set socket to listen");
-	return false;
-    }
-    if (fdp)
-	*fdp = listenfd;
-    if (portp)
-	*portp = port;
-    return true;
-}
-
-/* Create listening socket.
-   Port value of 0 indicates that port can be chosen arbitrarily.
-   If successful, set fdp to fd for listening socket and portp to port.
- */
-
 #define MAXTRIES 5
 
 bool new_server(unsigned port, int *fdp, unsigned *portp) {
@@ -412,30 +355,6 @@ bool new_server(unsigned port, int *fdp, unsigned *portp) {
     }
     err(false, "Failed %d tries to set up server", ntries);
     return false;
-}
-
-/* Open connection to server.  Return socket file descriptor (LEGACY) */
-int open_clientfd_old(char *hostname, unsigned port) {
-    int clientfd;
-    struct hostent *hp;
-    struct sockaddr_in serveraddr;
-
-    if ((clientfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-	return -1; /* check errno for cause of error */
-
-    /* Fill in the server's IP address and port */
-    if ((hp = gethostbyname(hostname)) == NULL)
-	return -2; /* check h_errno for cause of error */
-    bzero((char *) &serveraddr, sizeof(serveraddr));
-    serveraddr.sin_family = AF_INET;
-    bcopy((char *)hp->h_addr, 
-	  (char *)&serveraddr.sin_addr.s_addr, hp->h_length);
-    serveraddr.sin_port = htons(port);
-
-    /* Establish a connection with the server */
-    if (connect(clientfd, (struct sockaddr *) &serveraddr, sizeof(serveraddr)) < 0)
-	return -1;
-    return clientfd;
 }
 
 /* Open connection to server.  Return socket file descriptor */
@@ -500,40 +419,14 @@ int accept_connection(int listenfd, unsigned *ipp) {
 	err(false, "Accept failed");
 	return clientfd;
     }
-    if (getnameinfo((struct sockaddr *) &clientaddr, clientlen, hostname, INET_ADDRSTRLEN,
+    if (getnameinfo((struct sockaddr *) &clientaddr, clientlen,
+		    hostname, INET_ADDRSTRLEN,
 		    sport, 10, NI_NUMERICHOST | NI_NUMERICSERV) == 0) {
 	report(3, "Accepted connection from %s:%s", hostname, sport);
     }
     if (ipp) {
 	struct sockaddr_in *cap = (struct sockaddr_in *) &clientaddr;
 	*ipp = ntohl(cap->sin_addr.s_addr);
-    }
-    return clientfd;
-}
-
-/* Accept a connection request from a client
-   Return connection socket descriptor.
-   (Optionally) update pointers to IP address */
-int accept_connection_old(int listenfd, unsigned *ipp) {
-    struct sockaddr_in clientaddr;
-    struct hostent *hp;
-    char *haddrp;
-    socklen_t len = sizeof(clientaddr);
-    int clientfd = accept(listenfd, (struct sockaddr *) &clientaddr, &len);
-    if (clientfd < 0) {
-	err(false, "Accept failed");
-	return clientfd;
-    }
-    hp = gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr,
-		       sizeof(clientaddr.sin_addr.s_addr), AF_INET);
-    haddrp = inet_ntoa(clientaddr.sin_addr);
-    if (hp) {
-	report(3, "Accepted connection from %s (%s)", hp->h_name, haddrp);
-    } else {
-	err(false, "Could not get host name for host %s", haddrp);
-    }
-    if (ipp) {
-	*ipp = ntohl(clientaddr.sin_addr.s_addr);
     }
     return clientfd;
 }

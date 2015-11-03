@@ -33,7 +33,8 @@ bool do_global_cmd(int argc, char *argv[]);
 void gc_start();
 void gc_finish();
 
-static void init(char *controller_name, unsigned controller_port, bool try_local_router) {
+static void init(char *controller_name, unsigned controller_port,
+		 bool try_local_router) {
     init_cmd();
     init_agent(true, controller_name, controller_port, try_local_router);
     set_agent_stat_helper(do_summary_stat);
