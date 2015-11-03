@@ -157,7 +157,8 @@ static bool bdd_quit(int argc, char *argv[]) {
 }
 
 static void usage(char *cmd) {
-    printf("Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT]\n",
+    printf(
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
@@ -167,6 +168,7 @@ static void usage(char *cmd) {
     printf("\t-d         Use distributed refs\n");
     printf("\t-H HOST    Use HOST as controller host\n");
     printf("\t-P PORT    Use PORT as controller port\n");
+    printf("\t-r         Try to use local router\n");
     exit(0);
 }
 
@@ -181,11 +183,12 @@ int main(int argc, char *argv[]) {
     int c;
     char hbuf[BUFSIZE] = "localhost";
     unsigned port = CPORT;
+    bool try_local_router = false;
 
     do_cudd = 0;
     do_local = 0;
     do_dist = 0;
-    while ((c = getopt(argc, argv, "hn:v:f:cldH:P:")) != -1) {
+    while ((c = getopt(argc, argv, "hn:v:f:cldH:P:r")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -213,6 +216,9 @@ int main(int argc, char *argv[]) {
 	case 'P':
 	    port = atoi(optarg);
 	    break;
+	case 'r':
+	    try_local_router = true;
+	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);
@@ -222,7 +228,7 @@ int main(int argc, char *argv[]) {
     bdd_init();
     init_cmd();
     if (do_dist) {
-	init_agent(true, hbuf, port);
+	init_agent(true, hbuf, port, try_local_router);
 	set_agent_flush_helper(run_flush);
 	set_agent_stat_helper(do_summary_stat);
     }

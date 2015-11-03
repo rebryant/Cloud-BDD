@@ -25,8 +25,9 @@
 #include "bdd.h"
 
 
-static void init(char *controller_name, unsigned controller_port) {
-    init_agent(false, controller_name, controller_port);
+static void init(char *controller_name, unsigned controller_port,
+		 bool try_local_router) {
+    init_agent(false, controller_name, controller_port, try_local_router);
     init_dref_mgr();
     set_agent_flush_helper(flush_dref_mgr);
     set_agent_global_helpers(uop_start, uop_finish);
@@ -48,11 +49,12 @@ static void finish() {
 }
 
 static void usage(char *cmd) {
-    printf("Usage: %s [-h] [-v VLEVEL] [-H HOST] [-P PORT]\n", cmd);
+    printf("Usage: %s [-h] [-v VLEVEL] [-H HOST] [-P PORT][-r]\n", cmd);
     printf("\t-h         Print this information\n");
     printf("\t-v VLEVEL  Set verbosity level\n");
     printf("\t-H HOST    Use HOST as controller host\n");
     printf("\t-P PORT    Use PORT as controller port\n");
+    printf("\t-r         Try to use local router\n");
     exit(0);
 }
 
@@ -63,7 +65,9 @@ int main(int argc, char *argv[]) {
     unsigned port = CPORT;
     int c;
     int level = 1;
-    while ((c = getopt(argc, argv, "hv:H:P:")) != -1) {
+    bool try_local_router = false;
+
+    while ((c = getopt(argc, argv, "hv:H:P:r")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage(argv[0]);
@@ -78,6 +82,9 @@ int main(int argc, char *argv[]) {
 	case 'P':
 	    port = atoi(optarg);
 	    break;
+	case 'r':
+	    try_local_router = true;
+	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);
@@ -85,7 +92,7 @@ int main(int argc, char *argv[]) {
 	}
     }
     set_verblevel(level);
-    init(buf, port);
+    init(buf, port, try_local_router);
     run_worker();
     finish();
     mem_status(stdout);
