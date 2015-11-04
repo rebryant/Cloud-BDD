@@ -242,8 +242,9 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port,
 		word_t h = chunk_get_word(msg, i);
 		int fd;
 		unsigned ip = msg_get_header_ip(h);
-
 		unsigned port = msg_get_header_port(h);
+		report(4, "Attempting to add router %u with ip 0x%x, port %d",
+		       ridx, ip, port);
 		fd = open_clientfd_ip(ip, port);
 		if (fd < 0) {
 		    err(true, "Couldn't add router with ip 0x%x, port %d",

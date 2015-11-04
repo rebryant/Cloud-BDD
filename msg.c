@@ -312,7 +312,7 @@ bool new_server(unsigned port, int *fdp, unsigned *portp) {
 	/* Make sure different nodes don't attempt the same random sequence */
 	srandom(getpid());
 	for (i = 0; i < MAXTRIES; i++) {
-	    ports[i] = 5000 + random() % 5000;
+	    ports[i] = MINPORT + random() % PORTCOUNT;
 	}
 	ntries = MAXTRIES;
 	
