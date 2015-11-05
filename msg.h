@@ -179,6 +179,10 @@ chunk_ptr msg_new_gc_finish();
    If successful, set fdp to fd for listening socket and portp to port.
  */
 
+/* Parameters that define range of ports tried */
+#define MINPORT 6000
+#define PORTCOUNT 1000
+
 bool new_server(unsigned port, int *fdp, unsigned *portp);
 
 /* Open connection to server.  Return socket file descriptor
