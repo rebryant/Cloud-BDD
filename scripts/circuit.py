@@ -613,6 +613,9 @@ def lQueens(n, f = sys.stdout):
     ckt.decRefs([okO])
     ckt.write("time")
     ckt.write("count ok")
+    ckt.write("status")
+    ckt.write("flush")
+    ckt.write("quit")
 
 
     

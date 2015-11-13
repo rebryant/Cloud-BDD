@@ -122,6 +122,8 @@ void init_cmd() {
     add_param("verbose", &verblevel, "Verbosity level");
     add_param("error", &err_limit,   "Number of errors until exit");
     add_param("echo", &echo, "Do/don't echo commands");
+    add_param("megabytes", &mblimit, "Maximum megabytes allowed");
+    add_param("seconds", &timelimit, "Maximum seconds allowed");
     init_in();
     init_time();
 }
@@ -511,7 +513,7 @@ void unblock_console() {
 /* Determine if there is a complete command line in input buffer */
 static bool read_ready() {
     int i;
-    for (i = 0; i < buf_stack->cnt; i++) {
+    for (i = 0; buf_stack && i < buf_stack->cnt; i++) {
 	if (buf_stack->bufptr[i] == '\n')
 	    return true;
     }
@@ -538,6 +540,8 @@ int cmd_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 	interpret_cmd(cmdline);
 	prompt_flag = true;
     }
+    if (cmd_done())
+	return 0;
     if (!block_flag) {
 	/* Process any commands in input buffer */
 	if (readfds == NULL)

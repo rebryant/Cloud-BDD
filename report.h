@@ -8,6 +8,14 @@ void init_files(FILE *errfile, FILE *verbfile);
 extern int verblevel;
 void set_verblevel(int level);
 
+/* Maximum number of megabytes that application can use (0 = unlimited) */
+extern int mblimit;
+/* Maximum number of seconds that application can use.  (0 = unlimited)  */
+extern int timelimit;
+
+/* Optional function to call when fatal error encountered */
+extern void (*fatal_fun)();
+
 /* Report Errors */
 void err(bool fatal, char *fmt, ...);
 /* Report useful information */

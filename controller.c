@@ -877,7 +877,7 @@ static void handle_gc_msg(unsigned code, unsigned gen, int fd, bool isclient) {
 
 
 static void usage(char *cmd) {
-    printf("Usage: %s [-h] [-v VLEVEL] [-p port] [-r RCNT] [-w WCNT] [-c CCNT]\n",
+    printf("Usage: %s [-h] [-v VLEVEL] [-p port] [-r RCNT] [-w WCNT] [-c CCNT] [-C]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-v VLEVEL  Set verbosity level\n");
@@ -885,6 +885,7 @@ static void usage(char *cmd) {
     printf("\t-r RCNT    Specify number of routers\n");
     printf("\t-w WCNT    Specify number of workers\n");
     printf("\t-c CCNT    Specify maximum number of clients\n");
+    printf("\t-C         Operate without console\n");
     exit(0);
 }
 
@@ -896,7 +897,8 @@ int main(int argc, char *argv[]) {
     /* Max number of clients */
     int c;
     int level = 1;
-    while ((c = getopt(argc, argv, "hv:p:r:w:c:")) != -1) {
+    bool console = true;
+    while ((c = getopt(argc, argv, "hv:p:r:w:c:C")) != -1) {
 	switch (c) {
 	case 'h':
 	    usage(argv[0]);
@@ -916,6 +918,9 @@ int main(int argc, char *argv[]) {
 	case 'c':
 	    maxclients = atoi(optarg);
 	    break;
+	case 'C':
+	    console = false;
+	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);
@@ -924,6 +929,8 @@ int main(int argc, char *argv[]) {
     }
     set_verblevel(level);
     init_controller(port, nrouters, nworkers);
+    if (!console)
+	block_console();
     run_controller(NULL);
     mem_status(stdout);
     return 0;

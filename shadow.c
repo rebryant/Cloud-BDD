@@ -152,8 +152,14 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist) {
     ref_t r = REF_ZERO;
     DdNode *n = NULL;
     if (do_cudd) {
-	mgr->bdd_manager = Cudd_Init(0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
-	n = Cudd_ReadLogicZero(mgr->bdd_manager);
+      /* Modified CUDD Parameters */
+      unsigned int numVars = 1u<<8; /* Default 0 */
+      unsigned int numVarsZ = 0; /* Default 0 */
+      unsigned int numSlots = 1u<<18; /* Default 256 */
+      unsigned int cacheSize = 1u<<22; /* Default 262144 */
+      unsigned int maxMemory = 1u<<31; /* Default 67,108,864 */
+      mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
+        n = Cudd_ReadLogicZero(mgr->bdd_manager);
     }
     if (do_ref(mgr)) {
 	mgr->ref_mgr = new_ref_mgr();

@@ -18,19 +18,25 @@ void init_files(FILE *efile, FILE *vfile)
     verbfile = vfile;
 }
 
+/* Optional function to call when fatal error encountered */
+void (*fatal_fun)() = NULL;
+
 void err(bool fatal, char *fmt, ...)
 {
-  va_list ap;
-  if (!errfile)
-    init_files(stdout, stdout);
-  va_start(ap, fmt);
-  fprintf(errfile, "Error: ");
-  vfprintf(errfile, fmt, ap);
-  fprintf(errfile, "\n");
-  fflush(errfile);
-  va_end(ap);
-  if (fatal)
-    exit(1);
+    va_list ap;
+    if (!errfile)
+	init_files(stdout, stdout);
+    va_start(ap, fmt);
+    fprintf(errfile, "Error: ");
+    vfprintf(errfile, fmt, ap);
+    fprintf(errfile, "\n");
+    fflush(errfile);
+    va_end(ap);
+    if (fatal) {
+	if (fatal_fun)
+	    fatal_fun();
+	exit(1);
+    }
 }
 
 void set_verblevel(int level)
@@ -38,40 +44,44 @@ void set_verblevel(int level)
     verblevel = level;
 }
 
-
 void report(int level, char *fmt, ...)
 {
-  va_list ap;
-  if (!verbfile)
-    init_files(stdout, stdout);
-  if (level <= verblevel) {
-    va_start(ap, fmt);
-    vfprintf(verbfile, fmt, ap);
-    fprintf(verbfile, "\n");
-    fflush(verbfile);
-    va_end(ap);
-  }
+    va_list ap;
+    if (!verbfile)
+	init_files(stdout, stdout);
+    if (level <= verblevel) {
+	va_start(ap, fmt);
+	vfprintf(verbfile, fmt, ap);
+	fprintf(verbfile, "\n");
+	fflush(verbfile);
+	va_end(ap);
+    }
 }
 
 void report_noreturn(int level, char *fmt, ...)
 {
-  va_list ap;
-  if (!verbfile)
-    init_files(stdout, stdout);
-  if (level <= verblevel) {
-    va_start(ap, fmt);
-    vfprintf(verbfile, fmt, ap);
-    fflush(verbfile);
-    va_end(ap);
-  }
+    va_list ap;
+    if (!verbfile)
+	init_files(stdout, stdout);
+    if (level <= verblevel) {
+	va_start(ap, fmt);
+	vfprintf(verbfile, fmt, ap);
+	fflush(verbfile);
+	va_end(ap);
+    }
 }
 
 /* Functions denoting failures */
 
 /* General failure */
 void fail_fun(char *format, char *msg) {
-  err(false, format, msg);
+    err(true, format, msg);
 }
+
+/* Maximum number of megabytes that application can use (0 = unlimited) */
+int mblimit = 0;
+/* Maximum number of seconds that application can use.  (0 = unlimited)  */
+int timelimit = 0;
 
 /* Keeping track of memory allocation */
 static size_t allocate_cnt = 0;
@@ -83,71 +93,84 @@ size_t peak_bytes = 0;
 size_t last_peak_bytes = 0;
 static size_t current_bytes = 0;
 
+static void check_exceed(size_t new_bytes) {
+    size_t limit_bytes = (size_t) mblimit << 20;
+    size_t request_bytes = new_bytes + current_bytes;
+    if (mblimit > 0 && request_bytes > limit_bytes) {
+	err(true, "Exceeded memory limit of %u megabytes with %lu bytes", mblimit, request_bytes);
+    }
+}
+
 /* Call malloc & exit if fails */
 void * malloc_or_fail(size_t bytes, char *fun_name) {
-  void *p = malloc(bytes);
-  if (!p) {
-    fail_fun("Malloc returned NULL in %s", fun_name);
-    return NULL;
-  }
-  allocate_cnt++;
-  allocate_bytes += bytes;
-  current_bytes += bytes;
-  peak_bytes = MAX(peak_bytes, current_bytes);
-  last_peak_bytes = MAX(last_peak_bytes, current_bytes);
-  return p;
+    check_exceed(bytes);
+    void *p = malloc(bytes);
+    if (!p) {
+	fail_fun("Malloc returned NULL in %s", fun_name);
+	return NULL;
+    }
+    allocate_cnt++;
+    allocate_bytes += bytes;
+    current_bytes += bytes;
+    peak_bytes = MAX(peak_bytes, current_bytes);
+    last_peak_bytes = MAX(last_peak_bytes, current_bytes);
+    return p;
 }
 
 /* Call calloc returns NULL & exit if fails */
 void *calloc_or_fail(size_t cnt, size_t bytes, char *fun_name) {
-  void *p = calloc(cnt, bytes);
-  if (!p) {
-    fail_fun("Calloc returned NULL in %s", fun_name);
-    return NULL;
-  }
-  allocate_cnt++;
-  allocate_bytes += cnt * bytes;
-  current_bytes += cnt * bytes;
-  peak_bytes = MAX(peak_bytes, current_bytes);
-  last_peak_bytes = MAX(last_peak_bytes, current_bytes);
+    check_exceed(cnt*bytes);
+    void *p = calloc(cnt, bytes);
+    if (!p) {
+	fail_fun("Calloc returned NULL in %s", fun_name);
+	return NULL;
+    }
+    allocate_cnt++;
+    allocate_bytes += cnt * bytes;
+    current_bytes += cnt * bytes;
+    peak_bytes = MAX(peak_bytes, current_bytes);
+    last_peak_bytes = MAX(last_peak_bytes, current_bytes);
 
-  return p;
+    return p;
 }
 
 /* Call realloc returns NULL & exit if fails.
    Require explicit indication of current allocation */
 void * realloc_or_fail(void *old, size_t old_bytes, size_t new_bytes,
 		       char *fun_name) {
-  void *p = realloc(old, new_bytes);
-  if (!p) {
-    fail_fun("Realloc returned NULL in %s", fun_name);
-    return NULL;
-  }
-  allocate_cnt++;
-  allocate_bytes += new_bytes;
-  current_bytes += (new_bytes-old_bytes);
-  peak_bytes = MAX(peak_bytes, current_bytes);
-  last_peak_bytes = MAX(last_peak_bytes, current_bytes);
-  free_cnt++;
-  free_bytes += old_bytes;
-  return p;
+    if (new_bytes > old_bytes) 
+	check_exceed(new_bytes-old_bytes);
+    void *p = realloc(old, new_bytes);
+    if (!p) {
+	fail_fun("Realloc returned NULL in %s", fun_name);
+	return NULL;
+    }
+    allocate_cnt++;
+    allocate_bytes += new_bytes;
+    current_bytes += (new_bytes-old_bytes);
+    peak_bytes = MAX(peak_bytes, current_bytes);
+    last_peak_bytes = MAX(last_peak_bytes, current_bytes);
+    free_cnt++;
+    free_bytes += old_bytes;
+    return p;
 }
 
 char *strsave_or_fail(char *s, char *fun_name) {
-  if (!s)
-    return NULL;
-  int len = strlen(s);
-  char *ss = malloc(len+1);
-  if (!ss) {
-    fail_fun("strsave failed in %s", fun_name);
-  }
-  allocate_cnt++;
-  allocate_bytes += len+1;
-  current_bytes += len+1;
-  peak_bytes = MAX(peak_bytes, current_bytes);
-  last_peak_bytes = MAX(last_peak_bytes, current_bytes);
+    if (!s)
+	return NULL;
+    size_t len = strlen(s);
+    check_exceed(len+1);
+    char *ss = malloc(len+1);
+    if (!ss) {
+	fail_fun("strsave failed in %s", fun_name);
+    }
+    allocate_cnt++;
+    allocate_bytes += len+1;
+    current_bytes += len+1;
+    peak_bytes = MAX(peak_bytes, current_bytes);
+    last_peak_bytes = MAX(last_peak_bytes, current_bytes);
 
-  return strcpy(ss, s);
+    return strcpy(ss, s);
 }
 
 /* Free block, as from malloc, realloc, or strsave */
@@ -185,8 +208,8 @@ void free_string(char *s) {
 /* Report current allocation status */
 void mem_status(FILE *fp) {
     fprintf(fp,
-"Allocated cnt/bytes: %lu/%lu.  Freed cnt/bytes: %lu/%lu.\n"
-"  Peak bytes %lu, Last peak bytes %ld, Current bytes %ld\n",
+	    "Allocated cnt/bytes: %lu/%lu.  Freed cnt/bytes: %lu/%lu.\n"
+	    "  Peak bytes %lu, Last peak bytes %ld, Current bytes %ld\n",
 	    (long unsigned) allocate_cnt, (long unsigned) allocate_bytes,
 	    (long unsigned) free_cnt, (long unsigned) free_bytes,
 	    (long unsigned) peak_bytes, 

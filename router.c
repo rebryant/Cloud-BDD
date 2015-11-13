@@ -228,7 +228,7 @@ static void run_router() {
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {
-		    err(false, "Unexpected EOF from controller");
+		    err(true, "Unexpected EOF from controller (fatal)");
 		} else if (set_member(new_conn_set, (word_t) fd, true)) {
 		    err(false, "Unexpected EOF from new connection, fd %d", fd);
 		} else {

@@ -5,7 +5,7 @@ CUDDINC= -I$(CUDDDIR)/cudd -I$(CUDDDIR)/mtr -I$(CUDDDIR)/epd -I$(CUDDDIR)/util
 CUDDLIBS = $(CUDDDIR)/cudd/libcudd.a  $(CUDDDIR)/mtr/libmtr.a  $(CUDDDIR)/st/libst.a $(CUDDDIR)/epd/libepd.a $(CUDDDIR)/util/libutil.a -lm
 
 CC=gcc
-# CFLAGS= -Wall -g
+#CFLAGS= -Wall -g
 CFLAGS = -Wall -O2
 
 # Optionally test version with very small hash signatures to stress aliasing code

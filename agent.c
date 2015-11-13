@@ -650,7 +650,7 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
 	chunk_ptr msg = chunk_read_unbuffered(controller_fd, &eof);
 	if (eof) {
 	    /* Unexpected EOF */
-	    err(false, "Unexpected EOF from controller (ignored)");
+	    err(true, "Unexpected EOF from controller (fatal)");
 	    close(controller_fd);
 	    done = true; ok = false;
 	}
@@ -798,7 +798,7 @@ void run_worker() {
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {
-		    err(false, "Unexpected EOF from controller (ignored)");
+		    err(true, "Unexpected EOF from controller (fatal)");
 		} else {
 		    err(false,
 			"Unexpected EOF from router with fd %d (ignored)", fd);
@@ -935,7 +935,7 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {
-		    err(false, "Unexpected EOF from controller (ignored)");
+		    err(true, "Unexpected EOF from controller (fatal)");
 		} else {
 		    err(false,
 			"Unexpected EOF from router with fd %d (ignored)", fd);
@@ -1042,6 +1042,8 @@ void run_client(char *infile_name) {
 	maxcfd = 0;
 	add_cfd(controller_fd);
 	cmd_select(maxcfd+1, &cset, NULL, NULL, NULL);
+	if (cmd_done())
+	    break;
 	int fd;
 	for (fd = 0; fd <= maxcfd; fd++) {
 	    if (!FD_ISSET(fd, &cset))
@@ -1051,7 +1053,7 @@ void run_client(char *infile_name) {
 	    if (eof) {
 		/* Unexpected EOF */
 		if (fd == controller_fd) {
-		    err(false, "Unexpected EOF from controller (ignored)");
+		    err(true, "Unexpected EOF from controller (fatal)");
 		} else {
 		    err(false,
 "Unexpected EOF from unexpected source. fd %d (ignored)", fd);
