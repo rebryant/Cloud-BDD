@@ -363,6 +363,8 @@ bool do_agent_kill(int argc, char *argv[]) {
 
 bool do_agent_flush(int argc, char *argv[]) {
     chunk_ptr msg = msg_new_flush();
+    /* Further command processing must wait until received statistics from controller */
+    block_console();
     bool ok = chunk_write(controller_fd, msg);
     if (ok)
 	report(3, "Notified controller that want to flush system");
@@ -376,6 +378,8 @@ bool do_agent_flush(int argc, char *argv[]) {
 
 bool do_agent_gc(int argc, char *argv[]) {
     chunk_ptr msg = msg_new_gc_start();
+    /* Further command processing must wait until gc completes */
+    block_console();
     bool ok = chunk_write(controller_fd, msg);
     chunk_free(msg);
     if (ok)
@@ -1084,6 +1088,8 @@ void run_client(char *infile_name) {
 			stat_helper(msg);
 		    }
 		    chunk_free(msg);
+		    /* Client can proceed with next command */
+		    unblock_console();
 		    break;
 		case MSG_KILL:
 		    chunk_free(msg);
@@ -1116,7 +1122,6 @@ void run_client(char *infile_name) {
 }
 
 static void gc_start(unsigned code) {
-    block_console();
     gc_state = GC_ACTIVE;
     report(3, "Starting GC");
     if (isclient) {
@@ -1152,5 +1157,7 @@ static void gc_finish(unsigned code) {
     }
     gc_state = GC_IDLE;
     gc_generation++;
+    /* Allow command processing to continue */
     unblock_console();
 }
+

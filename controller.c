@@ -685,7 +685,7 @@ static void run_controller(char *infile_name) {
 		    finish_cmd();
 		    return;
 		case MSG_DO_FLUSH:
-		    /* Iniitiate a flush operation */
+		    /* Initiate a flush operation */
 		    chunk_free(msg);
 		    flush_requestor_fd = fd;
 		    do_controller_flush_cmd(0, NULL);
