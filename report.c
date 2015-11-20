@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
+#include <signal.h>
+#include <unistd.h>
 #include <stdbool.h>
 #include "report.h"
 
@@ -219,4 +221,14 @@ void mem_status(FILE *fp) {
 
 void reset_peak_bytes() {
     last_peak_bytes = current_bytes;
+}
+
+void sigalrmhandler(int sig) {
+    err(true, "Timeout after %d seconds", timelimit);
+}
+
+void change_timeout(int oldval) {
+    /* alarm function will correctly cancel existing alarms */
+    signal(SIGALRM, sigalrmhandler);
+    alarm(timelimit);
 }

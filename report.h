@@ -10,6 +10,7 @@ void set_verblevel(int level);
 
 /* Maximum number of megabytes that application can use (0 = unlimited) */
 extern int mblimit;
+
 /* Maximum number of seconds that application can use.  (0 = unlimited)  */
 extern int timelimit;
 
@@ -63,3 +64,7 @@ size_t last_peak_bytes;
 
 /* Reset last_peak_bytes */
 void reset_peak_bytes();
+
+/* Change value of timeout */
+void change_timeout(int oldval);
+

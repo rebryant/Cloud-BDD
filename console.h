@@ -13,12 +13,17 @@ struct CELE {
     cmd_ptr next;
 };
 
+/* Optionally supply function that gets invoked when parameter changes */
+typedef void (*setter_function)(int oldval);
+
 /* Integer-valued parameters */
 typedef struct PELE param_ele, *param_ptr;
 struct PELE {
     char *name;
     int *valp;
     char *documentation;
+    /* Function that gets called whenever parameter changes */
+    setter_function setter;
     param_ptr next;
 };
     
@@ -29,7 +34,8 @@ void init_cmd();
 void add_cmd(char *name, cmd_function operation, char *documentation);
 
 /* Add a new parameter */
-void add_param(char *name, int *valp, char *doccumentation);
+void add_param(char *name, int *valp, char *doccumentation,
+	       setter_function setter);
 
 /* Execute a command from a command line */
 bool interpret_cmd(char *cmdline);

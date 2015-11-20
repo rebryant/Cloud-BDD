@@ -119,11 +119,12 @@ void init_cmd() {
 	    " file         | Read commands from source file");
     add_cmd("time", do_time_cmd,       " cmd arg ...  | Time command execution");
     add_cmd("#", do_comment_cmd,       " ...          | Display comment");
-    add_param("verbose", &verblevel, "Verbosity level");
-    add_param("error", &err_limit,   "Number of errors until exit");
-    add_param("echo", &echo, "Do/don't echo commands");
-    add_param("megabytes", &mblimit, "Maximum megabytes allowed");
-    add_param("seconds", &timelimit, "Maximum seconds allowed");
+    add_param("verbose", &verblevel, "Verbosity level", NULL);
+    add_param("error", &err_limit,   "Number of errors until exit", NULL);
+    add_param("echo", &echo, "Do/don't echo commands", NULL);
+    add_param("megabytes", &mblimit, "Maximum megabytes allowed", NULL);
+    add_param("seconds", &timelimit, "Maximum seconds allowed",
+	      change_timeout);
     init_in();
     init_time();
 }
@@ -145,7 +146,8 @@ void add_cmd(char *name, cmd_function operation, char *documentation) {
 }
 
 /* Add a new parameter */
-void add_param(char *name, int *valp, char *documentation) {
+void add_param(char *name, int *valp, char *documentation,
+	       setter_function setter) {
     param_ptr next_param = param_list;
     param_ptr *last_loc = &param_list;
     while (next_param && strcmp(name, next_param->name) < 0) {
@@ -156,6 +158,7 @@ void add_param(char *name, int *valp, char *documentation) {
     ele->name = name;
     ele->valp = valp;
     ele->documentation = documentation;
+    ele->setter = setter;
     ele->next = next_param;
     *last_loc = ele;
 }
@@ -351,7 +354,10 @@ bool do_option_cmd(int argc, char *argv[]) {
 	param_ptr plist = param_list;
 	while (!found && plist) {
 	    if (strcmp(plist->name, name) == 0) {
+  	        int oldval = *plist->valp;
 		*plist->valp = value;
+		if (plist->setter)
+		    plist->setter(oldval);
 		found = true;
 	    } else
 		plist = plist->next;

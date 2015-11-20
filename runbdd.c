@@ -128,8 +128,8 @@ static void console_init(bool do_dist) {
 	    " v1 v2 ...      | Create variables");
     add_cmd("xor", do_xor,
 	    " fd f1 f2 ...   | fd <- f1 ^ f2 ^ ...");
-    add_param("collect", &enable_collect, "Enable garbage collection");
-    add_param("allvars", &all_vars, "Count all variables in support");
+    add_param("collect", &enable_collect, "Enable garbage collection", NULL);
+    add_param("allvars", &all_vars, "Count all variables in support", NULL);
 }
 
 static bool bdd_quit(int argc, char *argv[]) {

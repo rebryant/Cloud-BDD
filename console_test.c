@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
     init_cmd();
     add_cmd("times", do_times, "Multiply");
     add_cmd("plus", do_plus, "Add");
-    add_param("value", &value, "Value");
+    add_param("value", &value, "Value", NULL);
     add_quit_helper(app_quit);
     run_console(NULL);
     finish_cmd();
