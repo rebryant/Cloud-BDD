@@ -4,7 +4,7 @@ CUDDDIR = ./cudd-symlink
 CUDDINC= -I$(CUDDDIR)/cudd -I$(CUDDDIR)/mtr -I$(CUDDDIR)/epd -I$(CUDDDIR)/util
 CUDDLIBS = $(CUDDDIR)/cudd/libcudd.a  $(CUDDDIR)/mtr/libmtr.a  $(CUDDDIR)/st/libst.a $(CUDDDIR)/epd/libepd.a $(CUDDDIR)/util/libutil.a -lm
 
-VLEVEL=2
+VLEVEL=3
 
 CC=gcc
 #CFLAGS= -Wall -g -DRPT=$(VLEVEL)
