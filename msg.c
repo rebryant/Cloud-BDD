@@ -385,7 +385,9 @@ int open_clientfd(char *hostname, unsigned port) {
     }
     freeaddrinfo(listp);
     if (p) {
+#if RPT >= 4
 	report(4, "Opened connection to  %s:%s.", hostname, sport);
+#endif
 	return clientfd;
     } else {
 	err(false, "Couldn't open connection to %s:%s", hostname, sport);
@@ -422,7 +424,9 @@ int accept_connection(int listenfd, unsigned *ipp) {
     if (getnameinfo((struct sockaddr *) &clientaddr, clientlen,
 		    hostname, INET_ADDRSTRLEN,
 		    sport, 10, NI_NUMERICHOST | NI_NUMERICSERV) == 0) {
+#if RPT >= 3
 	report(3, "Accepted connection from %s:%s", hostname, sport);
+#endif
     }
     if (ipp) {
 	struct sockaddr_in *cap = (struct sockaddr_in *) &clientaddr;

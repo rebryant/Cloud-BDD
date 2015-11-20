@@ -152,8 +152,9 @@ int match_self_ip(unsigned hip) {
     char ipv4str[INET_ADDRSTRLEN];
     unsigned nip = ntohl(hip);
     inet_ntop(AF_INET, &nip, ipv4str, INET_ADDRSTRLEN);
+#if RPT >= 5
     report(5, "Provided IP is: %s\n", ipv4str);
-
+#endif
     struct ifaddrs *ifap;
     int x;
     if ((x = getifaddrs(&ifap)) == -1)
@@ -173,8 +174,9 @@ int match_self_ip(unsigned hip) {
             interface_ip =
 		((struct sockaddr_in *)(curr->ifa_addr))->sin_addr.s_addr;
             inet_ntop(AF_INET, &interface_ip, ipv4str, INET_ADDRSTRLEN);
+#if RPT >= 5
             report(5, "System's IP is: %s\n", ipv4str);
-
+#endif
             if (interface_ip == nip)
                 return 1;
         }
@@ -199,12 +201,17 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port,
 	err(true, 
 	    "Cannot create connection to controller at %s:%u",
 	    controller_name, controller_port);
-    else
+    else {
+#if RPT >= 2
 	report(2, "Connection to controller has descriptor %d", controller_fd);
+#endif
+    }
     msg = isclient ? msg_new_register_client() : msg_new_register_worker();
     bool sok = chunk_write(controller_fd, msg);
+#if RPT >= 3
     report(3, "Sent %s registration to controller",
 	   isclient ? "client" : "worker");
+#endif
     chunk_free(msg);
     if (!sok)
 	err(true, "Could not send registration message to controller");
@@ -232,9 +239,11 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port,
 		nrouters = msg_get_header_wordcount(h);
 		router_fd_array = calloc_or_fail(nrouters, sizeof(int),
 						 "init_agent");
+#if RPT >= 3
 		report(3,
 "Ack from controller.  Agent Id %u.  %d workers.  %d routers.",
 		       own_agent, nworkers, nrouters);
+#endif
 		first = false;
 	    }
 	    int i;
@@ -243,16 +252,20 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port,
 		int fd;
 		unsigned ip = msg_get_header_ip(h);
 		unsigned port = msg_get_header_port(h);
+#if RPT >= 4
 		report(4, "Attempting to add router %u with ip 0x%x, port %d",
 		       ridx, ip, port);
+#endif
 		fd = open_clientfd_ip(ip, port);
 		if (fd < 0) {
 		    err(true, "Couldn't add router with ip 0x%x, port %d",
 			ip, port);
 		} else {
 		    router_fd_array[ridx++] = fd;
+#if RPT >= 3
 		    report(3, "Added router %u with ip 0x%x, port %d, fd %d",
 			   ridx, ip, port, fd);
+#endif
 		    if (!chunk_write(fd, amsg)) {
 			err(true, 
 "Couldn't send agent registration message to router with ip 0x%x, port %u",
@@ -263,9 +276,11 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port,
 			match_self_ip(ip))
                     {
                         local_router_fd = fd;
+#if RPT >= 5
                         report(5,
 "Router with fd %d designated as local router and prioritized for sending packets",
 			       fd);
+#endif
                     }
 		}
 	    }
@@ -282,7 +297,9 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port,
 	}
     }
     chunk_free(amsg);
+#if RPT >= 2
     report(2, "All %d routers connected", nrouters);
+#endif
     if (isclient) {
 	add_quit_helper(quit_agent);
 	add_cmd("kill", do_agent_kill,
@@ -295,7 +312,9 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port,
 	/* Worker must notify controller that it's ready */
 	chunk_ptr rmsg = msg_new_worker_ready(own_agent);
 	if (chunk_write(controller_fd, rmsg)) {
+#if RPT >= 3
 	    report(3, "Notified controller that worker is ready");
+#endif
 	} else {
 	    err(true, "Couldn't notify controller that worker is ready");
 	}
@@ -338,8 +357,14 @@ bool quit_agent(int argc, char *argv[]) {
 void agent_show_stat() {
     /* Gather statistics information */
     agent_stat_counter[STATA_BYTE_PEAK] = last_peak_bytes;
+    agent_stat_counter[STATA_MESSAGES_SENT] = chunks_sent;
+    agent_stat_counter[STATA_MESSAGE_BYTES] = chunk_bytes_sent;
     report(0, "Peak bytes %" PRIu64,
 	   agent_stat_counter[STATA_BYTE_PEAK]);
+    report(0, "Messages sent %" PRIu64,
+	   agent_stat_counter[STATA_MESSAGES_SENT]);
+    report(0, "Message bytes sent %" PRIu64,
+	   agent_stat_counter[STATA_MESSAGE_BYTES]);
     report(0,
 "Operations.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
 	   agent_stat_counter[STATA_OPERATION_TOTAL],
@@ -353,7 +378,9 @@ void agent_show_stat() {
 bool do_agent_kill(int argc, char *argv[]) {
     chunk_ptr msg = msg_new_kill();
     if (chunk_write(controller_fd, msg)) {
+#if RPT >= 3
 	report(3, "Notified controller that want to kill system");
+#endif
     } else {
 	err(false, "Couldn't notify controller that want to kill system");
     }
@@ -366,10 +393,13 @@ bool do_agent_flush(int argc, char *argv[]) {
     /* Further command processing must wait until received statistics from controller */
     block_console();
     bool ok = chunk_write(controller_fd, msg);
-    if (ok)
+    if (ok) {
+#if RPT >= 3
 	report(3, "Notified controller that want to flush system");
-    else
+#endif
+    } else {
 	err(false, "Couldn't notify controller that want to flush system");
+    }
     chunk_free(msg);
     gc_state = GC_IDLE;
     gc_generation = 0;
@@ -382,11 +412,14 @@ bool do_agent_gc(int argc, char *argv[]) {
     block_console();
     bool ok = chunk_write(controller_fd, msg);
     chunk_free(msg);
-    if (ok)
+    if (ok) {
+#if RPT >= 4	
 	report(4, "Notified controller that want to run garbage collection");
-    else
+#endif
+    } else {
 	err(false,
 	    "Couldn't notify controller that want to run garbage collection");
+    }
     return ok;
 }
 
@@ -444,13 +477,15 @@ bool send_op(chunk_ptr msg) {
     dword_t dh = chunk_get_dword(msg, 0);
     unsigned agent = msg_get_dheader_agent(dh);
     unsigned code = msg_get_dheader_code(dh);
-    word_t id = msg_get_dheader_op_id(dh);
 
     if (code == MSG_OPERATION) {
 	agent_stat_counter[STATA_OPERATION_TOTAL]++;
 	if (self_route && agent == own_agent) {
 	    agent_stat_counter[STATA_OPERATION_LOCAL]++;
+#if RPT >= 6
+	    word_t id = msg_get_dheader_op_id(dh);
 	    report(6, "Routing operator with id 0x%lx to self", id);
+#endif
 	    receive_operation(chunk_clone(msg));
 	    return true;
 	}
@@ -459,7 +494,10 @@ bool send_op(chunk_ptr msg) {
 	agent_stat_counter[STATA_OPERAND_TOTAL]++;
 	if (self_route && agent == own_agent && !isclient) {
 	    agent_stat_counter[STATA_OPERAND_LOCAL]++;
+#if RPT >= 6
+	    word_t id = msg_get_dheader_op_id(dh);
 	    report(6, "Routing operand with id 0x%lx to self", id);
+#endif
 	    receive_operand(chunk_clone(msg));
 	    return true;
 	}
@@ -470,21 +508,30 @@ bool send_op(chunk_ptr msg) {
     {
         unsigned idx = random() % nrouters;
         rfd = router_fd_array[idx];
+#if RPT >= 5
+	word_t id = msg_get_dheader_op_id(dh);
         report(5,
 "Sending message with id 0x%x through router %u (fd %d)", id, idx, rfd);
+#endif
     }
     else
     {
         rfd = local_router_fd;
+#if RPT >= 5
+	word_t id = msg_get_dheader_op_id(dh);
         report(5,
 "Sending message with id 0x%x through the local router (fd %d)", id, rfd);
+#endif
     }
 
     bool ok = chunk_write(rfd, msg);
-    if (ok)
+    if (ok) {
+#if RPT >= 5
 	report(5, "Message sent");
-    else
+#endif
+    } else {
 	err(false, "Failed");
+    }
     return ok;
 }
 
@@ -501,14 +548,14 @@ void op_insert_word(chunk_ptr op, word_t wd, size_t offset) {
     chunk_insert_word(op, wd, offset);
     nvmask = vmask | idx;
     chunk_insert_word(op, nvmask, 2);
-    if (verblevel >= 6) {
-	dword_t dh = chunk_get_dword(op, 0);
-	word_t id = msg_get_dheader_op_id(dh);
-	report(6,
-	       "Inserted word, offset %d, operation with id 0x%lx.\n"
-	       "  Total size = %d.  Vmask 0x%lx --> 0x%lx",
-	       (int) offset, id, op->length, vmask, nvmask);
-    }
+#if RPT >= 6
+    dword_t dh = chunk_get_dword(op, 0);
+    word_t id = msg_get_dheader_op_id(dh);
+    report(6,
+	   "Inserted word, offset %d, operation with id 0x%lx.\n"
+	   "  Total size = %d.  Vmask 0x%lx --> 0x%lx",
+	   (int) offset, id, op->length, vmask, nvmask);
+#endif
 }
 
 /* Insert double word into operator, updating its valid mask.
@@ -527,28 +574,28 @@ void op_insert_dword(chunk_ptr op, dword_t dwd, size_t offset) {
     chunk_insert_dword(op, dwd, offset);
     nvmask = vmask | imask;
     chunk_insert_word(op, nvmask, 2);
-    if (verblevel >= 6) {
-	dword_t dh = chunk_get_dword(op, 0);
-	word_t id = msg_get_dheader_op_id(dh);
-	report(6,
-"Inserted double word at offset %d into operation with id 0x%lx.\n"
-"  Total size = %d.  Vmask 0x%lx --> 0x%lx",
-	       (int) offset, id, op->length, vmask, nvmask);
-    }
+#if RPT >= 6
+    dword_t dh = chunk_get_dword(op, 0);
+    word_t id = msg_get_dheader_op_id(dh);
+    report(6,
+	   "Inserted double word at offset %d into operation with id 0x%lx.\n"
+	   "  Total size = %d.  Vmask 0x%lx --> 0x%lx",
+	   (int) offset, id, op->length, vmask, nvmask);
+#endif
 }
 
 /* Insert an operand into an operation */
 void op_insert_operand(chunk_ptr op, chunk_ptr oper, unsigned offset) {
     size_t i;
     size_t n = oper->length-OPER_HEADER_CNT;
-    if (verblevel >= 6) {
-	dword_t dh = chunk_get_dword(op, 0);
-	word_t vmask = chunk_get_word(op, 2);
-	unsigned opcode = msg_get_dheader_opcode(dh);
-	report(5,
-"Inserting operand with %u words into op with opcode %u at offset %u.  Mask 0x%lx",
-	       (unsigned) n, opcode, offset, vmask);
-    }
+#if RPT >= 5
+    dword_t dh = chunk_get_dword(op, 0);
+    unsigned opcode = msg_get_dheader_opcode(dh);
+    word_t vmask = chunk_get_word(op, 2);
+    report(5,
+	   "Inserting operand with %u words into op with opcode %u at offset %u.  Mask 0x%lx",
+	   (unsigned) n, opcode, offset, vmask);
+#endif
     for (i = 0; i < n; i++) {
 	word_t w = chunk_get_word(oper, i+OPER_HEADER_CNT);
 	op_insert_word(op, w, i+offset);
@@ -573,7 +620,9 @@ static fd_set cset;
 static int maxcfd = 0;
 
 static void add_cfd(int fd) {
+#if RPT >= 6
     report(6, "Adding fd %d to command set", fd);
+#endif
     FD_SET(fd, &cset);
     if (fd > maxcfd)
 	maxcfd = fd;
@@ -584,7 +633,9 @@ static fd_set rset;
 static int maxrfd = 0;
 
 static void add_rfd(int fd) {
+#if RPT >= 6
     report(6, "Adding fd %d to waiting operand set", fd);
+#endif
     FD_SET(fd, &rset);
     if (fd > maxrfd)
 	maxrfd = fd;
@@ -618,7 +669,9 @@ static bool check_fire(chunk_ptr op) {
     word_t id = msg_get_dheader_op_id(dh);
     op_ptr ls = op_list;
     op_handler opfun = NULL;
+#if RPT >= 5
     report(5, "Firing operation with id 0x%lx", id);
+#endif
     while (ls) {
 	if (ls->opcode == opcode) {
 	    opfun = ls->opfun;
@@ -663,15 +716,19 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
 	switch (code) {
 	case MSG_DO_FLUSH:
 	    chunk_free(msg);
+#if RPT >= 5
 	    report(5,
 "Received flush message from controller, superceding client global operation");
+#endif
 	    if (flush_helper) {
 		flush_helper();
 	    }
 	    done = true; ok = false;
 	    break;
 	case MSG_STAT:
+#if RPT >= 5
 	    report(5, "Received summary statistics from controller");
+#endif
 	    if (stat_helper) {
 		/* Get a copy of the byte usage from memory allocator */
 		stat_helper(msg);
@@ -680,21 +737,27 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
 	    break;
 	case MSG_KILL:
 	    chunk_free(msg);
+#if RPT >= 5
 	    report(5,
 "Received kill message from controller, superceding client global operation");
+#endif
 	    finish_cmd();
 	    done = true; ok = false;
 	    break;
 	case MSG_CLIOP_ACK:
 	    chunk_free(msg);
+#if RPT >= 5
 	    report(5,
 "Received acknowledgement for client global operation");
+#endif
 	    done = true; ok = true;
 	    break;
 	case MSG_GC_START:
 	    /* Got notice that should initiate garbage collection.
 	       Defer until current operation done */
+#if RPT >= 3
 	    report(3, "Deferring GC start");
+#endif
 	    chunk_free(msg);
 	    gc_state = GC_DEFER;
 	    break;
@@ -725,7 +788,9 @@ static void receive_operation(chunk_ptr op) {
     word_t w;
     dword_t dh = chunk_get_dword(op, 0);
     word_t id = msg_get_dheader_op_id(dh);
+#if RPT >= 5
     report(5, "Received operation.  id 0x%lx", id);
+#endif
     /* Check if there's already an outstanding operation with the same ID */
     if (keyvalue_find(operator_table, id, NULL)) {
 	err(false, "Operator ID collision encountered.  Op id = 0x%lx", id);
@@ -738,21 +803,27 @@ static void receive_operation(chunk_ptr op) {
 	while (ls) {
 	    operand_ptr ele = ls;
 	    op_insert_operand(op, ls->operand, ls->offset);
+#if RPT >= 5
 	    report(5,
 "Inserted operand with offset %u into received operator with id 0x%lx",
 		   ls->offset, id);
+#endif
 	    chunk_free(ls->operand);
 	    ls = ls->next;
 	    free_block(ele, sizeof(operand_ele));
 	}
     }
     if (check_fire(op)) {
+#if RPT >= 5
 	report(5,
 "Completed firing of newly received operation with id 0x%lx", id);
+#endif
 	chunk_free(op);
     } else {
 	keyvalue_insert(operator_table, (word_t) id, (word_t) op);
+#if RPT >= 5
 	report(5, "Queued operation with id 0x%lx", id);
+#endif
     }
 }
 
@@ -766,18 +837,24 @@ static void receive_operand(chunk_ptr oper) {
 	/* Operation exists */
 	chunk_ptr op = (chunk_ptr) w;
 	op_insert_operand(op, oper, offset);
+#if RPT >= 5
 	report(5,
 "Inserted operand with offset %u into existing operator with id 0x%lx",
 	       offset, id);
+#endif
 	chunk_free(oper);
 	if (check_fire(op)) {
+#if RPT >= 5
 	    report(5, "Completed firing of dequeued operation with id 0x%lx", id);
+#endif
 	    keyvalue_remove(operator_table, id, NULL, NULL);
 	    chunk_free(op);
 	}
     } else {
 	add_deferred_operand(id, oper, offset);
+#if RPT >= 5
 	report(5, "Deferred operand with offset %u for id 0x%lx", offset, id);
+#endif
     }
 }
 
@@ -825,19 +902,25 @@ void run_worker() {
 		switch(code) {
 		case MSG_KILL:
 		    chunk_free(msg);
+#if RPT >= 5
 		    report(5, "Received kill message from controller");
+#endif
 		    quit_agent(0, NULL);
 		    return;
 		case MSG_DO_FLUSH:
 		    chunk_free(msg);
+#if RPT >= 5
 		    report(5, "Received flush message from controller");
+#endif
 		    if (flush_helper) {
 			chunk_ptr msg = flush_helper();
 			if (!msg)
 			    break;
 			if (chunk_write(controller_fd, msg)) {
+#if RPT >= 5
 			    report(5,
 				   "Sent statistics information to controller");
+#endif
 			} else {
 			    err(false,
 "Failed to send statistics information to controller");
@@ -855,9 +938,11 @@ void run_worker() {
 		    chunk_free(msg);
 		    chunk_ptr rmsg = msg_new_cliop_ack(agent);
 		    if (chunk_write(controller_fd, rmsg)) {
+#if RPT >= 5
 			report(5,
 			       "Acknowledged client operation data.  Agent = %u",
 			       agent);
+#endif
 		    } else {
 			err(false,
 "Failed to acknowledge client operation data.  Agent = %u",
@@ -866,7 +951,9 @@ void run_worker() {
 		    chunk_free(rmsg);
 		    break;
 		case MSG_CLIOP_ACK:
+#if RPT >= 5
 		    report(5, "Received client operation ack.  Agent = %u", agent);
+#endif
 		    if (gop_finish_helper)
 			gop_finish_helper(agent);
 		    chunk_free(msg);
@@ -958,12 +1045,16 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		switch(code) {
 		case MSG_KILL:
 		    chunk_free(msg);
-		    report(1, "Received kill message from controller");
+#if RPT >= 2
+		    report(2, "Received kill message from controller");
+#endif
 		    quit_agent(0, NULL);
 		    break;
 		case MSG_DO_FLUSH:
 		    chunk_free(msg);
-		    report(1, "Received flush message from controller");
+#if RPT >= 2
+		    report(2, "Received flush message from controller");
+#endif
 		    if (flush_helper) {
 			flush_helper(0, NULL);
 		    }
@@ -971,7 +1062,9 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		case MSG_GC_START:
 		    /* Got notice that should initiate garbage collection.
 		       Defer until current operation done */
+#if RPT >= 3
 		    report(3, "Deferring GC start");
+#endif
 		    chunk_free(msg);
 		    gc_state = GC_DEFER;
 		    break;
@@ -998,7 +1091,9 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		case MSG_OPERAND:
 		    dh = chunk_get_dword(msg, 0);
 		    id = msg_get_dheader_op_id(dh);
+#if RPT >= 5
 		    report(5, "Received operand with id 0x%lx", id);
+#endif
 		    rval = msg;
 		    local_done = true;
 		    break;
@@ -1022,16 +1117,21 @@ chunk_ptr fire_and_wait(chunk_ptr msg) {
 
 void request_gc() {
     if (gc_state != GC_IDLE) {
+#if RPT >= 4
 	report(4, "GC request when not in GC_IDLE state");
+#endif
 	return;
     }
     unsigned gen = gc_generation+1;
     chunk_ptr msg = msg_new_gc_request(gen);
-    if (chunk_write(controller_fd, msg))
+    if (chunk_write(controller_fd, msg)) {
+#if RPT >= 4
 	report(4, "Requested garbage collection with generation %u", gen);
-    else
+#endif
+    } else {
 	err(false,
 	    "Failed to request garbage collection with generation %u", gen);
+    }
     chunk_free(msg);
     gc_state = GC_REQUESTED;
 }
@@ -1076,13 +1176,17 @@ void run_client(char *infile_name) {
 		switch(code) {
 		case MSG_DO_FLUSH:
 		    chunk_free(msg);
+#if RPT >= 5
 		    report(5, "Received flush message from controller");
+#endif
 		    if (flush_helper) {
 			flush_helper();
 		    }
 		    break;
 		case MSG_STAT:
+#if RPT >= 5
 		    report(5, "Received summary statistics from controller");
+#endif
 		    if (stat_helper) {
 			/* Get a copy of the byte usage from mem. allocator */
 			stat_helper(msg);
@@ -1093,7 +1197,9 @@ void run_client(char *infile_name) {
 		    break;
 		case MSG_KILL:
 		    chunk_free(msg);
+#if RPT >= 5
 		    report(5, "Received kill message from controller");
+#endif
 		    finish_cmd();
 		    break;
 		case MSG_GC_START:
@@ -1123,7 +1229,9 @@ void run_client(char *infile_name) {
 
 static void gc_start(unsigned code) {
     gc_state = GC_ACTIVE;
+#if RPT >= 3
     report(3, "Starting GC");
+#endif
     if (isclient) {
 	/* Client */
 	if (start_gc_handler)
@@ -1144,7 +1252,9 @@ static void gc_start(unsigned code) {
 }
 
 static void gc_finish(unsigned code) {
+#if RPT >= 3
     report(3, "Finishing GC");
+#endif
     if (isclient) {
 	if (finish_gc_handler)
 	    finish_gc_handler();

@@ -59,16 +59,23 @@ static void init_router(char *controller_name, unsigned controller_port) {
     unsigned myport = 0;
     if (!new_server(0, &listen_fd, &myport))
 	err(true, "Cannot set up server");
+#if RPT >= 3
     report(3, "Listening socket has descriptor %d", listen_fd);
+#endif
     controller_fd = open_clientfd(controller_name, controller_port);
     if (controller_fd < 0)
 	err(true, "Cannot create connection to controller at %s:%u",
 	    controller_name, controller_port);
-    else
+    else {
+#if RPT >= 3
 	report(3, "Connection to controller has descriptor %d", controller_fd);
+#endif
+    }
     chunk_ptr msg = msg_new_register_router(myport);
     bool sok = chunk_write(controller_fd, msg);
+#if RPT >= 3
     report(3, "Sent router registration to controller");
+#endif
     chunk_free(msg);
     if (!sok)
 	err(true, "Could not send registration message to controller");
@@ -127,7 +134,6 @@ static size_t outq_len() {
 static void insert_queue(chunk_ptr msg) {
     dword_t dh = chunk_get_dword(msg, 0);
     unsigned agent = msg_get_dheader_agent(dh);
-    word_t id = msg_get_dheader_op_id(dh);
     int fd;
     word_t w;
     if (keyvalue_find(routing_table, agent, &w)) {
@@ -149,7 +155,10 @@ static void insert_queue(chunk_ptr msg) {
     } else {
 	outq_head = outq_tail = ele;
     }
+#if RPT >= 2
+    word_t id = msg_get_dheader_op_id(dh);
     report(2, "Queued message with id 0x%lx for agent %u.", id, agent);
+#endif
 }
 
 static fd_set inset;
@@ -157,14 +166,18 @@ static fd_set outset;
 static int maxfd = 0;
 
 static void add_infd(int fd) {
+#if RPT >= 6
     report(6, "Adding fd %d to input set", fd);
+#endif
     FD_SET(fd, &inset);
     if (fd > maxfd)
 	maxfd = fd;
 }
 
 static void add_outfd(int fd) {
+#if RPT >= 6
     report(6, "Adding fd %d to output set", fd);
+#endif
     FD_SET(fd, &outset);
     if (fd > maxfd)
 	maxfd = fd;
@@ -217,7 +230,9 @@ static void run_router() {
 	    if (fd == listen_fd) {
 		int connfd = accept_connection(fd, NULL);
 		set_insert(new_conn_set, (word_t) connfd);
+#if RPT >= 4
 		report(4, "New connection with fd %d", connfd);
+#endif
 		continue;
 	    }
 	    bool eof;
@@ -236,7 +251,9 @@ static void run_router() {
 		    if (keyvalue_remove(inverse_table, (word_t) fd, NULL, &wa)) {
 			unsigned agent = wa;
 			keyvalue_remove(routing_table, (word_t) agent, NULL, NULL);
+#if RPT >= 5
 			report(3, "Disconnecting agent %u (fd %d)", agent, fd);
+#endif
 		    } else {
 			err(false, "EOF from unknown source, fd %d", fd);
 		    }
@@ -256,7 +273,9 @@ static void run_router() {
 		switch(code) {
 		case MSG_KILL:
 		    chunk_free(msg);
+#if RPT >= 1
 		    report(1, "Received kill message from controller");
+#endif
 		    return;
 		default:
 		    chunk_free(msg);
@@ -270,8 +289,10 @@ static void run_router() {
 		    chunk_free(msg);
 		    keyvalue_insert(routing_table, (word_t) agent, (word_t) fd);
 		    keyvalue_insert(inverse_table, (word_t) fd, (word_t) agent);
+#if RPT >= 3
 		    report(3, "Created routing table entry for agent %u, fd %d",
 			   agent, fd);
+#endif
 		    break;
 		default:
 		    chunk_free(msg);
@@ -314,10 +335,12 @@ static void run_router() {
 		ls = ls->next;
 		/* Send the message */
 		if (chunk_write(fd, outmsg)) {
+#if RPT >= 2
 		    dword_t dh = chunk_get_dword(outmsg, 0);
 		    word_t id = msg_get_dheader_op_id(dh);
 		    report(2, "Routed message with id 0x%lx to agent %u",
 			   id, agent);
+#endif
 		}
 		else
 		    err(false, "Couldn't send message to agent %u (ignored)",
@@ -381,5 +404,6 @@ int main(int argc, char *argv[]) {
     run_router();
     quit_router();
     mem_status(stdout);
+    chunk_status(stdout);
     return 0;
 }

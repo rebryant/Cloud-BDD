@@ -246,18 +246,18 @@ static ref_t ref_canonize_lookup(ref_mgr mgr, chunk_ptr ucp) {
 	    err(true, "Exceeded uniquifier bounds.  Hash = 0x%llx", h);
 	r = PACK_REF(0, BDD_FUNCTION, REF_GET_VAR(vref), h, uniquifier);
 	ls = ulist_new(ucp, r);
-	if (verblevel >= 4) {
-	    ref_t vref = chunk_get_word(ucp, 0);
-	    ref_t hiref = chunk_get_word(ucp, 1);
-	    ref_t loref = chunk_get_word(ucp, 2);
-	    char vbuf[24], hibuf[24], lobuf[24], rbuf[24];
-	    ref_show(vref, vbuf);
-	    ref_show(hiref, hibuf);
-	    ref_show(loref, lobuf);
-	    ref_show(r, rbuf);
-	    report(4, "Creating unique table entry [%s,%s,%s] --> %s",
-		   vbuf, hibuf, lobuf, rbuf);
-	}
+#if RPT >= 4
+	ref_t vref = chunk_get_word(ucp, 0);
+	ref_t hiref = chunk_get_word(ucp, 1);
+	ref_t loref = chunk_get_word(ucp, 2);
+	char vbuf[24], hibuf[24], lobuf[24], rbuf[24];
+	ref_show(vref, vbuf);
+	ref_show(hiref, hibuf);
+	ref_show(loref, lobuf);
+	ref_show(r, rbuf);
+	report(4, "Creating unique table entry [%s,%s,%s] --> %s",
+	       vbuf, hibuf, lobuf, rbuf);
+#endif
 	mgr->stat_counter[STATB_UNIQ_CURR]++;
 	if (mgr->stat_counter[STATB_UNIQ_CURR]
 	    > mgr->stat_counter[STATB_UNIQ_PEAK])
@@ -329,19 +329,22 @@ chunk_ptr ref_deref_lookup(ref_mgr mgr, ref_t r) {
 	    return ele->data;
 	ele = ele->next;
     }
-    if (ls && verblevel >= 3) {
+#if RPT >= 3
+    if (ls) {
 	char buf[24];
 	ref_show(r, buf);
 	report(3, "Looking for ref %s.  Found list in hash table, but no entry",
 	       buf);
 	ele = ls;
 	while (ele) {
+
 	    char ebuf[24];
 	    ref_show(ele->ref, ebuf);
 	    report(3, "\tMismatch with %s", ebuf);
 	    ele = ele->next;
 	}
     }
+#endif
     return NULL;
 }
 
@@ -375,9 +378,11 @@ void ref_deref(ref_mgr mgr, ref_t r,
 ref_t ref_ite_local(ref_mgr mgr, ref_t iref,
 		    ref_t tref, ref_t eref, chunk_ptr *ucpp) {
     ref_t r;
+#if RPT >= 4
     ref_t siref = iref;
     ref_t stref = tref;
     ref_t seref = eref;
+#endif
     mgr->stat_counter[STATB_ITE_CNT]++;
     /* Simple cases */
     if (iref == REF_ONE)
@@ -451,26 +456,26 @@ ref_t ref_ite_local(ref_mgr mgr, ref_t iref,
     }
     if (!REF_IS_RECURSE(r))
 	mgr->stat_counter[STATB_ITE_LOCAL_CNT]++;
-    if (verblevel >= 4) {
-	char sibuf[24], stbuf[24], sebuf[24];
-	ref_show(siref, sibuf);
-	ref_show(stref, stbuf);
-	ref_show(seref, sebuf);
-	if (REF_IS_RECURSE(r)) {
-	    char ibuf[24], tbuf[24], ebuf[24];
-	    ref_show(iref, ibuf);
-	    ref_show(tref, tbuf);
-	    ref_show(eref, ebuf);
-	    char *ns = REF_GET_NEG(r) ? "!" : "";
-	    report(4, "ITE Local(%s, %s, %s) -> %sITE(%s,%s,%s)",
-		   sibuf, stbuf, sebuf, ns, ibuf, tbuf, ebuf);
-	} else {
-	    char rbuf[24];
-	    ref_show(r, rbuf);
-	    report(4, "ITE Local(%s, %s, %s) -> %s",
-		   sibuf, stbuf, sebuf, rbuf);
-	}
+#if RPT >= 4
+    char sibuf[24], stbuf[24], sebuf[24];
+    ref_show(siref, sibuf);
+    ref_show(stref, stbuf);
+    ref_show(seref, sebuf);
+    if (REF_IS_RECURSE(r)) {
+	char ibuf[24], tbuf[24], ebuf[24];
+	ref_show(iref, ibuf);
+	ref_show(tref, tbuf);
+	ref_show(eref, ebuf);
+	char *ns = REF_GET_NEG(r) ? "!" : "";
+	report(4, "ITE Local(%s, %s, %s) -> %sITE(%s,%s,%s)",
+	       sibuf, stbuf, sebuf, ns, ibuf, tbuf, ebuf);
+    } else {
+	char rbuf[24];
+	ref_show(r, rbuf);
+	report(4, "ITE Local(%s, %s, %s) -> %s",
+	       sibuf, stbuf, sebuf, rbuf);
     }
+#endif
     return r;
 }
 
@@ -483,36 +488,34 @@ ref_t ref_ite_lookup(ref_mgr mgr, chunk_ptr ucp) {
 	mgr->stat_counter[STATB_ITE_HIT_CNT]++;
     } else
 	r = REF_RECURSE;
-
-    if (verblevel >= 4) {
-	ref_t iref = chunk_get_word(ucp, 0);
-	ref_t tref = chunk_get_word(ucp, 1);
-	ref_t eref = chunk_get_word(ucp, 2);
-	char ibuf[24], tbuf[24], ebuf[24], rbuf[24];
-	ref_show(iref, ibuf);
-	ref_show(tref, tbuf);
-	ref_show(eref, ebuf);
-	ref_show(r, rbuf);
-	report(4, "ITELookup(%s,%s,%s) --> %s",
-	       ibuf, tbuf, ebuf, rbuf);
-    }
-    
+#if RPT >= 4
+    ref_t iref = chunk_get_word(ucp, 0);
+    ref_t tref = chunk_get_word(ucp, 1);
+    ref_t eref = chunk_get_word(ucp, 2);
+    char ibuf[24], tbuf[24], ebuf[24], rbuf[24];
+    ref_show(iref, ibuf);
+    ref_show(tref, tbuf);
+    ref_show(eref, ebuf);
+    ref_show(r, rbuf);
+    report(4, "ITELookup(%s,%s,%s) --> %s",
+	   ibuf, tbuf, ebuf, rbuf);
+#endif    
     return r;
 }
 
 void ref_ite_store(ref_mgr mgr, chunk_ptr ucp, ref_t r) {
-    if (verblevel >= 4) {
-	ref_t iref = chunk_get_word(ucp, 0);
-	ref_t tref = chunk_get_word(ucp, 1);
-	ref_t eref = chunk_get_word(ucp, 2);
-	char ibuf[24], tbuf[24], ebuf[24], rbuf[24];
-	ref_show(iref, ibuf);
-	ref_show(tref, tbuf);
-	ref_show(eref, ebuf);
-	ref_show(r, rbuf);
-	report(4, "Storing ITE(%s,%s,%s) --> %s",
-	       ibuf, tbuf, ebuf, rbuf);
-    }
+#if RPT >= 4
+    ref_t iref = chunk_get_word(ucp, 0);
+    ref_t tref = chunk_get_word(ucp, 1);
+    ref_t eref = chunk_get_word(ucp, 2);
+    char ibuf[24], tbuf[24], ebuf[24], rbuf[24];
+    ref_show(iref, ibuf);
+    ref_show(tref, tbuf);
+    ref_show(eref, ebuf);
+    ref_show(r, rbuf);
+    report(4, "Storing ITE(%s,%s,%s) --> %s",
+	   ibuf, tbuf, ebuf, rbuf);
+#endif
     keyvalue_insert(mgr->ite_table, (word_t) ucp, (word_t) r);
     mgr->stat_counter[STATB_ITEC_TOTAL]++;
     mgr->stat_counter[STATB_ITEC_CURR]++;
@@ -544,11 +547,11 @@ ref_t ref_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 	chunk_free(ucp);
 	if (neg)
 	    r = REF_NEGATE(r);
-	if (verblevel >= 4) {
-	    char buf1[24];
-	    ref_show(r, buf1);
-	    report(4, "\tFound via lookup: %s", buf1);
-	}
+#if RPT >= 4
+	char buf1[24];
+	ref_show(r, buf1);
+	report(4, "\tFound via lookup: %s", buf1);
+#endif
 	return r;
     }
     /* Must do recursion */
@@ -556,26 +559,25 @@ ref_t ref_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     iref = (ref_t) chunk_get_word(ucp, 0);
     tref = (ref_t) chunk_get_word(ucp, 1);
     eref = (ref_t) chunk_get_word(ucp, 2);
-    if (verblevel >= 4) {
-	char buf1[24], buf2[24], buf3[24];
-	iref = (ref_t) chunk_get_word(ucp, 0);
-	tref = (ref_t) chunk_get_word(ucp, 1);
-	eref = (ref_t) chunk_get_word(ucp, 2);
-	ref_show(iref, buf1); ref_show(tref, buf2); ref_show(eref, buf3);
-	char *ns = neg ? "!" : "";
-	report(4, "Computing %sITE(%s, %s, %s)", ns, buf1, buf2, buf3);
-    }
+#if RPT >= 4
+    char buf1[24], buf2[24], buf3[24];
+    iref = (ref_t) chunk_get_word(ucp, 0);
+    tref = (ref_t) chunk_get_word(ucp, 1);
+    eref = (ref_t) chunk_get_word(ucp, 2);
+    ref_show(iref, buf1); ref_show(tref, buf2); ref_show(eref, buf3);
+    char *ns = neg ? "!" : "";
+    report(4, "Computing %sITE(%s, %s, %s)", ns, buf1, buf2, buf3);
+#endif
     size_t ivar = REF_GET_VAR(iref);
     size_t tvar = REF_GET_VAR(tref);
     size_t evar = REF_GET_VAR(eref);
     size_t var = ivar;
     if (tvar < var) { var = tvar; }
     if (evar < var) { var = evar; }
-    if (verblevel >= 4) {
-	char buf1[24];
-	ref_show(REF_VAR(var), buf1);
-	report(4, "\tSplitting on variable %s", buf1);
-    }
+#if RPT >= 4
+    ref_show(REF_VAR(var), buf1);
+    report(4, "\tSplitting on variable %s", buf1);
+#endif
     ref_t ivref, irefhi, ireflo, tvref, trefhi, treflo, evref, erefhi, ereflo;
     if (ivar == var)
 	ref_deref(mgr, iref, &ivref, &irefhi, &ireflo);
@@ -597,11 +599,10 @@ ref_t ref_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     ref_ite_store(mgr, ucp, r);
     if (neg)
 	r = REF_NEGATE(r);
-    if (verblevel >= 4) {
-	char buf1[24];
-	ref_show(r, buf1);
-	report(4, "\tGot recursively computed case: %s", buf1);
-    }
+#if RPT >= 4
+    ref_show(r, buf1);
+    report(4, "\tGot recursively computed case: %s", buf1);
+#endif
     return r;
 }
 
@@ -747,22 +748,26 @@ static void free_uop(uop_mgr_ptr umgr) {
 
 /* Depth-first recursive traversal to implement unary operation */
 static word_t uop_traverse(uop_mgr_ptr umgr, ref_t r) {
+#if RPT >= 4
     char buf[24];
-    if (verblevel >= 4) {
-	ref_show(r, buf);
-	report(4, "Uop traversal hits %s", buf);
-    }
+    ref_show(r, buf);
+    report(4, "Uop traversal hits %s", buf);
+#endif
     /* See if already done */
     word_t val;
     if (keyvalue_find(umgr->map, (word_t) r, &val)) {
+#if RPT >= 4
 	report(4, "\tRetrieved previous value 0x%llx", val);
+#endif
 	return val;
     }
     /* See if terminal case */
     if (REF_IS_CONST(r)) {
 	val = uop_node_functions[umgr->operation](umgr, r, (word_t) 0,
 						  (word_t) 0, umgr->auxinfo);
+#if RPT >= 4
 	report(4, "\tConstant node yields 0x%llx", val);
+#endif
     } else {
 	/* Apply recursively */
 	ref_t vref, hiref, loref;
@@ -771,7 +776,9 @@ static word_t uop_traverse(uop_mgr_ptr umgr, ref_t r) {
 	word_t loval = uop_traverse(umgr, loref);
 	val = uop_node_functions[umgr->operation](umgr, r, hival, loval,
 						  umgr->auxinfo);
+#if RPT >= 4
 	report(4, "\tComputed value 0x%llx", val);
+#endif
     }
     keyvalue_insert(umgr->map, (word_t) r, val);
     return val;
@@ -929,14 +936,6 @@ static word_t uop_node_pcount(uop_mgr_ptr umgr, ref_t r, word_t hival,
 	word_t lcnt = pval2cnt(loval, idx+1);
 	cnt = hcnt + lcnt;
     }
-#if 0
-    {
-	char buf[24];
-	ref_show(r, buf);
-	report(1, "Ref %s.  nvars = %lu.  idx = %u.  cnt = %lu",
-	       buf, nvars, idx, cnt);
-    }
-#endif
     return pack_count(idx, cnt);
 }
 
@@ -1128,22 +1127,22 @@ static void complete_collection(ref_mgr mgr, set_ptr rset) {
 	    ls = ele->next;
 	    start_cnt++;
 	    if (set_member(rset, (word_t) r, false)) {
-		if (verblevel >= 4) {
-		    char buf[24];
-		    ref_show(r, buf);
-		    report(4, "Keeping %s", buf);
-		}
+#if RPT >= 4
+		char buf[24];
+		ref_show(r, buf);
+		report(4, "Keeping %s", buf);
+#endif
 		/* Want to keep this entry.  Move over to new list */
 		ele->next = nls;
 		nls = ele;
 		end_cnt++;
 	    } else {
 		/* Don't need this one */
-		if (verblevel >= 4) {
-		    char buf[24];
-		    ref_show(r, buf);
-		    report(4, "Removing %s", buf);
-		}
+#if RPT >= 4
+		char buf[24];
+		ref_show(r, buf);
+		report(4, "Removing %s", buf);
+#endif
 		chunk_free(ele->data);
 		free_block((void *) ele, sizeof(ulist_ele));
 	    }
@@ -1157,7 +1156,9 @@ static void complete_collection(ref_mgr mgr, set_ptr rset) {
     clear_ite_table(mgr);
     mgr->stat_counter[STATB_UNIQ_CURR] = end_cnt;
     mgr->last_nelements = end_cnt;
+#if RPT >= 1
     report(1, "Garbage Collection: %lu --> %lu function refs", start_cnt, end_cnt);
+#endif
 }
 
 
@@ -1178,6 +1179,10 @@ void ref_show_stat(ref_mgr mgr) {
 	mgr->stat_counter[i] = agent_stat_counter[i];
     report(0, "Peak bytes %" PRIu64,
 	   mgr->stat_counter[STATA_BYTE_PEAK]);
+    report(0, "Messages sent %" PRIu64,
+	   agent_stat_counter[STATA_MESSAGES_SENT]);
+    report(0, "Message bytes sent %" PRIu64,
+	   agent_stat_counter[STATA_MESSAGE_BYTES]);
     report(0,
 "Operations.  Total generated %" PRIu64 ".  Routed locally %" PRIu64,
 	   mgr->stat_counter[STATA_OPERATION_TOTAL],
@@ -1252,11 +1257,16 @@ void free_dref_mgr() {
 }
 
 chunk_ptr flush_dref_mgr() {
+#if RPT >= 3
     report(3, "Flushing state");
+#endif
     /* Gather statistics information */
     size_t i;
     agent_stat_counter[STATA_BYTE_PEAK] = last_peak_bytes;
+    agent_stat_counter[STATA_MESSAGES_SENT] = chunks_sent;
+    agent_stat_counter[STATA_MESSAGE_BYTES] = chunk_bytes_sent;
     reset_peak_bytes();
+    reset_chunk_stats();
     for (i = 0; i < NSTATA; i++)
 	dmgr->rmgr->stat_counter[i] = agent_stat_counter[i];
     chunk_ptr msg = msg_new_stat(1, NSTAT, dmgr->rmgr->stat_counter);
@@ -1283,8 +1293,10 @@ chunk_ptr build_var(dword_t dest) {
     word_t id = new_operator_id();
     chunk_ptr op = msg_new_operator(OP_VAR, worker, id, OPER_SIZE + OP_HEADER_CNT);
     op_insert_dword(op, dest, OP_HEADER_CNT);
+#if RPT >= 4
     report(4, "Created Var operation.  Worker %u.  Operator ID 0x%lx.",
 	   worker, id);
+#endif
     return op;
 }
 
@@ -1295,8 +1307,10 @@ chunk_ptr build_canonize(dword_t dest, ref_t vref) {
 				    3 + OPER_SIZE + OP_HEADER_CNT);
     op_insert_dword(op, dest,           OP_HEADER_CNT);
     op_insert_word(op, (word_t) vref,   0+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     report(4, "Created Canonize operation.  Worker %u.  Operator ID 0x%lx.",
 	   worker, id);
+#endif
     return op;
 }
 
@@ -1312,8 +1326,10 @@ chunk_ptr build_canonize_lookup(dword_t dest, word_t hash, ref_t vref,
     op_insert_word(op, (word_t) hiref,  2+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) loref,  3+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) negate, 4+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     report(4, "Created Canonize Lookup operation.  Worker %u.  Operator ID 0x%lx.",
 	   worker, id);
+#endif
     return op;
 }
 
@@ -1325,8 +1341,10 @@ chunk_ptr build_retrieve_lookup(dword_t dest, ref_t ref) {
 				    1 + OPER_SIZE + OP_HEADER_CNT);
     op_insert_dword(op, dest,            OP_HEADER_CNT);
     op_insert_word(op, (word_t) ref,     0+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     report(4, "Created Retrieve Lookup operation.  Worker %u.  Operator ID 0x%lx.",
 	   worker, id);
+#endif
     return op;
 }
 
@@ -1343,8 +1361,10 @@ chunk_ptr build_ite_lookup(dword_t dest, ref_t iref,
     op_insert_word(op, (word_t) tref,   1+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) eref,   2+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) negate, 3+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     report(4, "Created ITE Lookup operation.  Worker %u.  Operator ID 0x%lx.",
 	   worker, id);
+#endif
     chunk_free(ucp);
     return op;
 }
@@ -1356,8 +1376,10 @@ chunk_ptr build_ite_recurse(dword_t dest, ref_t vref) {
 				    7 + OPER_SIZE + OP_HEADER_CNT);
     op_insert_dword(op, dest,         OP_HEADER_CNT);
     op_insert_word(op, (word_t) vref, 0+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     report(4, "Created ITE Recurse operation.  Worker %u.  Operator ID 0x%lx.",
 	   worker, id);
+#endif
     return op;
 }
 
@@ -1372,8 +1394,10 @@ chunk_ptr build_ite_store(dword_t dest, word_t iref,
     op_insert_word(op, (word_t) tref,    1+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) eref,    2+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) negate,  4+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     report(4, "Created ITE Store operation.  Worker %u.  Operator ID 0x%lx.",
 	   worker, id);
+#endif
     return op;
 }
 
@@ -1386,9 +1410,11 @@ chunk_ptr build_uop_down(dword_t dest, unsigned uid, ref_t ref) {
     op_insert_dword(op, dest,           OP_HEADER_CNT);
     op_insert_word(op, (word_t) uid,    0+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) ref,    1+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     report(4,
 "Created UOP Down operation.  Uid %u.  Worker %u.  Operator ID 0x%lx.",
 	   uid, worker, id);
+#endif
     return op;
 }
 
@@ -1400,8 +1426,10 @@ chunk_ptr build_uop_up(dword_t dest, unsigned uid, ref_t ref) {
     op_insert_dword(op, dest,           OP_HEADER_CNT);
     op_insert_word(op, (word_t) uid,    0+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) ref,    1+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     report(4, "Created UOP Up operation.  Uid %u.  Worker %u.  Operator ID 0x%lx.",
 	   uid, worker, id);
+#endif
     return op;
 }
 
@@ -1413,19 +1441,21 @@ chunk_ptr build_uop_store(dword_t dest, unsigned uid, ref_t ref) {
     op_insert_dword(op, dest,           OP_HEADER_CNT);
     op_insert_word(op, (word_t) uid,    0+OPER_SIZE+OP_HEADER_CNT);
     op_insert_word(op, (word_t) ref,    1+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     report(4,
 "Created UOP Store operation.  Uid %u.  Worker %u.  Operator ID 0x%lx.",
 	   uid, worker, id);
+#endif
     return op;
 }
 
 static bool send_ref_as_operand(dword_t dest, ref_t ref) {
-    if (verblevel >= 4) {
-	char buf[24];
-	ref_show(ref, buf);
-	report(4, "Sending ref result %s.  Agent %u, Op Id 0x%lx", buf,
-	       msg_get_dest_agent(dest), msg_get_dest_op_id(dest));
-    }
+#if RPT >= 4
+    char buf[24];
+    ref_show(ref, buf);
+    report(4, "Sending ref result %s.  Agent %u, Op Id 0x%lx", buf,
+	   msg_get_dest_agent(dest), msg_get_dest_op_id(dest));
+#endif
     return send_as_operand(dest, (word_t) ref);
 
 }
@@ -1447,8 +1477,6 @@ bool do_canonize_op(chunk_ptr op) {
     bool ok = true;
     ref_t r = ref_canonize_local(vref, hiref, loref, &ucp);
     if (!REF_IS_RECURSE(r)) {
-	if (verblevel >= 4) {
-	}
 	ok = send_ref_as_operand(dest, r);
 	return ok;
     }
@@ -1493,12 +1521,12 @@ bool do_retrieve_lookup_op(chunk_ptr op) {
     chunk_ptr oper = msg_new_operand(dest, 2 + OPER_HEADER_CNT);
     chunk_insert_word(oper, (word_t) tref, 0 + OPER_HEADER_CNT);
     chunk_insert_word(oper, (word_t) eref, 1 + OPER_HEADER_CNT);
-    if (verblevel >= 4) {
-	char tbuf[24], ebuf[24];
-	ref_show(tref, tbuf);
-	ref_show(eref, ebuf);
-	report(4, "Sending Retrieve Lookup result %s, %s", tbuf, ebuf);
-    }
+#if RPT >= 4
+    char tbuf[24], ebuf[24];
+    ref_show(tref, tbuf);
+    ref_show(eref, ebuf);
+    report(4, "Sending Retrieve Lookup result %s, %s", tbuf, ebuf);
+#endif
     bool ok = send_op(oper);
     chunk_free(oper);
     return ok;
@@ -1518,23 +1546,23 @@ bool do_ite_lookup_op(chunk_ptr op) {
     ref_t tref = (ref_t) chunk_get_word(op, 1+OPER_SIZE+OP_HEADER_CNT);
     ref_t eref = (ref_t) chunk_get_word(op, 2+OPER_SIZE+OP_HEADER_CNT);
     bool negate = (bool) chunk_get_word(op, 3+OPER_SIZE+OP_HEADER_CNT);
-    if (verblevel >= 4) {
-	char buf1[24], buf2[24], buf3[24];
-	ref_show(iref, buf1); ref_show(tref, buf2); ref_show(eref, buf3);
-	char *ns = negate ? "!" : "";
-	report(4, "Computing %sITE(%s, %s, %s)", ns, buf1, buf2, buf3);
-    }
+#if RPT >= 4
+    char buf1[24], buf2[24], buf3[24];
+    ref_show(iref, buf1); ref_show(tref, buf2); ref_show(eref, buf3);
+    char *ns = negate ? "!" : "";
+    report(4, "Computing %sITE(%s, %s, %s)", ns, buf1, buf2, buf3);
+#endif
     chunk_ptr ucp = ref3_encode(iref, tref, eref);
     ref_t rlook = ref_ite_lookup(mgr, ucp);
     if (!REF_IS_RECURSE(rlook)) {
 	chunk_free(ucp);
 	if (negate)
 	    rlook = REF_NEGATE(rlook);
-	if (verblevel >= 4) {
-	    char buf1[24];
-	    ref_show(rlook, buf1);
-	    report(4, "\tFound via lookup: %s", buf1);
-	}
+#if RPT >= 4
+	char buf1[24];
+	ref_show(rlook, buf1);
+	report(4, "\tFound via lookup: %s", buf1);
+#endif
 	bool ok = send_ref_as_operand(dest, rlook);	
 	return ok;
     }
@@ -1550,16 +1578,15 @@ bool do_ite_lookup_op(chunk_ptr op) {
 	keyvalue_insert(dmgr->deferred_ite_table, (word_t) old_ucp,
 			(word_t) ele);
 	chunk_free(ucp);
-	if (verblevel >= 4) {
-	    char ibuf[24], tbuf[24], ebuf[24];
-	    ref_show(iref, ibuf); ref_show(tref, tbuf), ref_show(eref, ebuf);
-	    char *sn = negate ? "!" : "";
-	    word_t op_id = msg_get_dest_op_id(dest);
-	    unsigned agent = msg_get_dest_agent(dest);
-	    report(4, "\tDeferring %sITE(%s, %s, %s).  Agent %u, Op Id 0x%lx",
-		   sn, ibuf, tbuf, ebuf, agent, op_id);
-	    
-	}
+#if RPT >= 4
+	char ibuf[24], tbuf[24], ebuf[24];
+	ref_show(iref, ibuf); ref_show(tref, tbuf), ref_show(eref, ebuf);
+	char *sn = negate ? "!" : "";
+	word_t op_id = msg_get_dest_op_id(dest);
+	unsigned agent = msg_get_dest_agent(dest);
+	report(4, "\tDeferring %sITE(%s, %s, %s).  Agent %u, Op Id 0x%lx",
+	       sn, ibuf, tbuf, ebuf, agent, op_id);
+#endif	    
 	return true;
     } else {
 	/* Insert empty list as placeholder */
@@ -1574,11 +1601,10 @@ bool do_ite_lookup_op(chunk_ptr op) {
     if (tvar < var) { var = tvar; }
     if (evar < var) { var = evar; }
     ref_t vref = REF_VAR(var);
-    if (verblevel >= 4) {
-	char buf1[24];
-	ref_show(vref, buf1);
-	report(4, "\tSplitting on variable %s", buf1);
-    }
+#if RPT >= 4
+    ref_show(vref, buf1);
+    report(4, "\tSplitting on variable %s", buf1);
+#endif
     /* Create next operations */
     chunk_ptr sop = build_ite_store(dest, iref, tref, eref, negate);
     dword_t sdest =  msg_new_destination(sop, 3+OPER_SIZE+OP_HEADER_CNT);
@@ -1706,18 +1732,17 @@ bool do_ite_store_op(chunk_ptr op) {
 		lr = REF_NEGATE(lr);
 	    ok = ok && send_ref_as_operand(ldest, lr);
 	    ele = ele->next;
-	    if (verblevel >= 4) {
-		char ibuf[24], tbuf[24], ebuf[24], rbuf[24];
-		ref_show(iref, ibuf); ref_show(tref, tbuf), ref_show(eref, ebuf);
-		ref_show(lr, rbuf);
-		char *sn = lnegate ? "!" : "";
-		word_t op_id = msg_get_dest_op_id(dest);
-		unsigned agent = msg_get_dest_agent(dest);
-		report(4,
+#if RPT >= 4
+	    char ibuf[24], tbuf[24], ebuf[24], rbuf[24];
+	    ref_show(iref, ibuf); ref_show(tref, tbuf), ref_show(eref, ebuf);
+	    ref_show(lr, rbuf);
+	    char *sn = lnegate ? "!" : "";
+	    word_t op_id = msg_get_dest_op_id(dest);
+	    unsigned agent = msg_get_dest_agent(dest);
+	    report(4,
 "\tSending deferred result %sITE(%s, %s, %s) --> %s.  Agent %u, Op Id 0x%lx",
-		       sn, ibuf, tbuf, ebuf, rbuf, agent, op_id);
-	    
-	    }
+		   sn, ibuf, tbuf, ebuf, rbuf, agent, op_id);
+#endif
 	}
 	ilist_free(ls);
     }
@@ -1751,11 +1776,11 @@ bool do_uop_down_op(chunk_ptr op) {
     unsigned uid =         chunk_get_word(op,  0+OPER_SIZE+OP_HEADER_CNT);
     ref_t ref =    (ref_t) chunk_get_word(op,  1+OPER_SIZE+OP_HEADER_CNT);
     mgr->stat_counter[STATB_UOP_CNT]++;
+#if RPT >= 4
     char buf[24];
-    if (verblevel >= 4) {
-	ref_show(ref, buf);
-	report(4, "Downward traversal hits %s", buf);
-    }
+    ref_show(ref, buf);
+    report(4, "Downward traversal hits %s", buf);
+#endif
     /* look for umgr */
     uop_mgr_ptr umgr = find_umgr(uid, false);
     if (!umgr)
@@ -1763,7 +1788,9 @@ bool do_uop_down_op(chunk_ptr op) {
     /* See if already have result */
     word_t val;
     if (keyvalue_find(umgr->map, (word_t) ref, &val)) {
+#if RPT >= 4
 	report(4, "\tRetrieved previous value 0x%llx", val);
+#endif
 	mgr->stat_counter[STATB_UOP_HIT_CNT]++;
 	return (send_as_operand(dest, val));
     }
@@ -1771,7 +1798,9 @@ bool do_uop_down_op(chunk_ptr op) {
     if (REF_IS_CONST(ref)) {
 	val = uop_node_functions[umgr->operation](umgr, ref, (word_t) 0,
 						  (word_t) 0, umgr->auxinfo);
+#if RPT >= 4
 	report(4, "\tConstant node yields 0x%llx", val);
+#endif
 	return (send_as_operand(dest, val));
     }
     /* See if there is an outstanding downward call */
@@ -1781,7 +1810,9 @@ bool do_uop_down_op(chunk_ptr op) {
 	ilist_ptr ele = ilist_new(dest, false);
 	ele->next = ilist;
 	keyvalue_insert(umgr->deferred_uop_table, (word_t) ref, (word_t) ele);
+#if RPT >= 4
 	report(4, "\tDeferred operation", val);
+#endif
 	return true;
     } else {
 	/* Insert empty list as placeholder */
@@ -1800,27 +1831,27 @@ bool do_uop_down_op(chunk_ptr op) {
     chunk_free(upop);
     chunk_free(hiop);
     chunk_free(loop);
-    if (verblevel >= 4) {
-	char hibuf[24], lobuf[24];
-	ref_show(hiref, hibuf); ref_show(loref, lobuf);
-	report(4, "\tCreated downward calls for children %s and %s",
-	       hibuf, lobuf);
-    }
+#if RPT >= 4
+    char hibuf[24], lobuf[24];
+    ref_show(hiref, hibuf); ref_show(loref, lobuf);
+    report(4, "\tCreated downward calls for children %s and %s",
+	   hibuf, lobuf);
+#endif
     return ok;
 }
 
 /* Finish off unary operation */
 static bool up_store(uop_mgr_ptr umgr, dword_t dest, word_t ref, word_t val) {
+#if RPT >= 4
     report(4, "\tComputed value 0x%llx", val);
+#endif
     bool ok = send_as_operand(dest, val);
-
-    if (verblevel >= 4) {
-	word_t op_id = msg_get_dest_op_id(dest);
-	unsigned agent = msg_get_dest_agent(dest);
-	report(4, "\tSent result.  Agent %u, Op Id 0x%lx",
-	       agent, op_id);
-    }
-
+#if RPT >= 4
+    word_t op_id = msg_get_dest_op_id(dest);
+    unsigned agent = msg_get_dest_agent(dest);
+    report(4, "\tSent result.  Agent %u, Op Id 0x%lx",
+	   agent, op_id);
+#endif
     word_t w;
     if (keyvalue_remove(umgr->deferred_uop_table, (word_t) ref, NULL, &w)) {
 	ilist_ptr ilist = (ilist_ptr) w;
@@ -1828,12 +1859,12 @@ static bool up_store(uop_mgr_ptr umgr, dword_t dest, word_t ref, word_t val) {
 	while (ele) {
 	    dword_t ndest = ele->dest;
 	    ok = ok && send_as_operand(ndest, val);
-	    if (verblevel >= 4) {
-		word_t op_id = msg_get_dest_op_id(ndest);
-		unsigned agent = msg_get_dest_agent(ndest);
-		report(4, "\tSent deferred result.  Agent %u, Op Id 0x%lx",
-		       agent, op_id);
-	    }
+#if RPT >= 4
+	    word_t op_id = msg_get_dest_op_id(ndest);
+	    unsigned agent = msg_get_dest_agent(ndest);
+	    report(4, "\tSent deferred result.  Agent %u, Op Id 0x%lx",
+		   agent, op_id);
+#endif
 	    ele = ele->next;
 	}
 	ilist_free(ilist);
@@ -1979,11 +2010,11 @@ bool do_uop_up_op(chunk_ptr op) {
     ref_t ref =    (ref_t) chunk_get_word(op,  1+OPER_SIZE+OP_HEADER_CNT);
     word_t hival =         chunk_get_word(op,  2+OPER_SIZE+OP_HEADER_CNT);
     word_t loval =         chunk_get_word(op,  3+OPER_SIZE+OP_HEADER_CNT);
+#if RPT >= 4
     char buf[24];
-    if (verblevel >= 4) {
-	ref_show(ref, buf);
-	report(4, "Upward traversal hits %s", buf);
-    }
+    ref_show(ref, buf);
+    report(4, "Upward traversal hits %s", buf);
+#endif
     /* look for umgr */
     uop_mgr_ptr umgr = find_umgr(uid, false);
     if (!umgr)
@@ -2022,13 +2053,13 @@ bool do_uop_store_op(chunk_ptr op) {
     unsigned uid =         chunk_get_word(op,  0+OPER_SIZE+OP_HEADER_CNT);
     ref_t ref =    (ref_t) chunk_get_word(op,  1+OPER_SIZE+OP_HEADER_CNT);
     word_t val =           chunk_get_word(op,  2+OPER_SIZE+OP_HEADER_CNT);
-    char buf[24];
     ref_mgr mgr = dmgr->rmgr;
     mgr->stat_counter[STATB_UOP_STORE_CNT]++;
-    if (verblevel >= 4) {
-	ref_show(ref, buf);
-	report(4, "Upward store hits %s", buf);
-    }
+#if RPT >= 4
+    char buf[24];
+    ref_show(ref, buf);
+    report(4, "Upward store hits %s", buf);
+#endif
     /* look for umgr */
     uop_mgr_ptr umgr = find_umgr(uid, false);
     if (!umgr)
@@ -2052,11 +2083,11 @@ ref_t dist_var(ref_mgr mgr) {
 
 ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     chunk_ptr ucp = NULL;
-    if (verblevel >= 4) {
-	char buf1[24], buf2[24], buf3[24];
-	ref_show(iref, buf1); ref_show(tref, buf2); ref_show(eref, buf3);
-	report(4, "Computing Distance ITE(%s, %s, %s)", buf1, buf2, buf3);
-    }
+#if RPT >= 4
+    char buf1[24], buf2[24], buf3[24];
+    ref_show(iref, buf1); ref_show(tref, buf2); ref_show(eref, buf3);
+    report(4, "Computing Distance ITE(%s, %s, %s)", buf1, buf2, buf3);
+#endif
     ref_t rlocal = ref_ite_local(mgr, iref, tref, eref, &ucp);
     if (REF_IS_RECURSE(rlocal)) {
 	ref_t niref = (ref_t) chunk_get_word(ucp, 0);
@@ -2077,7 +2108,9 @@ ref_t dist_ite(ref_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 keyvalue_table_ptr dist_density(ref_mgr mgr, set_ptr roots) {
     keyvalue_table_ptr dtable = word_keyvalue_new();
     if (start_client_global(UOP_DENSITY, 0, NULL)) {
+#if RPT >= 5
 	report(5, "Started density operation");
+#endif
     } else {
 	err(false, "Couldn't start global operations");
 	return NULL;
@@ -2109,7 +2142,9 @@ keyvalue_table_ptr dist_count(ref_mgr mgr, set_ptr roots) {
     keyvalue_table_ptr ctable = word_keyvalue_new();
     word_t nvars = mgr->variable_cnt;
     if (start_client_global(UOP_PCOUNT, 1, &nvars)) {
+#if RPT >= 5
 	report(5, "Started count operation");
+#endif
     } else {
 	err(false, "Couldn't start global count operations");
 	return NULL;
@@ -2144,11 +2179,11 @@ void dist_mark(ref_mgr mgr, set_ptr roots) {
 	ref_t r = (ref_t) w;
 	dword_t dest = msg_build_destination(own_agent, new_operator_id(), 0);
 	/* Controller uses uid 0 */
-	if (verblevel >= 5) {
-	    char buf[24];
-	    ref_show(r, buf);
-	    report(5, "Starting mark at root %s", buf);
-	}
+#if RPT >= 5
+	char buf[24];
+	ref_show(r, buf);
+	report(5, "Starting mark at root %s", buf);
+#endif
 	chunk_ptr msg = build_uop_down(dest, 0, r);
 	chunk_ptr rmsg = fire_and_wait(msg);
 	chunk_free(msg);
@@ -2161,7 +2196,9 @@ set_ptr dist_support(ref_mgr mgr, set_ptr roots) {
     /* Implement using bit vector representation of variable set */
     word_t vset = 0;
     if (start_client_global(UOP_SUPPORT, 0, NULL)) {
+#if RPT >= 5
 	report(5, "Started support operation");
+#endif
     } else {
 	err(false, "Couldn't start global operation");
 	return NULL;
@@ -2198,7 +2235,9 @@ keyvalue_table_ptr dist_restrict(ref_mgr mgr, set_ptr roots, set_ptr lits) {
     word_t *data = calloc_or_fail(nword, sizeof(word_t), "dist_restrict");
     set_marshal(lits, data);
     if (start_client_global(UOP_COFACTOR, nword, data)) {
+#if RPT >= 5
 	report(5, "Started restriction operation");
+#endif
     } else {
 	err(false, "Couldn't start global operations");
 	return false;
@@ -2229,7 +2268,9 @@ keyvalue_table_ptr dist_equant(ref_mgr mgr, set_ptr roots, set_ptr vars) {
     word_t *data = calloc_or_fail(nword, sizeof(word_t), "dist_equant");
     set_marshal(vars, data);
     if (start_client_global(UOP_EQUANT, nword, data)) {
+#if RPT >= 5
 	report(5, "Started quantification operation");
+#endif
     } else {
 	err(false, "Couldn't start global operations");
 	return false;
@@ -2259,7 +2300,9 @@ keyvalue_table_ptr dist_shift(ref_mgr mgr, set_ptr roots,
     word_t *data = calloc_or_fail(nword, sizeof(word_t), "dist_shift");
     keyvalue_marshal(vmap, data);
     if (start_client_global(UOP_SHIFT, nword, data)) {
+#if RPT >= 5
 	report(5, "Started shift operation");
+#endif
     } else {
 	err(false, "Couldn't start global operations");
 	return false;
@@ -2365,6 +2408,8 @@ void uop_finish(unsigned id) {
 static char *stat_items[NSTAT] = {
     /* These come from stat_counter in agent */
     "Peak bytes allocated  ",
+    "Total messages sent   ",
+    "Total msg bytes sent  ",
     "Total operations sent ",
     "Total local operations",
     "Total operands   sent ",
@@ -2388,13 +2433,14 @@ static char *stat_items[NSTAT] = {
 
 /* For processing summary statistics information */
 void do_summary_stat(chunk_ptr smsg) {
-    size_t i;
     word_t h = chunk_get_word(smsg, 0);
     int nworker = msg_get_header_workercount(h);
     if (nworker <= 0) {
 	err(false, "Invalid number of workers: %d", nworker);
 	nworker = 1;
     }
+#if RPT >= 1
+    size_t i;
     for (i = 0; i < NSTAT; i++) {
 	word_t minval = chunk_get_word(smsg, 1 + i*3 + 0);
 	word_t maxval = chunk_get_word(smsg, 1 + i*3 + 1);
@@ -2403,6 +2449,7 @@ void do_summary_stat(chunk_ptr smsg) {
 	       "\tAvg: %.2f\tSum: %" PRIu64,
 	       stat_items[i], minval, maxval, (double) sumval/nworker, sumval);
     }
+#endif
 }
 
 void worker_gc_start() {

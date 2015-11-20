@@ -241,7 +241,9 @@ bool interpret_cmd(char *cmdline) {
     int argc;
     if (quit_flag)
 	return false;
+#if RPT >= 6
     report(6, "Interpreting command '%s'\n", cmdline);
+#endif
     char **argv = parse_args(cmdline, &argc);
     bool ok = interpret_cmda(argc, argv);
     int i;

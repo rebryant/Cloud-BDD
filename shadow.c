@@ -98,11 +98,11 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 		n, nother, buf1);
 	} else {
 	    /* Normal case.  Create both entries */
-	    if (verblevel >= 5) {
-		char buf[24];
-		shadow_show(mgr, r, buf);
-		report(5, "Added ref %s for node %p", buf, n);
-	    }
+#if RPT >= 5
+	    char buf[24];
+	    shadow_show(mgr, r, buf);
+	    report(5, "Added ref %s for node %p", buf, n);
+#endif
 	    keyvalue_insert(mgr->c2r_table, (word_t ) n, (word_t ) r);
 	    keyvalue_insert(mgr->r2c_table, (word_t ) r, (word_t ) n);
 	    /* Create entries for negations */
@@ -113,11 +113,10 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 	    } else {
 		nn = (DdNode *) rn;
 	    }
-	    if (verblevel >= 5) {
-		char buf[24];
-		shadow_show(mgr, rn, buf);
-		report(5, "Added ref %s for node %p", buf, nn);
-	    }
+#if RPT >= 5
+	    shadow_show(mgr, rn, buf);
+	    report(5, "Added ref %s for node %p", buf, nn);
+#endif
 	    keyvalue_insert(mgr->c2r_table, (word_t ) nn, (word_t ) rn);
 	    keyvalue_insert(mgr->r2c_table, (word_t ) rn, (word_t ) nn);
 	}
@@ -132,10 +131,12 @@ static bool check_refs(shadow_mgr mgr, ref_t rlocal, ref_t rdist) {
 	shadow_show(mgr, rdist, bufdist);
 	err(false, "Mismatched refs.  Local = %s, Dist = %s", buflocal, bufdist);
 	return false;
-    } else if (verblevel >= 4)  {
+    } else {
+#if RPT >= 4
 	char buflocal[24];
 	shadow_show(mgr, rlocal, buflocal);
 	report(4, "Matching refs.  Local = Dist = %s", buflocal);
+#endif
     }
     return true;
 }
@@ -288,37 +289,37 @@ ref_t shadow_absval(shadow_mgr mgr, ref_t r) {
 
 ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
     ref_t r = shadow_ite(mgr, aref, bref, shadow_zero(mgr));
-    if (verblevel >= 4) {
-	char buf1[24], buf2[24], buf3[24];
-	shadow_show(mgr, aref, buf1);
-	shadow_show(mgr, bref, buf2);
-	shadow_show(mgr, r, buf3);
-	report(4, "%s AND %s --> %s", buf1, buf2, buf3);
-    }
+#if RPT >= 4
+    char buf1[24], buf2[24], buf3[24];
+    shadow_show(mgr, aref, buf1);
+    shadow_show(mgr, bref, buf2);
+    shadow_show(mgr, r, buf3);
+    report(4, "%s AND %s --> %s", buf1, buf2, buf3);
+#endif
     return r;
 }
 
 ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
     ref_t r = shadow_ite(mgr, aref, shadow_one(mgr), bref);
-    if (verblevel >= 4) {
-	char buf1[24], buf2[24], buf3[24];
-	shadow_show(mgr, aref, buf1);
-	shadow_show(mgr, bref, buf2);
-	shadow_show(mgr, r, buf3);
-	report(4, "%s OR %s --> %s", buf1, buf2, buf3);
-    }
+#if RPT >= 4
+    char buf1[24], buf2[24], buf3[24];
+    shadow_show(mgr, aref, buf1);
+    shadow_show(mgr, bref, buf2);
+    shadow_show(mgr, r, buf3);
+    report(4, "%s OR %s --> %s", buf1, buf2, buf3);
+#endif
     return r;
 }
 
 ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
     ref_t r = shadow_ite(mgr, aref, shadow_negate(mgr, bref), bref);
-    if (verblevel >= 4) {
-	char buf1[24], buf2[24], buf3[24];
-	shadow_show(mgr, aref, buf1);
-	shadow_show(mgr, bref, buf2);
-	shadow_show(mgr, r, buf3);
-	report(4, "%s XOR %s --> %s", buf1, buf2, buf3);
-    }
+#if RPT >= 4
+    char buf1[24], buf2[24], buf3[24];
+    shadow_show(mgr, aref, buf1);
+    shadow_show(mgr, bref, buf2);
+    shadow_show(mgr, r, buf3);
+    report(4, "%s XOR %s --> %s", buf1, buf2, buf3);
+#endif
     return r;
 }
 
@@ -337,13 +338,13 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
     if (mgr->do_cudd) {
 	Cudd_RecursiveDeref(mgr->bdd_manager, n);
     }
-    if (verblevel >= 5) {
-	char buf[24];
-	shadow_show(mgr, r, buf);
-	report(5, "Deleting reference %s for node %p", buf, n);
-	shadow_show(mgr, nr, buf);
-	report(5, "Deleting reference %s for node %p", buf, nn);
-    }
+#if RPT >= 5
+    char buf[24];
+    shadow_show(mgr, r, buf);
+    report(5, "Deleting reference %s for node %p", buf, n);
+    shadow_show(mgr, nr, buf);
+    report(5, "Deleting reference %s for node %p", buf, nn);
+#endif
     keyvalue_remove(mgr->c2r_table, (word_t ) n, NULL, NULL);
     keyvalue_remove(mgr->r2c_table, (word_t ) r, NULL, NULL);
     keyvalue_remove(mgr->c2r_table, (word_t ) nn, NULL, NULL);

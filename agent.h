@@ -1,7 +1,7 @@
 /* Implementation of client or worker in dataflow system */
 
 /* Counters tracked by agent */
-enum {STATA_BYTE_PEAK, STATA_OPERATION_TOTAL,
+enum {STATA_BYTE_PEAK, STATA_MESSAGES_SENT, STATA_MESSAGE_BYTES, STATA_OPERATION_TOTAL,
       STATA_OPERATION_LOCAL, STATA_OPERAND_TOTAL,
       STATA_OPERAND_LOCAL, NSTATA};
 

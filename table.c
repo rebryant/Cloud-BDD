@@ -137,7 +137,9 @@ static void kv_check_for_resize(keyvalue_table_ptr kvt, bool growing)
     }
     if (new_size == old_size)
 	return;
+#if RPT >= 5
     report(5, "Resizing hash table from %lu to %lu buckets", old_size, new_size);
+#endif
     /* Generate new table of size new_size */
     new_buckets = calloc_or_fail(new_size, sizeof(hash_ele_ptr),
 				 "kv_check_for_resize");
@@ -421,7 +423,9 @@ static void set_check_for_resize(set_ptr set, bool growing)
     }
     if (new_size == old_size)
 	return;
+#if RPT >= 5
     report(5, "Resizing set from %lu to %lu buckets", old_size, new_size);
+#endif
     /* Generate new table of size new_size */
     new_buckets = calloc_or_fail(new_size, sizeof(set_list_ptr),
 				 "set_check_for_resize");

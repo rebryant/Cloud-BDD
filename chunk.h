@@ -19,7 +19,7 @@ unsigned chunk_check_level;
 */
 
 typedef struct {
-    size_t length;   /* Number of data words in chunk.  Maximum value = 64 */
+    size_t length;   /* Number of data words in chunk.  Maximum value = CHUNK_MAX_LENGTH */
     word_t words[1]; /* First data word. */
 } chunk_t, *chunk_ptr;
 
@@ -30,6 +30,16 @@ typedef struct {
 /* Total number of bytes in longest possible chunk */
 #define CHUNK_MAX_SIZE  \
  (sizeof(chunk_t) + sizeof(word_t) * ((CHUNK_MAX_LENGTH) - 1))
+
+/* Track number of bytes & number of chunks sent */
+extern size_t chunks_sent;
+extern size_t chunk_bytes_sent;
+
+/* Reset tracking information */
+void reset_chunk_stats();
+
+/* Report information about chunk used as messages */
+void chunk_status(FILE *fp);
 
 /* Create a new chunk */
 chunk_ptr chunk_new(size_t len);

@@ -96,5 +96,6 @@ int main(int argc, char *argv[]) {
     run_worker();
     finish();
     mem_status(stdout);
+    chunk_status(stdout);
     return 0;
 }

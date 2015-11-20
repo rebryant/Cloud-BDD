@@ -136,13 +136,17 @@ static bool bdd_quit(int argc, char *argv[]) {
     word_t wk, wv;
     while (keyvalue_removenext(nametable, &wk, NULL)) {
 	char *s = (char *) wk;
+#if RPT >= 5
 	report(5, "Freeing string '%s' from name table", s);
+#endif
 	free_string(s);
     }
     keyvalue_free(nametable);
     while (keyvalue_removenext(vectable, &wk, &wv)) {
 	char *s = (char *) wk;
+#if RPT >= 5
 	report(5, "Freeing string '%s' from vector table", s);
+#endif
 	free_string(s);
 	chunk_ptr cp = (chunk_ptr) wv;
 	chunk_free(cp);
@@ -242,6 +246,7 @@ int main(int argc, char *argv[]) {
     }
     finish_cmd();
     mem_status(stdout);
+    chunk_status(stdout);
     return 0;
 }
 
@@ -301,7 +306,9 @@ static void assign_ref(char *name, ref_t r, bool saturate) {
 	if (verblevel >= 5) {
 	    char buf[24];
 	    shadow_show(smgr, rold, buf);
+#if RPT >= 5
 	    report(5, "Removed entry %s:%s from name table", name, buf);
+#endif
 	}
     } else {
 	sname = strsave_or_fail(name, "assign_ref");
@@ -310,7 +317,9 @@ static void assign_ref(char *name, ref_t r, bool saturate) {
     if (verblevel >= 5) {
 	char buf[24];
 	shadow_show(smgr, r, buf);
+#if RPT >= 5
 	report(5, "Added %s:%s to name table", name, buf);
+#endif
     }
 }
 
@@ -396,7 +405,9 @@ bool do_and(int argc, char *argv[]) {
     if (do_dist)
 	undefer();
     shadow_show(smgr, rval, buf);
-    report(1, "RESULT.  %s = %s", argv[1], buf);
+#if RPT >= 1
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
     return true;
 }
 
@@ -423,7 +434,9 @@ bool do_or(int argc, char *argv[]) {
     if (do_dist)
 	undefer();
     shadow_show(smgr, rval, buf);
-    report(1, "RESULT.  %s = %s", argv[1], buf);
+#if RPT >= 1
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
     return true;
 }
 
@@ -450,7 +463,9 @@ bool do_xor(int argc, char *argv[]) {
     if (do_dist)
 	undefer();
     shadow_show(smgr, rval, buf);
-    report(1, "RESULT.  %s = %s", argv[1], buf);
+#if RPT >= 2
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
     return true;
 }
 
@@ -477,14 +492,18 @@ bool do_ite(int argc, char *argv[]) {
     if (do_dist)
 	undefer();
     shadow_show(smgr, rval, buf);
-    report(1, "RESULT.  %s = %s", argv[1], buf);
+#if RPT >= 2
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
     return true;
 }
 
 bool do_local_collect(int argc, char *argv[]) {
     bool ok = true;
     if (!enable_collect) {
+#if RPT >= 1
 	report(1, "Garbage collection disabled");
+#endif
 	return ok;
     }
     if (smgr->do_local) {
@@ -506,19 +525,23 @@ static void client_gc_start() {
     word_t wk, wv;
     keyvalue_iterstart(nametable);
     while (keyvalue_iternext(nametable, &wk, &wv)) {
-	char *name = (char *) wk;
 	ref_t r = (ref_t) wv;
 	if (!set_member(roots, wv, false)  && REF_IS_FUNCT(r)) {
 	    set_insert(roots, wv);
 	    if (verblevel >= 5) {
 		char buf[24];
 		ref_show(r, buf);
+#if RPT >= 5
+		char *name = (char *) wk;
 		report(5, "Using root %s = %s", name, buf);
+#endif
 	    }
 	}
     }
     if (smgr->do_local) {
+#if RPT >= 4
 	report(4, "Performing local garbage collection");
+#endif
 	ref_collect(smgr->ref_mgr, roots);
     }
     if (smgr->do_dist) {
@@ -528,7 +551,9 @@ static void client_gc_start() {
 }
 
 static void client_gc_finish() {
+#if RPT >= 4
     report(4, "GC completed");
+#endif
 }
 
 
@@ -546,7 +571,9 @@ bool do_delete(int argc, char *argv[]) {
 	    if (verblevel >= 5) {
 		char buf[24];
 		shadow_show(smgr, rold, buf);
+#if RPT >= 5
 		report(5, "Removed entry %s:%s from name table", olds, buf);
+#endif
 	    }
 	    free_string(olds);
 	} else {
@@ -568,9 +595,13 @@ bool do_count(int argc, char *argv[]) {
 	    ref_t r = get_ref(argv[i]);
 	    word_t w;
 	    if (keyvalue_find(map, (word_t) r, &w)) {
+#if RPT >= 1
 		report(1, "%s:\t%lu", argv[i], w);
+#endif
 	    } else {
+#if RPT >= 1
 		report(1, "%s:\t??", argv[i]);
+#endif
 	    }
 	}
 	keyvalue_free(map);
@@ -593,10 +624,13 @@ bool do_count(int argc, char *argv[]) {
 	    }
 	}
 	report(0, "");
+#if RPT >= 1
 	word_t wt = ((word_t) 1) << supset->nelements;
-	for (i = 1; i < argc; i++)
+	for (i = 1; i < argc; i++) {
 	    report(1, "%s:\t%.0f",
 		   argv[i], wt * get_double(map, get_ref(argv[i])));
+	}
+#endif
 	keyvalue_free(map);
 	set_free(supset);
     }
@@ -624,7 +658,9 @@ bool do_equal(int argc, char *argv[]) {
 }
 
 bool do_local_flush(int argc, char *argv[]) {
+#if RPT >= 1
     report(1, "Flushing state");
+#endif
     bdd_quit(0, NULL);
     mem_status(stdout);
     reset_peak_bytes();
@@ -658,7 +694,9 @@ bool do_cofactor(int argc, char *argv[]) {
 	ref_t rnew = (ref_t) wr;
 	assign_ref(argv[1], rnew, false);
 	shadow_show(smgr, rnew, buf);
-	report(1, "RESULT.  %s = %s", argv[1], buf);
+#if RPT >= 2
+	report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
     }
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
@@ -689,7 +727,9 @@ bool do_equant(int argc, char *argv[]) {
 	ref_t rnew = (ref_t) wr;
 	assign_ref(argv[1], rnew, false);
 	shadow_show(smgr, rnew, buf);
-	report(1, "RESULT.  %s = %s", argv[1], buf);
+#if RPT >= 2
+	report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif	
     }
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
@@ -723,7 +763,9 @@ bool do_uquant(int argc, char *argv[]) {
 	rnew = REF_NEGATE(rnew);
 	assign_ref(argv[1], rnew, false);
 	shadow_show(smgr, rnew, buf);
-	report(1, "RESULT.  %s = %s", argv[1], buf);
+#if RPT >= 2
+	report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
     }
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
@@ -778,7 +820,9 @@ bool do_shift(int argc, char *argv[]) {
 	ref_t rnew = (ref_t) wr;
 	assign_ref(argv[1], rnew, false);
 	shadow_show(smgr, rnew, buf);
-	report(1, "RESULT.  %s = %s", argv[1], buf);
+#if RPT >= 2
+	report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
     }
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
@@ -833,7 +877,9 @@ bool do_support(int argc, char *argv[]) {
 	ref_t r = (ref_t) w;
 	char buf[24];
 	ref_show(r, buf);
+#if RPT >= 1
 	report(1, "\t%s", buf);
+#endif
     }
     set_free(roots);
     set_free(supset);
@@ -852,7 +898,9 @@ bool do_var(int argc, char *argv[]) {
 	    return false;
 	assign_ref(argv[i], rv, true);
 	shadow_show(smgr, rv, buf);
-	report(1, "VAR %s = %s", argv[i], buf);
+#if RPT >= 2
+	report(2, "VAR %s = %s", argv[i], buf);
+#endif
     }
     return true;
 }

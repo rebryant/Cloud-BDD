@@ -4,9 +4,11 @@ CUDDDIR = ./cudd-symlink
 CUDDINC= -I$(CUDDDIR)/cudd -I$(CUDDDIR)/mtr -I$(CUDDDIR)/epd -I$(CUDDDIR)/util
 CUDDLIBS = $(CUDDDIR)/cudd/libcudd.a  $(CUDDDIR)/mtr/libmtr.a  $(CUDDDIR)/st/libst.a $(CUDDDIR)/epd/libepd.a $(CUDDDIR)/util/libutil.a -lm
 
+VLEVEL=2
+
 CC=gcc
-#CFLAGS= -Wall -g
-CFLAGS = -Wall -O2
+#CFLAGS= -Wall -g -DRPT=$(VLEVEL)
+CFLAGS = -Wall -O2 -DRPT=$(VLEVEL)
 
 # Optionally test version with very small hash signatures to stress aliasing code
 BDDFLAGS=
