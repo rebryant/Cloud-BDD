@@ -550,7 +550,9 @@ static void run_controller(char *infile_name) {
 		if (keyvalue_remove(new_conn_map, (word_t) fd, NULL, NULL)) {
 		    err(false, "Unexpected EOF from new connection, fd %d", fd);
 		} else if (set_member(worker_fd_set, (word_t) fd, true)) {
-		    err(false, "Unexpected EOF from connected worker, fd %d", fd);
+		    err(false, "Unexpected EOF from connected worker, fd %d.  Shutting down", fd);
+		    /* Shut down system */
+		    finish_cmd();
 		} else if (set_member(client_fd_set, (word_t) fd, true)) {
 #if RPT >= 3
 		    report(3, "Disconnection from client (fd %d)", fd);

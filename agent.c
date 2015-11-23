@@ -737,8 +737,8 @@ bool start_client_global(unsigned opcode, unsigned nword, word_t *data) {
 	    break;
 	case MSG_KILL:
 	    chunk_free(msg);
-#if RPT >= 5
-	    report(5,
+#if RPT >= 1
+	    report(1,
 "Received kill message from controller, superceding client global operation");
 #endif
 	    finish_cmd();
@@ -882,7 +882,9 @@ void run_worker() {
 		    err(true, "Unexpected EOF from controller (fatal)");
 		} else {
 		    err(false,
-			"Unexpected EOF from router with fd %d (ignored)", fd);
+			"Unexpected EOF from router with fd %d (shutting down)", fd);
+		    finish_cmd();
+		    exit(0);
 		}
 		close(fd);
 		continue;
@@ -902,8 +904,8 @@ void run_worker() {
 		switch(code) {
 		case MSG_KILL:
 		    chunk_free(msg);
-#if RPT >= 5
-		    report(5, "Received kill message from controller");
+#if RPT >= 1
+		    report(1, "Received kill message from controller");
 #endif
 		    quit_agent(0, NULL);
 		    return;
@@ -1029,7 +1031,9 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		    err(true, "Unexpected EOF from controller (fatal)");
 		} else {
 		    err(false,
-			"Unexpected EOF from router with fd %d (ignored)", fd);
+			"Unexpected EOF from router with fd %d (shutting down)", fd);
+		    finish_cmd();
+		    exit(0);
 		}
 		close(fd);
 		continue;
@@ -1045,8 +1049,8 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		switch(code) {
 		case MSG_KILL:
 		    chunk_free(msg);
-#if RPT >= 2
-		    report(2, "Received kill message from controller");
+#if RPT >= 1
+		    report(1, "Received kill message from controller");
 #endif
 		    quit_agent(0, NULL);
 		    break;
@@ -1195,8 +1199,8 @@ void run_client(char *infile_name) {
 		    break;
 		case MSG_KILL:
 		    chunk_free(msg);
-#if RPT >= 5
-		    report(5, "Received kill message from controller");
+#if RPT >= 1
+		    report(1, "Received kill message from controller");
 #endif
 		    finish_cmd();
 		    break;
