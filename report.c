@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
+#include <sys/time.h>
 #include <signal.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -12,6 +13,7 @@
 
 FILE *errfile = NULL;
 FILE *verbfile = NULL;
+FILE *logfile = NULL;
 
 int verblevel = 0;
 void init_files(FILE *efile, FILE *vfile)
@@ -22,6 +24,17 @@ void init_files(FILE *efile, FILE *vfile)
 
 /* Optional function to call when fatal error encountered */
 void (*fatal_fun)() = NULL;
+
+void set_verblevel(int level)
+{
+    verblevel = level;
+}
+
+bool set_logfile(char *file_name)
+{
+    logfile = fopen(file_name, "w");
+    return logfile != NULL;
+}
 
 void err(bool fatal, char *fmt, ...)
 {
@@ -34,16 +47,19 @@ void err(bool fatal, char *fmt, ...)
     fprintf(errfile, "\n");
     fflush(errfile);
     va_end(ap);
+    if (logfile) {
+	va_start(ap, fmt);
+	fprintf(logfile, "Error: ");
+	vfprintf(logfile, fmt, ap);
+	fprintf(logfile, "\n");
+	fflush(logfile);
+	va_end(ap);
+    }
     if (fatal) {
 	if (fatal_fun)
 	    fatal_fun();
 	exit(1);
     }
-}
-
-void set_verblevel(int level)
-{
-    verblevel = level;
 }
 
 void report(int level, char *fmt, ...)
@@ -57,6 +73,13 @@ void report(int level, char *fmt, ...)
 	fprintf(verbfile, "\n");
 	fflush(verbfile);
 	va_end(ap);
+	if (logfile) {
+	    va_start(ap, fmt);
+	    vfprintf(logfile, fmt, ap);
+	    fprintf(logfile, "\n");
+	    fflush(logfile);
+	    va_end(ap);
+	}
     }
 }
 
@@ -70,6 +93,12 @@ void report_noreturn(int level, char *fmt, ...)
 	vfprintf(verbfile, fmt, ap);
 	fflush(verbfile);
 	va_end(ap);
+	if (logfile) {
+	    va_start(ap, fmt);
+	    vfprintf(logfile, fmt, ap);
+	    fflush(logfile);
+	    va_end(ap);
+	}
     }
 }
 
@@ -218,6 +247,22 @@ void mem_status(FILE *fp) {
 	    (long unsigned) last_peak_bytes,
 	    (long unsigned) current_bytes);
 }
+
+/* Initialization of timers */
+void init_time(double *timep) {
+    (void) delta_time(timep);
+}
+
+double delta_time(double *timep) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    double current_time = tv.tv_sec + 1.0E-6 * tv.tv_usec;
+    double delta = current_time - *timep;
+    *timep = current_time;
+    return delta;
+}
+
+
 
 void reset_peak_bytes() {
     last_peak_bytes = current_bytes;

@@ -9,7 +9,6 @@
 #include <inttypes.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/select.h>
 #include <fcntl.h>
 #include <ctype.h>
@@ -95,10 +94,10 @@ bool do_quit_cmd(int argc, char *argv[]);
 bool do_help_cmd(int argc, char *argv[]);
 bool do_option_cmd(int argc, char *argv[]);
 bool do_source_cmd(int argc, char *argv[]);
+bool do_log_cmd(int argc, char *argv[]);
 bool do_time_cmd(int argc, char *argv[]);
 bool do_comment_cmd(int argc, char *argv[]);
 
-static void init_time();
 static void init_in();
 
 static bool push_file(char *fname);
@@ -112,13 +111,14 @@ void init_cmd() {
     param_list = NULL;
     err_cnt = 0;
     quit_flag = false;
-    add_cmd("help", do_help_cmd,       "              | Show documentation");
-    add_cmd("option", do_option_cmd,   "     name val | Display & set options");
-    add_cmd("quit", do_quit_cmd,       "              | Exit program");
+    add_cmd("help", do_help_cmd,       "                | Show documentation");
+    add_cmd("option", do_option_cmd,   "       name val | Display & set options");
+    add_cmd("quit", do_quit_cmd,       "                | Exit program");
     add_cmd("source", do_source_cmd,
-	    " file         | Read commands from source file");
-    add_cmd("time", do_time_cmd,       " cmd arg ...  | Time command execution");
-    add_cmd("#", do_comment_cmd,       " ...          | Display comment");
+	    " file           | Read commands from source file");
+    add_cmd("log", do_log_cmd,         " file           | Copy output to file");
+    add_cmd("time", do_time_cmd,       " cmd arg ...    | Time command execution");
+    add_cmd("#", do_comment_cmd,       " ...            | Display comment");
     add_param("verbose", &verblevel, "Verbosity level", NULL);
     add_param("error", &err_limit,   "Number of errors until exit", NULL);
     add_param("echo", &echo, "Do/don't echo commands", NULL);
@@ -126,7 +126,8 @@ void init_cmd() {
     add_param("seconds", &timelimit, "Maximum seconds allowed",
 	      change_timeout);
     init_in();
-    init_time();
+    init_time(&last_time);
+    first_time = last_time;
 }
 
 /* Add a new command */
@@ -385,23 +386,20 @@ bool do_source_cmd(int argc, char *argv[]) {
     return true;
 }
 
-static double delta_time() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    double current_time = tv.tv_sec + 1.0E-6 * tv.tv_usec;
-    double delta = current_time - last_time;
-    last_time = current_time;
-    return delta;
-}
-
-/* Initialization of timers */
-static void init_time() {
-    delta_time();
-    first_time = last_time;
+bool do_log_cmd(int argc, char *argv[]) {
+    if (argc < 2) {
+	report(0, "No log file given");
+	return false;
+    }
+    bool result = set_logfile(argv[1]);
+    if (!result) {
+	report(0, "Couldn't open log file '%s'", argv[1]);
+    }
+    return result;
 }
 
 bool do_time_cmd(int argc, char *argv[]) {
-    double delta = delta_time();
+    double delta = delta_time(&last_time);
     bool ok = true;
     if (argc <= 1) {
 	double elapsed = last_time - first_time;
@@ -411,7 +409,7 @@ bool do_time_cmd(int argc, char *argv[]) {
 	if (block_flag) {
 	    block_timing = true;
 	} else {
-	    delta = delta_time();
+	    delta = delta_time(&last_time);
 	    report(0, "Delta time = %.3f", delta);
 	}
     }
@@ -511,7 +509,7 @@ void block_console() {
 void unblock_console() {
     block_flag = false;
     if (block_timing) {
-	double delta = delta_time();
+	double delta = delta_time(&last_time);
 	report(0, "Delta time = %.3f", delta);
     }
     block_timing = false;

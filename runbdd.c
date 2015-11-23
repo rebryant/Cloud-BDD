@@ -162,7 +162,7 @@ static bool bdd_quit(int argc, char *argv[]) {
 
 static void usage(char *cmd) {
     printf(
-"Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r]\n",
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
@@ -173,6 +173,7 @@ static void usage(char *cmd) {
     printf("\t-H HOST    Use HOST as controller host\n");
     printf("\t-P PORT    Use PORT as controller port\n");
     printf("\t-r         Try to use local router\n");
+    printf("\t-L FILE    Echo results to FILE\n");
     exit(0);
 }
 
@@ -183,6 +184,8 @@ int main(int argc, char *argv[]) {
     /* To hold input file name */
     char buf[BUFSIZE];
     char *infile_name = NULL;
+    char lbuf[BUFSIZE];
+    char *logfile_name = NULL;
     int level = 1;
     int c;
     char hbuf[BUFSIZE] = "localhost";
@@ -192,7 +195,7 @@ int main(int argc, char *argv[]) {
     do_cudd = 0;
     do_local = 0;
     do_dist = 0;
-    while ((c = getopt(argc, argv, "hn:v:f:cldH:P:r")) != -1) {
+    while ((c = getopt(argc, argv, "hn:v:f:cldH:P:rL:")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -223,6 +226,10 @@ int main(int argc, char *argv[]) {
 	case 'r':
 	    try_local_router = true;
 	    break;
+	case 'L':
+	    logfile_name = strncpy(lbuf, optarg, BUFSIZE-1);
+	    lbuf[BUFSIZE-1] = '\0';
+	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);
@@ -238,6 +245,8 @@ int main(int argc, char *argv[]) {
     }
     console_init(do_dist);
     set_verblevel(level);
+    if (logfile_name)
+	set_logfile(logfile_name);
     add_quit_helper(bdd_quit);
     if (do_dist) {
 	run_client(infile_name);

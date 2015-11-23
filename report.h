@@ -10,6 +10,8 @@
 
 void init_files(FILE *errfile, FILE *verbfile);
 
+bool set_logfile(char *file_name);
+
 extern int verblevel;
 void set_verblevel(int level);
 
@@ -58,6 +60,15 @@ void free_string(char *s);
 
 /* Report current allocation status */
 void mem_status(FILE *fp);
+
+/** Time measurement.  **/
+
+/* Time counted as fp number in seconds */
+void init_time(double *timep);
+
+/* Compute time since last call with this timer
+   and reset timer */
+double delta_time(double *timep);
 
 /** Counters giving peak memory usage **/
 
