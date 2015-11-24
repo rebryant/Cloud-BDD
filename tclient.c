@@ -36,7 +36,7 @@ void gc_finish();
 static void init(char *controller_name, unsigned controller_port,
 		 bool try_local_router) {
     init_cmd();
-    init_agent(true, controller_name, controller_port, try_local_router);
+    init_agent(true, controller_name, controller_port, true, try_local_router);
     set_agent_stat_helper(do_summary_stat);
     set_gc_handlers(gc_start, gc_finish);
     add_cmd("incr", do_incr_cmd,

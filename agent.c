@@ -29,6 +29,9 @@
 /* Is this a client or a worker? */
 static bool isclient = false;
 
+/* Should agent bypass router when message destined to self? */
+static bool self_route = true;
+
 /* What's my agent ID? */
 unsigned own_agent = 0;
 
@@ -186,7 +189,7 @@ int match_self_ip(unsigned hip) {
 }
 
 void init_agent(bool iscli, char *controller_name, unsigned controller_port,
-		bool try_local_router) {
+		bool try_self_route, bool try_local_router) {
     operator_table = word_keyvalue_new();
     deferred_operand_table = word_keyvalue_new();
     size_t i;
@@ -196,6 +199,7 @@ void init_agent(bool iscli, char *controller_name, unsigned controller_port,
     chunk_ptr msg;
     bool eof;
     isclient = iscli;
+    self_route = try_self_route;
     controller_fd = open_clientfd(controller_name, controller_port);
     if (controller_fd < 0)
 	err(true, 
@@ -460,9 +464,6 @@ unsigned choose_own_worker() {
 
 static void receive_operation(chunk_ptr op);
 static void receive_operand(chunk_ptr oper);
-
-/* Should bypass router when message destined to self? */
-static bool self_route = true;
 
 /* Send single-valued operand */
 bool send_as_operand(dword_t dest, word_t val) {
@@ -1073,8 +1074,10 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		    gc_state = GC_DEFER;
 		    break;
 		case MSG_GC_FINISH:
-		    err(false,
+#if RPT >= 3
+		    report(3,
 "Unexpected GC_FINISH message from controller when waiting for result (ignored)");
+#endif
 		    chunk_free(msg);
 		    break;
 		default:

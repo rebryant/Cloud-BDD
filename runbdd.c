@@ -239,7 +239,7 @@ int main(int argc, char *argv[]) {
     bdd_init();
     init_cmd();
     if (do_dist) {
-	init_agent(true, hbuf, port, try_local_router);
+	init_agent(true, hbuf, port, true, try_local_router);
 	set_agent_flush_helper(run_flush);
 	set_agent_stat_helper(do_summary_stat);
     }

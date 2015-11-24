@@ -11,9 +11,13 @@ size_t agent_stat_counter[NSTATA];
 /* What's my agent ID? */
 unsigned own_agent;
 
-/* Initialize agent.  Optionally specify that should attempt to use a local router */
+/* Initialize agent.
+   Optionally specify that should
+     1) bypass the network if messages are destined to the same agent
+     2) favor router having same IP address as agent 
+*/
 void init_agent(bool iscli, char *controller_name, unsigned controller_port,
-		bool try_local_route);
+		bool try_self_route, bool try_local_route);
 
 /* Function to implement specific operation */
 typedef bool (*op_handler)(chunk_ptr args);

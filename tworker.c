@@ -31,7 +31,7 @@ void gc_finish();
 
 static void init(char *controller_name, unsigned controller_port,
 		 bool try_local_router) {
-    init_agent(false, controller_name, controller_port, try_local_router);
+    init_agent(false, controller_name, controller_port, true, try_local_router);
     set_agent_flush_helper(flush_worker);
     add_op_handler(OP_IFORK, do_ifork_op);
     add_op_handler(OP_INCR, do_incr_op);
