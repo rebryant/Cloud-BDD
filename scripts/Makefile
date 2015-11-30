@@ -1,9 +1,9 @@
-all: aa ma nq lq
+all: aa ma nq lq slq
 aa: aa2.cmd aa3.cmd aa4.cmd aa6.cmd aa8.cmd aa12.cmd aa16.cmd aa24.cmd aa32.cmd aa48.cmd aa64.cmd
 ma: ma2.cmd ma3.cmd ma4.cmd ma5.cmd ma6.cmd ma7.cmd ma8.cmd ma10.cmd ma12.cmd
 nq: nq5.cmd nq6.cmd nq8.cmd nq10.cmd nq12.cmd nq13.cmd nq14.cmd nq15.cmd nq16.cmd
 lq: lq4.cmd lq8.cmd lq9.cmd lq10.cmd lq11.cmd lq12.cmd lq13.cmd lq14.cmd lq15.cmd lq16.cmd
-
+slq: slq4.cmd slq8.cmd slq9.cmd slq10.cmd slq11.cmd slq12.cmd slq13.cmd slq14.cmd slq15.cmd slq16.cmd
 
 aa2.cmd: circuit.py addassoc.py
 	./addassoc.py 2 > aa2.cmd
@@ -128,8 +128,38 @@ lq15.cmd: circuit.py lqueen.py
 lq16.cmd: circuit.py lqueen.py
 	./lqueen.py 16 > lq16.cmd
 
+slq4.cmd: circuit.py slqueen.py
+	./slqueen.py 4 > slq4.cmd
+
+slq8.cmd: circuit.py slqueen.py
+	./slqueen.py 8 > slq8.cmd
+
+slq9.cmd: circuit.py slqueen.py
+	./slqueen.py 9 > slq9.cmd
+
+slq10.cmd: circuit.py slqueen.py
+	./slqueen.py 10 > slq10.cmd
+
+slq11.cmd: circuit.py slqueen.py
+	./slqueen.py 11 > slq11.cmd
+
+slq12.cmd: circuit.py slqueen.py
+	./slqueen.py 12 > slq12.cmd
+
+slq13.cmd: circuit.py slqueen.py
+	./slqueen.py 13 > slq13.cmd
+
+slq14.cmd: circuit.py slqueen.py
+	./slqueen.py 14 > slq14.cmd
+
+slq15.cmd: circuit.py slqueen.py
+	./slqueen.py 15 > slq15.cmd
+
+slq16.cmd: circuit.py slqueen.py
+	./slqueen.py 16 > slq16.cmd
+
 
 clean:
-	rm -f *.pyc *~
+	rm -f *.pyc *~ *.cmd
 
 
