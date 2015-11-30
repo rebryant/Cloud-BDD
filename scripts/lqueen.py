@@ -5,4 +5,8 @@ import circuit
 
 n = int(sys.argv[1])
 
-circuit.lQueens(n)
+careful = n >= 13
+
+info = True
+
+circuit.lQueens(n, careful = careful, info = info)

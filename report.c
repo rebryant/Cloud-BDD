@@ -122,7 +122,7 @@ static size_t free_bytes = 0;
 /* These are externally visible */
 size_t peak_bytes = 0;
 size_t last_peak_bytes = 0;
-static size_t current_bytes = 0;
+size_t current_bytes = 0;
 
 static void check_exceed(size_t new_bytes) {
     size_t limit_bytes = (size_t) mblimit << 20;

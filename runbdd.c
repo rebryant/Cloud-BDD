@@ -845,12 +845,16 @@ bool do_shift(int argc, char *argv[]) {
 
 bool do_information(int argc, char *argv[]) {
     ref_t r;
+    size_t idx;
     set_ptr roots = get_refs(argc-1, argv+1);
     if (!roots)
 	return false;
+    for (idx = 1; idx < argc; idx++) {
+	report_noreturn(0, "%s ", argv[idx]);
+    }
+    report_noreturn(0, "\n");
     set_ptr supset = shadow_support(smgr, roots);
-    report_noreturn(0, "Support:");
-    size_t idx;
+    report_noreturn(0, "  Support:");
     for (idx = 0; idx < smgr->nvars; idx++) {
 	r = shadow_get_variable(smgr, idx);
 	if (set_member(supset, (word_t) r, false)) {
@@ -868,7 +872,7 @@ bool do_information(int argc, char *argv[]) {
     set_free(supset);
     if (smgr->do_local) {
 	set_ptr rset = ref_reach(smgr->ref_mgr, roots);
-	report(0, "Size: %lu nodes", rset->nelements);
+	report(0, "  Size: %lu nodes", rset->nelements);
 	set_free(rset);
     }
     set_free(roots);

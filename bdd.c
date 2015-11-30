@@ -1114,7 +1114,9 @@ keyvalue_table_ptr ref_shift(ref_mgr mgr, set_ptr roots,
 /* Do garbage collection, eliminating all but refs in rset */
 static void complete_collection(ref_mgr mgr, set_ptr rset) {
     size_t start_cnt = 0;
+    size_t start_bytes = current_bytes;
     size_t end_cnt = 0;
+    size_t end_bytes = 0;
     keyvalue_table_ptr old_uniq = mgr->unique_table;
     keyvalue_table_ptr new_uniq = word_keyvalue_new();
     ulist_ptr ls;
@@ -1156,8 +1158,10 @@ static void complete_collection(ref_mgr mgr, set_ptr rset) {
     clear_ite_table(mgr);
     mgr->stat_counter[STATB_UNIQ_CURR] = end_cnt;
     mgr->last_nelements = end_cnt;
+    end_bytes = current_bytes;
 #if RPT >= 1
-    report(1, "Garbage Collection: %lu --> %lu function refs", start_cnt, end_cnt);
+    report(1, "Garbage Collection: %lu (%lu) --> %lu (%lu) function refs (bytes)",
+	   start_cnt, start_bytes, end_cnt, end_bytes);
 #endif
 }
 

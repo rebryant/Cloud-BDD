@@ -555,7 +555,7 @@ def bigLog2(x):
     return val
 
 # Version of nqueens using logarithmic encoding of column numbers
-def lQueens(n, f = sys.stdout):
+def lQueens(n, f = sys.stdout, careful = False, info = False):
     ckt = Circuit(f)
     m = bigLog2(n)
     rows = [ckt.nameVec("v-%d" % r, m) for r in range(n)]
@@ -589,6 +589,11 @@ def lQueens(n, f = sys.stdout):
         ckt.exactly1(okc.nodes[c], col(n, c), col(n, c, True))
     ckt.andN(okC, okc.nodes)
     ckt.decRefs([okc])
+    if careful:
+        ckt.comment("Forced GC")
+        ckt.collect()
+    if info:
+        ckt.information("okC")
     # Diagonal constraints:
     ckt.comment("Diagonal Constraints")
     for i in range(-n+1,n):
@@ -597,6 +602,20 @@ def lQueens(n, f = sys.stdout):
         ckt.atMost1(out, diag(n,i), diag(n, i, True))
     ckt.andN(okD, okd.nodes)
     ckt.decRefs([okd])
+    if careful:
+        ckt.comment("Forced GC")
+        ckt.collect()
+    if info:
+        ckt.information("okD")
+    ckt.comment("Combine Constraints: column + diagonal")
+    okCD = ckt.node("okCD")
+    ckt.andN(okCD, [okC, okD])
+    ckt.decRefs([okC, okD])
+    if careful:
+        ckt.comment("Forced GC")
+        ckt.collect()
+    if info:
+        ckt.information("okCD")
     # Off diagonal constraints
     ckt.comment("Off-diagonal Constraints")
     for i in range(-n+1,n):
@@ -605,19 +624,26 @@ def lQueens(n, f = sys.stdout):
         ckt.atMost1(out, offDiag(n,i), offDiag(n, i, True))
     ckt.andN(okO, oko.nodes)
     ckt.decRefs([oko])
-    ckt.comment("Combine Constraints: column + diagonal")
-    ok = ckt.node("ok")
-    ckt.andN(ok, [okC, okD])
-    ckt.decRefs([okC, okD])
+    if careful:
+        ckt.comment("Forced GC")
+        ckt.collect()
+    if info:
+        ckt.information("okO")
     ckt.comment("Combine Constraints: Add off-diagonal")
-    ckt.andN(ok, [ok, okO])
-    ckt.decRefs([okO])
+    ok = ckt.node("ok")
+    ckt.andN(ok, [okCD, okO])
+    ckt.decRefs([okCD, okO])
+    if careful:
+        ckt.comment("Forced GC")
+        ckt.collect()
     ckt.comment("BDD generation completed")
     ckt.write("time")
+    ckt.information("ok")
     ckt.comment("Model counting")
     ckt.write("count ok")
-    ckt.comment("Final garbage collection. Get size of ok function")
-    ckt.write("collect")
+    if careful:
+        ckt.comment("Forced GC")
+        ckt.collect()
     ckt.write("time")
     ckt.comment("Flush state")
     ckt.write("flush")
