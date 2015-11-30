@@ -22,8 +22,13 @@ void init_files(FILE *efile, FILE *vfile)
     verbfile = vfile;
 }
 
+/* Default fatal function */
+void default_fatal_fun() {
+    printf("FATAL.  Memory allocation = %lu bytes\n", current_bytes);
+}
+
 /* Optional function to call when fatal error encountered */
-void (*fatal_fun)() = NULL;
+void (*fatal_fun)() = default_fatal_fun;
 
 void set_verblevel(int level)
 {
@@ -207,7 +212,7 @@ char *strsave_or_fail(char *s, char *fun_name) {
 /* Free block, as from malloc, realloc, or strsave */
 void free_block(void *b, size_t bytes) {
     if (b == NULL) {
-	err(0, "Attempting to free null block");
+	err(false, "Attempting to free null block");
     }
     free(b);
     free_cnt++;
@@ -218,7 +223,7 @@ void free_block(void *b, size_t bytes) {
 /* Free array, as from calloc */
 void free_array(void *b, size_t cnt, size_t bytes) {
     if (b == NULL) {
-	err(0, "Attempting to free null block");
+	err(false, "Attempting to free null block");
     }
     free(b);
     free_cnt++;
@@ -230,7 +235,7 @@ void free_array(void *b, size_t cnt, size_t bytes) {
 /* Free string saved by strsave_or_fail */
 void free_string(char *s) {
     if (s == NULL) {
-	err(0, "Attempting to free null block");
+	err(false, "Attempting to free null block");
     }
     free_block((void *) s, strlen(s)+1);
 }
@@ -276,4 +281,9 @@ void change_timeout(int oldval) {
     /* alarm function will correctly cancel existing alarms */
     signal(SIGALRM, sigalrmhandler);
     alarm(timelimit);
+}
+
+/* Handler for SIGTERM signals */
+void sigterm_handler(int sig) {
+    err(true, "SIGTERM signal received");
 }

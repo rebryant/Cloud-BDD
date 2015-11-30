@@ -88,3 +88,5 @@ void reset_peak_bytes();
 /* Change value of timeout */
 void change_timeout(int oldval);
 
+/* Handler for SIGTERM signals */
+void sigterm_handler(int sig);

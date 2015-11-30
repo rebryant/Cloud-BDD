@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "dtype.h"
 #include "table.h"
@@ -998,6 +999,8 @@ int main(int argc, char *argv[]) {
 	}
     }
     set_verblevel(level);
+    if (signal(SIGTERM, sigterm_handler) == SIG_ERR)
+	err(false, "Couldn't install signal handler");
     init_controller(port, nrouters, nworkers);
     if (!console)
 	block_console();

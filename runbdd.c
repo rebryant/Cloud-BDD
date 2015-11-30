@@ -8,6 +8,7 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <sys/select.h>
+#include <signal.h>
 
 #include "dtype.h"
 #include "table.h"
@@ -248,6 +249,8 @@ int main(int argc, char *argv[]) {
     if (logfile_name)
 	set_logfile(logfile_name);
     add_quit_helper(bdd_quit);
+    if (signal(SIGTERM, sigterm_handler) == SIG_ERR)
+	err(false, "Couldn't install signal handler");
     if (do_dist) {
 	run_client(infile_name);
     } else {

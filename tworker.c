@@ -14,6 +14,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "dtype.h"
 #include "table.h"
@@ -84,6 +85,8 @@ int main(int argc, char *argv[]) {
     }
     set_verblevel(level);
     init(buf, port, try_local_router);
+    if (signal(SIGTERM, sigterm_handler) == SIG_ERR)
+	err(false, "Couldn't install signal handler");
     run_worker();
     mem_status(stdout);
     return 0;

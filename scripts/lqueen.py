@@ -5,7 +5,7 @@ import circuit
 
 n = int(sys.argv[1])
 
-careful = n >= 13
+careful = True
 
 info = True
 
