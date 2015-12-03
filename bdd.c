@@ -1165,8 +1165,8 @@ static void complete_collection(ref_mgr mgr, set_ptr rset) {
     mgr->last_nelements = end_cnt;
     end_bytes = current_bytes;
 #if RPT >= 1
-    report(1, "Garbage Collection: %lu (%lu) --> %lu (%lu) function refs (bytes)",
-	   start_cnt, start_bytes, end_cnt, end_bytes);
+    report(1, "Garbage Collection: %lu (%.3f) --> %lu (%.3f) function refs (GB).  %.3f GB resident",
+	   start_cnt, gigabytes(start_bytes), end_cnt, gigabytes(end_bytes), gigabytes(resident_bytes()));
 #endif
 }
 

@@ -32,7 +32,6 @@ void report(int verblevel, char *fmt, ...);
 /* Like report, but without return character */
 void report_noreturn(int verblevel, char *fmt, ...);
 
-
 /* Simple failure report.  Works even when malloc returns NULL */
 void fail_fun(char *format, char *msg);
 
@@ -70,6 +69,14 @@ void init_time(double *timep);
    and reset timer */
 double delta_time(double *timep);
 
+/** Memory usage **/
+
+/* Number of bytes resident in physical memory */
+size_t resident_bytes();
+
+/* Convert bytes to gigabytes */
+double gigabytes(size_t bytes);
+
 /** Counters giving peak memory usage **/
 
 /* Never resets */
@@ -80,6 +87,7 @@ size_t last_peak_bytes;
 
 /* Instantaneous */
 size_t current_bytes;
+
 
 /* Reset last_peak_bytes */
 void reset_peak_bytes();

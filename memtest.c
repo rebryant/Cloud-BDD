@@ -3,8 +3,6 @@
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/time.h>
-#include <sys/resource.h>
 
 #include "report.h"
 
@@ -13,21 +11,11 @@
 
 size_t bcount = 0;
 
-double gb(size_t n) {
-    return (double) n / (1UL << 30);
-}
-
 static void memstat() {
-    struct rusage r;
     printf("%lu buffers of size %lu each.  Total = %.3f GB\n",
-	   bcount, BSIZE, gb(bcount * BSIZE));
-    int code = getrusage(RUSAGE_SELF, &r);
-    if (code < 0) {
-	printf("Call to getrusage failed\n");
-    } else {
-	size_t mem = r.ru_maxrss * 1024;
-	printf("%.3f GB resident\n", gb(mem));
-    }
+	   bcount, BSIZE, gigabytes(bcount * BSIZE));
+    size_t mem = resident_bytes();
+    printf("%.3f GB resident\n", gigabytes(mem));
 }
 
 int main (int argc, char *argv[]) {
@@ -49,4 +37,5 @@ int main (int argc, char *argv[]) {
     }
     printf("Completed\n");
     memstat();
+    exit(0);
 }

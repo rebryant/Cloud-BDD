@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include "report.h"
+#include <sys/time.h>
+#include <sys/resource.h>
+
 
 #define MAX(a,b) ((a)<(b)?(b):(a))
 
@@ -22,9 +25,16 @@ void init_files(FILE *efile, FILE *vfile)
     verbfile = vfile;
 }
 
+static char fail_buf[1024];
+
+
 /* Default fatal function */
 void default_fatal_fun() {
-    printf("FATAL.  Memory allocation = %lu bytes\n", current_bytes);
+    sprintf(fail_buf, "FATAL.  Memory: allocated = %.3f GB, resident = %.3f GB\n",
+	   gigabytes(current_bytes), gigabytes(resident_bytes()));
+    write(STDOUT_FILENO, fail_buf, strlen(fail_buf)+1);
+    if (logfile)
+	fputs(fail_buf, logfile);
 }
 
 /* Optional function to call when fatal error encountered */
@@ -111,7 +121,6 @@ void report_noreturn(int level, char *fmt, ...)
 /* Functions denoting failures */
 
 /* General failure */
-static char fail_buf[1024];
 
 /* Need to be able to print without using malloc */
 void fail_fun(char *format, char *msg) {
@@ -121,12 +130,13 @@ void fail_fun(char *format, char *msg) {
     /* Use write to avoid any buffering issues */
     write(STDOUT_FILENO, fail_buf, strlen(fail_buf)+1);
     if (logfile) {
-	/* Don't know file descriptor */
+	/* Don't know file descriptor for logfile */
 	fputs(fail_buf, logfile);
-	fclose(logfile);
     }
     if (fatal_fun)
 	fatal_fun();
+    if (logfile)
+	fclose(logfile);
     exit(1);
 }
 
@@ -283,7 +293,22 @@ double delta_time(double *timep) {
     return delta;
 }
 
+/* Number of bytes resident in physical memory */
+size_t resident_bytes() {
+    struct rusage r;
+    size_t mem = 0;
+    int code = getrusage(RUSAGE_SELF, &r);
+    if (code < 0) {
+	err(false, "Call to getrusage failed");
+    } else {
+	mem = r.ru_maxrss * 1024;
+    }
+    return mem;
+}
 
+double gigabytes(size_t n) {
+    return (double) n / (1UL << 30);
+}
 
 void reset_peak_bytes() {
     last_peak_bytes = current_bytes;
