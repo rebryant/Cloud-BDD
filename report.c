@@ -59,6 +59,7 @@ void err(bool fatal, char *fmt, ...)
 	fprintf(logfile, "\n");
 	fflush(logfile);
 	va_end(ap);
+	fclose(logfile);
     }
     if (fatal) {
 	if (fatal_fun)
@@ -110,8 +111,23 @@ void report_noreturn(int level, char *fmt, ...)
 /* Functions denoting failures */
 
 /* General failure */
+static char fail_buf[1024];
+
+/* Need to be able to print without using malloc */
 void fail_fun(char *format, char *msg) {
-    err(true, format, msg);
+    sprintf(fail_buf, format, msg);
+    /* Tack on return */
+    fail_buf[strlen(fail_buf)] = '\n';
+    /* Use write to avoid any buffering issues */
+    write(STDOUT_FILENO, fail_buf, strlen(fail_buf)+1);
+    if (logfile) {
+	/* Don't know file descriptor */
+	fputs(fail_buf, logfile);
+	fclose(logfile);
+    }
+    if (fatal_fun)
+	fatal_fun();
+    exit(1);
 }
 
 /* Maximum number of megabytes that application can use (0 = unlimited) */

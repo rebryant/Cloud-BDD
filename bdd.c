@@ -30,6 +30,9 @@
 /* Minimum node count below which will not trigger GC */
 #define GC_THRESHOLD 100000
 
+/* Can GC be requested based on growth characteristics? */
+bool auto_gc_enabled = true;
+
 /* Unique table uses a linked list for each possible hash value. */
 
 /*
@@ -619,6 +622,8 @@ ref_t ref_xor(ref_mgr mgr, ref_t aref, ref_t bref) {
 
 /* See if it's time to perform a GC */
 bool ref_gc_check(ref_mgr mgr) {
+    if (!auto_gc_enabled)
+	return false;
     size_t n = mgr->stat_counter[STATB_UNIQ_CURR];
     if (n <= GC_THRESHOLD)
 	return false;

@@ -99,7 +99,7 @@ static void console_init(bool do_dist) {
 	    " fd f l1 ...    | fd <- cofactor(f, l1, ...");
     if (!do_dist)
 	add_cmd("collect", do_local_collect,
-		"                | Perform garbage collection");
+		"                | Perform garbage collection (local only)");
     add_cmd("count", do_count,
 	    " f1 f2 ...      | Display function counts");
     add_cmd("delete", do_delete,

@@ -33,7 +33,7 @@ void report(int verblevel, char *fmt, ...);
 void report_noreturn(int verblevel, char *fmt, ...);
 
 
-/* Simple failure report */
+/* Simple failure report.  Works even when malloc returns NULL */
 void fail_fun(char *format, char *msg);
 
 /* Attempt to call malloc.  Fail when returns NULL */

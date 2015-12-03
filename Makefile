@@ -92,6 +92,9 @@ tworker: tworker.c table.o chunk.o report.o msg.o console.o agent.o test_df.o dt
 controller: controller.c table.o chunk.o report.o msg.o console.o dtype.h table.h chunk.h report.h msg.h console.h
 	$(CC) $(CFLAGS) -o controller controller.c  table.o chunk.o report.o msg.o console.o
 
+memtest: memtest.c report.o
+	$(CC) $(CFLAGS) -o memtest memtest.c  report.o
+
 clean:
 	rm -f *.o *~ *.dat
 	rm -rf *.dSYM
