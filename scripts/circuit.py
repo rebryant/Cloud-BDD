@@ -428,13 +428,10 @@ def multAssociative(n, f = sys.stdout):
 
     # Mult them together
     ckt.multV(s, [a, b, c])
-    ckt.size()
-    ckt.size()
 
     ckt.multV(t, [c, b, a])
     ckt.decRefs([a, b, c])
     ckt.information(t)
-    # ckt.size()
 
     # Generate comparator
     ckt.xorV(x, [s, t])
