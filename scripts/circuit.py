@@ -206,14 +206,17 @@ class Circuit:
     def delete(self, obj):
         self.cmdLine("delete", obj)
 
-    def information(self, obj):
-        self.cmdLine("info", obj)
+    def information(self, fv):
+        self.cmdLine("info", fv)
 
     def collect(self):
         self.write("collect")
 
-    def size(self):
-        self.write("size")
+    def status(self):
+        self.write("status")
+
+    def count(self, fv):
+        self.cmdLine("count", fv)
 
     # Generate sequence of commands
     # argList should be list of vectors
@@ -546,7 +549,7 @@ def nQueens(n, f = sys.stdout):
     ckt.andN(ok, [ok, okO])
     ckt.decRefs([okO])
     ckt.write("time")
-    ckt.write("count ok")
+    ckt.count([ok])
     
 def bigLog2(x):
     val = 0
@@ -592,8 +595,10 @@ def lQueens(n, f = sys.stdout, careful = False, info = False):
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
+        ckt.status()
     if info:
-        ckt.information("okC")
+        ckt.information([okC])
+        ckt.count([okC])
     # Diagonal constraints:
     ckt.comment("Diagonal Constraints")
     for i in range(-n+1,n):
@@ -605,8 +610,10 @@ def lQueens(n, f = sys.stdout, careful = False, info = False):
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
+        ckt.status()
     if info:
-        ckt.information("okD")
+        ckt.information([okD])
+        ckt.count([okD])
     ckt.comment("Combine Constraints: column + diagonal")
     okCD = ckt.node("okCD")
     ckt.andN(okCD, [okC, okD])
@@ -614,8 +621,10 @@ def lQueens(n, f = sys.stdout, careful = False, info = False):
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
+        ckt.status()
     if info:
-        ckt.information("okCD")
+        ckt.information([okCD])
+        ckt.count([okCD])
     # Off diagonal constraints
     ckt.comment("Off-diagonal Constraints")
     for i in range(-n+1,n):
@@ -627,8 +636,10 @@ def lQueens(n, f = sys.stdout, careful = False, info = False):
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
+        ckt.status()
     if info:
-        ckt.information("okO")
+        ckt.information([okO])
+        ckt.count([okO])
     ckt.comment("Combine Constraints: Add off-diagonal")
     ok = ckt.node("ok")
     ckt.andN(ok, [okCD, okO])
@@ -636,11 +647,12 @@ def lQueens(n, f = sys.stdout, careful = False, info = False):
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
+        ckt.status()
     ckt.comment("BDD generation completed")
     ckt.write("time")
-    ckt.information("ok")
+    ckt.information([ok])
     ckt.comment("Model counting")
-    ckt.write("count ok")
+    ckt.count([ok])
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
