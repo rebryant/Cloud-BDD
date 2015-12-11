@@ -376,7 +376,7 @@ void ref_deref(ref_mgr mgr, ref_t r,
 
 /* Perform local parts of ITE.
    Return either result or (possibly negated) recurse ref.
-   In latter case, set *iucpp to triple with ITE arguments
+   In latter case, set *ucpp to triple with ITE arguments
 */
 ref_t ref_ite_local(ref_mgr mgr, ref_t iref,
 		    ref_t tref, ref_t eref, chunk_ptr *ucpp) {

@@ -42,7 +42,8 @@ keyvalue_table_ptr nametable;
 keyvalue_table_ptr vectable;
 
 /*
-  Maintain reference count for each ref reachable from nametable.
+  Maintain reference count for each ref reachable from nametable
+  or as an intermediate result in a reduction operation.
   Index by absolute values of refs
 */
 keyvalue_table_ptr reftable;
@@ -262,45 +263,61 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
+/* Infinite value for reference count */
 #define SATVAL ((word_t) 1<<20)
 
 /* Increment reference count for new ref */
 static void root_addref(ref_t r, bool saturate) {
-    int cnt = 0;
+    int ocnt = 0;
+    int ncnt = 0;
+    if (REF_IS_INVALID(r))
+	return;
     ref_t ar = shadow_absval(smgr, r);
     word_t wv;
     if (keyvalue_remove(reftable, (word_t) ar, NULL, &wv))
-	cnt = wv;
-    if (saturate || cnt == SATVAL)
-	cnt = SATVAL;
+	ocnt = wv;
+    if (saturate || ocnt == SATVAL)
+	ncnt = SATVAL;
     else
-	cnt++;
-    keyvalue_insert(reftable, (word_t) ar, cnt);
+	ncnt = ocnt+1;
+    keyvalue_insert(reftable, (word_t) ar, ncnt);
+#if RPT >= 5
+    char buf[24];
+    shadow_show(smgr, ar, buf);
+    report(5, "Ref count for %s: %d --> %d", buf, ocnt, ncnt);
+#endif
 }
 
 
 /* Decrement reference count for ref */
 static void root_deref(ref_t r) {
-    int cnt = 0;
+    int ocnt = 0;
+    int ncnt = 0;
     if (REF_IS_INVALID(r))
 	return;
     ref_t ar = shadow_absval(smgr, r);
     /* Decrement reference count */
     word_t wv;
     if (keyvalue_remove(reftable, (word_t) ar, NULL, &wv)) {
-	cnt = wv;
-	if (cnt < SATVAL)
-	    cnt--;
-	if (cnt < 0) {
+	ocnt = wv;
+	ncnt = ocnt-1;
+	if (ocnt >= SATVAL)
+	    ncnt = SATVAL;
+	if (ncnt < 0) {
 	    char buf[24];
 	    shadow_show(smgr, ar, buf);
-	    err(true, "Negative ref count for %s", buf, cnt);
+	    err(true, "Negative ref count for %s", buf, ncnt);
 	}
-	if (cnt > 0)
-	    keyvalue_insert(reftable, (word_t) ar, cnt);
+	if (ncnt > 0)
+	    keyvalue_insert(reftable, (word_t) ar, ncnt);
 	else
 	    shadow_deref(smgr, ar);
     }
+#if RPT >= 5
+    char buf[24];
+    shadow_show(smgr, ar, buf);
+    report(5, "Ref count for %s: %d --> %d", buf, ocnt, ncnt);
+#endif
 }
 
 /* Add reference to table.  Makes permanent copy of name */
@@ -393,11 +410,98 @@ static char *name_find(ref_t r) {
     return NULL;
 }
 
-/* Forward declarations */
-bool do_and(int argc, char *argv[]) {
+/* Reduction operations */
+typedef ref_t (*combine_fun_t)(shadow_mgr mgr, ref_t aref, ref_t bref);
+
+
+/* Tree reduction.  Result has incremented reference count */
+static ref_t tree_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int arglo, int arghi) {
+    ref_t rval = unit_ref;
+    if (arghi < arglo) {
+	root_addref(rval, false);
+    }
+    if (arghi == arglo) {
+	rval = get_ref(argv[arglo]);
+	root_addref(rval, false);
+    }
+    if (arghi > arglo) {
+	int argm = (arglo+arghi)/2;
+	ref_t rlo = tree_reduce(argv, unit_ref, cfun, arglo, argm);
+	if (REF_IS_INVALID(rlo))
+	    rval = rlo;
+	else {
+	    ref_t rhi = tree_reduce(argv, unit_ref, cfun, argm+1, arghi);
+	    if (REF_IS_INVALID(rhi)) {
+		root_deref(rlo);
+		rval = rhi;
+	    } else {
+		rval = cfun(smgr, rlo, rhi);
+		root_addref(rval, false);
+		root_deref(rlo);
+		root_deref(rhi);
+		/* Check for local garbage collection */
+		if (shadow_gc_check(smgr))
+		    do_local_collect(0, NULL);
+		/* Initiate any deferred garbage collection */
+		if (do_dist)
+		    undefer();
+	    }
+	}
+    }
+    return rval;
+}
+
+/* Linear reduction.  Returns result with incremented reference count */
+static ref_t linear_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int arglo, int arghi) {
+    ref_t rval = unit_ref;
+    int i;
+    /* Not really necessary, but looks cleaner */
+    root_addref(rval, false);
+    for (i = arglo; i <= arghi; i++) {
+	ref_t rarg = get_ref(argv[i]);
+	if (REF_IS_INVALID(rarg))
+	    return rarg;
+	ref_t nval = cfun(smgr, rval, rarg);
+	root_addref(nval, false);
+	root_deref(rval);
+	rval = nval;
+	/* Check for local garbage collection */
+	if (shadow_gc_check(smgr))
+	    do_local_collect(0, NULL);
+	/* Initiate any deferred garbage collection */
+	if (do_dist)
+	    undefer();
+    }
+    return rval;
+}
+
+/* Use linear reduction.  Enable GC after each operation */
+static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
+    char buf[24];
+    ref_t rval = unit_ref;
+    if (argc < 2) {
+	report(0, "Need destination name");
+	return false;
+    }
+    rval = tree_reduce(argv, unit_ref, cfun, 2, argc-1);
+    if (REF_IS_INVALID(rval))
+	return false;
+    assign_ref(argv[1], rval, false);
+    /* Remove double counting of refs */
+    root_deref(rval);
+#if RPT >= 1
+    shadow_show(smgr, rval, buf);
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
+    return true;
+}
+
+
+/* Use linear reduction.  Enable GC after each operation */
+static bool do_reduce_monolithic(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
     int i;
     char buf[24];
-    ref_t rval = shadow_one(smgr);
+    ref_t rval = unit_ref;
     if (argc < 2) {
 	report(0, "Need destination name");
 	return false;
@@ -406,7 +510,43 @@ bool do_and(int argc, char *argv[]) {
 	ref_t rarg = get_ref(argv[i]);
 	if (REF_IS_INVALID(rarg))
 	    return false;
-	ref_t nval = shadow_and(smgr, rval, rarg);
+	ref_t nval = cfun(smgr, rval, rarg);
+	root_addref(nval, false);
+	if (argc > 2)
+	    root_deref(rval);
+	rval = nval;
+	/* Check for local garbage collection */
+	if (shadow_gc_check(smgr))
+	    do_local_collect(0, NULL);
+	/* Initiate any deferred garbage collection */
+	if (do_dist)
+	    undefer();
+    }
+    assign_ref(argv[1], rval, false);
+    /* Remove double counting of refs */
+    if (argc > 2)
+	root_deref(rval);
+#if RPT >= 1
+    shadow_show(smgr, rval, buf);
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
+    return true;
+}
+
+/* This version waited until the very end to enable GC */
+static bool do_reduce_old(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
+    int i;
+    char buf[24];
+    ref_t rval = unit_ref;
+    if (argc < 2) {
+	report(0, "Need destination name");
+	return false;
+    }
+    for (i = 2; i < argc; i++) {
+	ref_t rarg = get_ref(argv[i]);
+	if (REF_IS_INVALID(rarg))
+	    return false;
+	ref_t nval = cfun(smgr, rval, rarg);
 	rval = nval;
     }
     assign_ref(argv[1], rval, false);
@@ -416,69 +556,23 @@ bool do_and(int argc, char *argv[]) {
     /* Initiate any deferred garbage collection */
     if (do_dist)
 	undefer();
-    shadow_show(smgr, rval, buf);
 #if RPT >= 1
+    shadow_show(smgr, rval, buf);
     report(2, "RESULT.  %s = %s", argv[1], buf);
 #endif
     return true;
+}
+
+bool do_and(int argc, char *argv[]) {
+    return do_reduce(argc, argv, shadow_one(smgr), shadow_and);
 }
 
 bool do_or(int argc, char *argv[]) {
-    int i;
-    char buf[24];
-    ref_t rval = shadow_zero(smgr);
-    if (argc < 2) {
-	report(0, "Need destination name");
-	return false;
-    }
-    for (i = 2; i < argc; i++) {
-	ref_t rarg = get_ref(argv[i]);
-	if (REF_IS_INVALID(rarg))
-	    return false;
-	ref_t nval = shadow_or(smgr, rval, rarg);
-	rval = nval;
-    }
-    assign_ref(argv[1], rval, false);
-    /* Check for local garbage collection */
-    if (shadow_gc_check(smgr))
-	do_local_collect(0, NULL);
-    /* Initiate any deferred garbage collection */
-    if (do_dist)
-	undefer();
-    shadow_show(smgr, rval, buf);
-#if RPT >= 1
-    report(2, "RESULT.  %s = %s", argv[1], buf);
-#endif
-    return true;
+    return do_reduce(argc, argv, shadow_zero(smgr), shadow_or);
 }
 
 bool do_xor(int argc, char *argv[]) {
-    int i;
-    char buf[24];
-    ref_t rval = shadow_zero(smgr);
-    if (argc < 2) {
-	report(0, "Need destination name");
-	return false;
-    }
-    for (i = 2; i < argc; i++) {
-	ref_t rarg = get_ref(argv[i]);
-	if (REF_IS_INVALID(rarg))
-	    return false;
-	ref_t nval = shadow_xor(smgr, rval, rarg);
-	rval = nval;
-    }
-    assign_ref(argv[1], rval, false);
-    /* Check for local garbage collection */
-    if (shadow_gc_check(smgr))
-	do_local_collect(0, NULL);
-    /* Initiate any deferred garbage collection */
-    if (do_dist)
-	undefer();
-    shadow_show(smgr, rval, buf);
-#if RPT >= 2
-    report(2, "RESULT.  %s = %s", argv[1], buf);
-#endif
-    return true;
+    return do_reduce(argc, argv, shadow_zero(smgr), shadow_xor);
 }
 
 bool do_ite(int argc, char *argv[]) {
@@ -503,8 +597,8 @@ bool do_ite(int argc, char *argv[]) {
     /* Initiate any deferred garbage collection */
     if (do_dist)
 	undefer();
-    shadow_show(smgr, rval, buf);
 #if RPT >= 2
+    shadow_show(smgr, rval, buf);
     report(2, "RESULT.  %s = %s", argv[1], buf);
 #endif
     return true;
@@ -521,9 +615,9 @@ bool do_local_collect(int argc, char *argv[]) {
     if (smgr->do_local) {
 	set_ptr roots = word_set_new();
 	word_t wk, wv;
-	keyvalue_iterstart(nametable);
-	while (keyvalue_iternext(nametable, &wk, &wv)) {
-	    ref_t r = (ref_t) wv;
+	keyvalue_iterstart(reftable);
+	while (keyvalue_iternext(reftable, &wk, &wv)) {
+	    ref_t r = (ref_t) wk;
 	    set_insert(roots, (word_t) r);
 	}
 	ref_collect(smgr->ref_mgr, roots);

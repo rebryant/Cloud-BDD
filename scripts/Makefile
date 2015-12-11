@@ -1,9 +1,11 @@
-all: aa ma nq lq slq
+all: aa ma nq lq slq 
 aa: aa2.cmd aa3.cmd aa4.cmd aa6.cmd aa8.cmd aa12.cmd aa16.cmd aa24.cmd aa32.cmd aa48.cmd aa64.cmd
 ma: ma2.cmd ma3.cmd ma4.cmd ma5.cmd ma6.cmd ma7.cmd ma8.cmd ma10.cmd ma12.cmd
 nq: nq5.cmd nq6.cmd nq8.cmd nq10.cmd nq12.cmd nq13.cmd nq14.cmd nq15.cmd nq16.cmd
 lq: lq4.cmd lq8.cmd lq9.cmd lq10.cmd lq11.cmd lq12.cmd lq13.cmd lq14.cmd lq15.cmd lq16.cmd
 slq: slq4.cmd slq8.cmd slq9.cmd slq10.cmd slq11.cmd slq12.cmd slq13.cmd slq14.cmd slq15.cmd slq16.cmd
+sliq: sliq4.cmd sliq8.cmd sliq9.cmd sliq10.cmd sliq11.cmd sliq12.cmd sliq13.cmd sliq14.cmd sliq15.cmd sliq16.cmd
+slsq: slsq4.cmd slsq8.cmd slsq9.cmd slsq10.cmd slsq11.cmd slsq12.cmd slsq13.cmd slsq14.cmd slsq15.cmd slsq16.cmd
 
 aa2.cmd: circuit.py addassoc.py
 	./addassoc.py 2 > aa2.cmd
@@ -157,6 +159,66 @@ slq15.cmd: circuit.py slqueen.py
 
 slq16.cmd: circuit.py slqueen.py
 	./slqueen.py 16 > slq16.cmd
+
+sliq4.cmd: circuit.py sliqueen.py
+	./sliqueen.py 4 > sliq4.cmd
+
+sliq8.cmd: circuit.py sliqueen.py
+	./sliqueen.py 8 > sliq8.cmd
+
+sliq9.cmd: circuit.py sliqueen.py
+	./sliqueen.py 9 > sliq9.cmd
+
+sliq10.cmd: circuit.py sliqueen.py
+	./sliqueen.py 10 > sliq10.cmd
+
+sliq11.cmd: circuit.py sliqueen.py
+	./sliqueen.py 11 > sliq11.cmd
+
+sliq12.cmd: circuit.py sliqueen.py
+	./sliqueen.py 12 > sliq12.cmd
+
+sliq13.cmd: circuit.py sliqueen.py
+	./sliqueen.py 13 > sliq13.cmd
+
+sliq14.cmd: circuit.py sliqueen.py
+	./sliqueen.py 14 > sliq14.cmd
+
+sliq15.cmd: circuit.py sliqueen.py
+	./sliqueen.py 15 > sliq15.cmd
+
+sliq16.cmd: circuit.py sliqueen.py
+	./sliqueen.py 16 > sliq16.cmd
+
+slsq4.cmd: circuit.py slsqueen.py
+	./slsqueen.py 4 > slsq4.cmd
+
+slsq8.cmd: circuit.py slsqueen.py
+	./slsqueen.py 8 > slsq8.cmd
+
+slsq9.cmd: circuit.py slsqueen.py
+	./slsqueen.py 9 > slsq9.cmd
+
+slsq10.cmd: circuit.py slsqueen.py
+	./slsqueen.py 10 > slsq10.cmd
+
+slsq11.cmd: circuit.py slsqueen.py
+	./slsqueen.py 11 > slsq11.cmd
+
+slsq12.cmd: circuit.py slsqueen.py
+	./slsqueen.py 12 > slsq12.cmd
+
+slsq13.cmd: circuit.py slsqueen.py
+	./slsqueen.py 13 > slsq13.cmd
+
+slsq14.cmd: circuit.py slsqueen.py
+	./slsqueen.py 14 > slsq14.cmd
+
+slsq15.cmd: circuit.py slsqueen.py
+	./slsqueen.py 15 > slsq15.cmd
+
+slsq16.cmd: circuit.py slsqueen.py
+	./slsqueen.py 16 > slsq16.cmd
 
 
 clean:
