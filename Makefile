@@ -1,8 +1,14 @@
 CUDDDIR = ./cudd-symlink
+OCUDDDIR = ./cudd-symlink-original
 #CUDDDIR= ../../../boolean/cudd-2.5.0
 
 CUDDINC= -I$(CUDDDIR)/cudd -I$(CUDDDIR)/mtr -I$(CUDDDIR)/epd -I$(CUDDDIR)/util
 CUDDLIBS = $(CUDDDIR)/cudd/libcudd.a  $(CUDDDIR)/mtr/libmtr.a  $(CUDDDIR)/st/libst.a $(CUDDDIR)/epd/libepd.a $(CUDDDIR)/util/libutil.a -lm
+
+OCUDDINC= -I$(OCUDDDIR)/cudd -I$(OCUDDDIR)/mtr -I$(OCUDDDIR)/epd -I$(OCUDDDIR)/util
+OCUDDLIBS = $(OCUDDDIR)/cudd/libcudd.a  $(OCUDDDIR)/mtr/libmtr.a  $(OCUDDDIR)/st/libst.a $(OCUDDDIR)/epd/libepd.a $(OCUDDDIR)/util/libutil.a -lm
+
+CUDDFLAGS = -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=8
 
 VLEVEL=3
 
@@ -41,7 +47,7 @@ bdd.o: bdd.c dtype.h bdd.h table.h chunk.h report.h msg.h console.h agent.h
 	$(CC) $(CFLAGS) $(BDDFLAGS) -c bdd.c
 
 shadow.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg.h
-	$(CC) $(CFLAGS) $(BDDFLAGS) $(CUDDINC) -c shadow.c
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -c shadow.c
 
 console.o: console.c console.h report.h
 	$(CC) $(CFLAGS) -c console.c
@@ -74,7 +80,10 @@ console_test: console_test.c console.h report.h console.o report.o chunk.o table
 	$(CC) $(CFLAGS) -o console_test console_test.c console.o report.o chunk.o table.o
 
 runbdd: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
-	$(CC) $(CFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS)
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS)
+
+runbddo: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(OCUDDINC) -o runbddo runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(OCUDDLIBS)
 
 bworker: bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o
 	$(CC) $(CFLAGS) -o bworker bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o

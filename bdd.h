@@ -74,7 +74,7 @@ typedef word_t ref_t;
 /* Maintain an array of counters to keep track of statistics */
 /* These stats combine STATA's from agent with STATB's from here */
 enum {STATB_UNIQ_CURR = NSTATA, STATB_UNIQ_PEAK, STATB_UNIQ_TOTAL,
-      STATB_UNIQ_COLLIDE,
+      STATB_UNIQ_COLLIDE, STATB_UNIQ_MAX,
       STATB_ITE_CNT, STATB_ITE_LOCAL_CNT, STATB_ITE_HIT_CNT, STATB_ITE_NEW_CNT,
       STATB_ITEC_CURR, STATB_ITEC_PEAK, STATB_ITEC_TOTAL,
       STATB_UOP_CNT, STATB_UOP_HIT_CNT, STATB_UOP_STORE_CNT, NSTAT};

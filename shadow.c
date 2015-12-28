@@ -26,6 +26,10 @@
    When not running CUDD, use refs as DdNode *values
 */
 
+/* Attempts to use CUDD's APA package failed.  Disable */
+#define USE_APA 0
+
+
 bool fatal = false;
 
 bool do_ref(shadow_mgr mgr) {
@@ -153,14 +157,16 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist) {
     ref_t r = REF_ZERO;
     DdNode *n = NULL;
     if (do_cudd) {
-      /* Modified CUDD Parameters */
-      unsigned int numVars = 1u<<8; /* Default 0 */
-      unsigned int numVarsZ = 0; /* Default 0 */
-      unsigned int numSlots = 1u<<18; /* Default 256 */
-      unsigned int cacheSize = 1u<<22; /* Default 262144 */
-      unsigned int maxMemory = 1u<<31; /* Default 67,108,864 */
-      mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
-        n = Cudd_ReadLogicZero(mgr->bdd_manager);
+	/* Modified CUDD Parameters */
+	unsigned int numVars = 0; /* Default 0 */
+	unsigned int numVarsZ = 0; /* Default 0 */
+	unsigned int numSlots = 1u<<18; /* Default 256 */
+	unsigned int cacheSize = 1u<<22; /* Default 262144 */
+	/* Default 67,108,864 */
+	unsigned long int maxMemory = (1u<<31) + (1ul << 34); 
+	mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
+	n = Cudd_ReadLogicZero(mgr->bdd_manager);
+	printf("Using CUDD Version %s\n", CUDD_VERSION);
     }
     if (do_ref(mgr)) {
 	mgr->ref_mgr = new_ref_mgr();
@@ -448,30 +454,36 @@ keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots) {
     return density;
 }
 
+#if USE_APA
 static word_t apa2word(DdApaNumber num, int digits) {
     word_t val = 0;
-    int plim = sizeof(word_t) / sizeof(DdApaDigit);
     int i;
-    int pos;
-    for (i = digits-1, pos = 0; i >= 0 && pos < plim; i--, pos++) {
-	printf("digits = %u.  num[%d] = %u, pos = %d\n", digits, i, num[i], pos);
-	val += (word_t) num[i] << (pos * sizeof(DdApaDigit) * 8);
+
+     for (i = 0; i < digits; i++) {
+	val = val * DD_APA_BASE + (word_t) num[i];
     }
     return val;
 }
+#endif
 
 static keyvalue_table_ptr cudd_count(shadow_mgr mgr, set_ptr roots) {
     word_t wk, wv;
     keyvalue_table_ptr result = word_keyvalue_new();
     size_t nvars = mgr->nvars;
-    int digits;
     set_iterstart(roots);
     while (set_iternext(roots, &wk)) {
-	DdNode *n = (DdNode *) wk;
+	ref_t r = (ref_t) wk;
+	DdNode *n = get_ddnode(mgr, r);
+#if USE_APA
+	int digits;
 	DdApaNumber num = Cudd_ApaCountMinterm(mgr->bdd_manager, n, nvars,
 					       &digits);
 	wv = apa2word(num, digits);
 	FREE(num);
+#else
+	double fv = Cudd_CountMinterm(mgr->bdd_manager, n, nvars);
+	wv = (word_t) fv;
+#endif
 	keyvalue_insert(result, wk, wv);
     }
     return result;
@@ -633,6 +645,26 @@ set_ptr shadow_support(shadow_mgr mgr, set_ptr roots) {
     }
     return support;
 }
+
+/* Use CUDD to compute number of BDD nodes to represent set of functions */
+size_t cudd_size(shadow_mgr mgr, set_ptr roots) {
+    if (!mgr->do_cudd)
+	return 0;
+    size_t nele = roots->nelements;
+    DdNode **croots = calloc_or_fail(nele, sizeof(DdNode *), "cudd_size");
+    word_t wr;
+    int i = 0;
+    set_iterstart(roots);
+    while (set_iternext(roots, &wr)) {
+	ref_t r = (ref_t) wr;
+	DdNode *n = get_ddnode(mgr, r);
+	croots[i++] = n;
+    }
+    int cnt = Cudd_SharingSize(croots, nele);
+    free_array(croots, nele, sizeof(DdNode *));
+    return (size_t) cnt;
+}
+
 
 /* Convert a set of literals into a CUDD cube */
 static DdNode *cudd_lit_cube(shadow_mgr mgr, set_ptr lits) {

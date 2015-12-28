@@ -78,7 +78,8 @@ chunk_ptr ref3_encode(ref_t r1, ref_t r2, ref_t r3) {
 /* Compute hash code for vref, hiref, loref.  Used to create hash for ref */
 size_t utable_hash(chunk_ptr ucp) {
     size_t val = chunk_hash((word_t) ucp);
-    return (val % (2147483629UL)) & REF_MASK_HASH;
+    //    return (val % (2147483629UL)) & REF_MASK_HASH;
+    return val & REF_MASK_HASH;
 }
 
 /* Functions to use key/value table to implement unique table */
@@ -247,6 +248,8 @@ static ref_t ref_canonize_lookup(ref_mgr mgr, chunk_ptr ucp) {
 	/* See if have exceeded bounds for uniquifier */
 	if (uniquifier > REF_MASK_UNIQ)
 	    err(true, "Exceeded uniquifier bounds.  Hash = 0x%llx", h);
+	if (uniquifier > mgr->stat_counter[STATB_UNIQ_MAX])
+	    mgr->stat_counter[STATB_UNIQ_MAX] = uniquifier;
 	r = PACK_REF(0, BDD_FUNCTION, REF_GET_VAR(vref), h, uniquifier);
 	ls = ulist_new(ucp, r);
 #if RPT >= 4
@@ -1165,8 +1168,9 @@ static void complete_collection(ref_mgr mgr, set_ptr rset) {
     mgr->last_nelements = end_cnt;
     end_bytes = current_bytes;
 #if RPT >= 1
-    report(1, "Garbage Collection: %lu (%.3f) --> %lu (%.3f) function refs (GB).  %.3f GB resident",
-	   start_cnt, gigabytes(start_bytes), end_cnt, gigabytes(end_bytes), gigabytes(resident_bytes()));
+    report(1, "GC: %lu (%.3f) --> %lu (%.3f) function refs (GB).  %.3f GB resident",
+	   start_cnt, gigabytes(start_bytes), end_cnt, gigabytes(end_bytes),
+	   gigabytes(resident_bytes()));
 #endif
 }
 
@@ -1202,11 +1206,13 @@ void ref_show_stat(ref_mgr mgr) {
 	   mgr->stat_counter[STATA_OPERAND_LOCAL]);
     report(0,
 "Unique table.  Total generated %" PRIu64 ".  Current %" PRIu64
-".  Peak %" PRIu64 ".  Collisions %" PRIu64,
+".  Peak %" PRIu64 ".  Collisions %" PRIu64 ".  Max uniq %" PRIu64,
 	   mgr->stat_counter[STATB_UNIQ_TOTAL],
 	   mgr->stat_counter[STATB_UNIQ_CURR],
 	   mgr->stat_counter[STATB_UNIQ_PEAK],
-	   mgr->stat_counter[STATB_UNIQ_COLLIDE]);
+	   mgr->stat_counter[STATB_UNIQ_COLLIDE],
+	   mgr->stat_counter[STATB_UNIQ_MAX]
+	   );
     report(0,
 "ITEs. Total %" PRIu64 ".  Done Locally %" PRIu64 
 ".  Hit cache %" PRIu64 ".  Cause recursion %" PRIu64,
@@ -2428,6 +2434,7 @@ static char *stat_items[NSTAT] = {
     "Peak unique entries   ",
     "Total unique entires  ",
     "Unique hash collisions",
+    "Maximum uniq value    ",
     "Total number of ITEs  ",
     "ITEs handled locally  ",
     "ITEs found in table   ",

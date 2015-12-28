@@ -404,8 +404,8 @@ def addAssociative(n, f = sys.stdout):
     # Add them together
     ckt.addV(s, [a, b, c])
     ckt.addV(t, [c, b, a])
-    ckt.decRefs([a, b, c])
     ckt.information(t)
+    ckt.decRefs([a, b, c])
 
     # Generate comparator
     ckt.xorV(x, [s, t])
@@ -414,6 +414,7 @@ def addAssociative(n, f = sys.stdout):
     ckt.decRefs([x])
     ckt.write("equal zero e")
     ckt.write("time")
+    ckt.status()
 
 # Show that multiplication is associative
 def multAssociative(n, f = sys.stdout):
@@ -430,8 +431,8 @@ def multAssociative(n, f = sys.stdout):
     ckt.multV(s, [a, b, c])
 
     ckt.multV(t, [c, b, a])
-    ckt.decRefs([a, b, c])
     ckt.information(t)
+    ckt.decRefs([a, b, c])
 
     # Generate comparator
     ckt.xorV(x, [s, t])
@@ -440,6 +441,7 @@ def multAssociative(n, f = sys.stdout):
     ckt.decRefs([x])
     ckt.write("equal zero e")
     ckt.write("time")
+    ckt.status()
 
 # Functions related to n-queens
 # Literal representing value at position r,c
@@ -654,6 +656,7 @@ def lQueens(n, f = sys.stdout, careful = False, info = False):
         ckt.comment("Forced GC")
         ckt.collect()
     ckt.write("time")
+    ckt.status()
     ckt.comment("Flush state")
     ckt.write("flush")
     ckt.comment("Exit")

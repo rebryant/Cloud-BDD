@@ -22,6 +22,8 @@
 #include "cudd.h"
 #include "shadow.h"
 
+/* Keep, but do not compile, old versions of reduction */
+#define OLD_REDUCE 0
 
 /* Global parameters */
 /* Should I perform garbage collection? */
@@ -451,6 +453,29 @@ static ref_t tree_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int a
     return rval;
 }
 
+
+/* Use linear reduction.  Enable GC after each operation */
+static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
+    char buf[24];
+    ref_t rval = unit_ref;
+    if (argc < 2) {
+	report(0, "Need destination name");
+	return false;
+    }
+    rval = tree_reduce(argv, unit_ref, cfun, 2, argc-1);
+    if (REF_IS_INVALID(rval))
+	return false;
+    assign_ref(argv[1], rval, false);
+    /* Remove double counting of refs */
+    root_deref(rval);
+#if RPT >= 1
+    shadow_show(smgr, rval, buf);
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
+    return true;
+}
+
+#if OLD_REDUCE
 /* Linear reduction.  Returns result with incremented reference count */
 static ref_t linear_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int arglo, int arghi) {
     ref_t rval = unit_ref;
@@ -474,29 +499,9 @@ static ref_t linear_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int
     }
     return rval;
 }
+#endif /* OLD_REDUCE */
 
-/* Use linear reduction.  Enable GC after each operation */
-static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
-    char buf[24];
-    ref_t rval = unit_ref;
-    if (argc < 2) {
-	report(0, "Need destination name");
-	return false;
-    }
-    rval = tree_reduce(argv, unit_ref, cfun, 2, argc-1);
-    if (REF_IS_INVALID(rval))
-	return false;
-    assign_ref(argv[1], rval, false);
-    /* Remove double counting of refs */
-    root_deref(rval);
-#if RPT >= 1
-    shadow_show(smgr, rval, buf);
-    report(2, "RESULT.  %s = %s", argv[1], buf);
-#endif
-    return true;
-}
-
-
+#if OLD_REDUCE
 /* Use linear reduction.  Enable GC after each operation */
 static bool do_reduce_monolithic(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
     int i;
@@ -532,7 +537,9 @@ static bool do_reduce_monolithic(int argc, char *argv[], ref_t unit_ref, combine
 #endif
     return true;
 }
+#endif /* OLD_REDUCE */
 
+#if OLD_REDUCE
 /* This version waited until the very end to enable GC */
 static bool do_reduce_old(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
     int i;
@@ -562,6 +569,7 @@ static bool do_reduce_old(int argc, char *argv[], ref_t unit_ref, combine_fun_t 
 #endif
     return true;
 }
+#endif /* OLD_REDUCE */
 
 bool do_and(int argc, char *argv[]) {
     return do_reduce(argc, argv, shadow_one(smgr), shadow_and);
@@ -969,8 +977,12 @@ bool do_information(int argc, char *argv[]) {
     set_free(supset);
     if (smgr->do_local) {
 	set_ptr rset = ref_reach(smgr->ref_mgr, roots);
-	report(0, "  Size: %lu nodes", rset->nelements);
+	report(0, "  Ref size: %lu nodes", rset->nelements);
 	set_free(rset);
+    }
+    if (smgr->do_cudd) {
+	size_t cnt = cudd_size(smgr, roots);
+	report(0, "  Cudd size: %lu nodes", cnt);
     }
     set_free(roots);
     return true;

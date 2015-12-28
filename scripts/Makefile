@@ -1,6 +1,6 @@
 all: aa ma nq lq slq 
 aa: aa2.cmd aa3.cmd aa4.cmd aa6.cmd aa8.cmd aa12.cmd aa16.cmd aa24.cmd aa32.cmd aa48.cmd aa64.cmd
-ma: ma2.cmd ma3.cmd ma4.cmd ma5.cmd ma6.cmd ma7.cmd ma8.cmd ma10.cmd ma12.cmd
+ma: ma2.cmd ma3.cmd ma4.cmd ma5.cmd ma6.cmd ma7.cmd ma8.cmd ma9.cmd ma10.cmd ma12.cmd
 nq: nq5.cmd nq6.cmd nq8.cmd nq10.cmd nq12.cmd nq13.cmd nq14.cmd nq15.cmd nq16.cmd
 lq: lq4.cmd lq8.cmd lq9.cmd lq10.cmd lq11.cmd lq12.cmd lq13.cmd lq14.cmd lq15.cmd lq16.cmd
 slq: slq4.cmd slq8.cmd slq9.cmd slq10.cmd slq11.cmd slq12.cmd slq13.cmd slq14.cmd slq15.cmd slq16.cmd
@@ -60,6 +60,9 @@ ma7.cmd: circuit.py multassoc.py
 
 ma8.cmd: circuit.py multassoc.py
 	./multassoc.py 8 > ma8.cmd
+
+ma9.cmd: circuit.py multassoc.py
+	./multassoc.py 9 > ma9.cmd
 
 ma10.cmd: circuit.py multassoc.py
 	./multassoc.py 10 > ma10.cmd
