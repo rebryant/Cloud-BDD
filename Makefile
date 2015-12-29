@@ -47,7 +47,10 @@ bdd.o: bdd.c dtype.h bdd.h table.h chunk.h report.h msg.h console.h agent.h
 	$(CC) $(CFLAGS) $(BDDFLAGS) -c bdd.c
 
 shadow.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg.h
-	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -c shadow.c
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC)  -c shadow.c
+
+shadow-nochain.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg.h
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -DNO_CHAINING -c shadow.c -o shadow-nochain.o
 
 console.o: console.c console.h report.h
 	$(CC) $(CFLAGS) -c console.c
@@ -82,8 +85,8 @@ console_test: console_test.c console.h report.h console.o report.o chunk.o table
 runbdd: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
 	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS)
 
-runbddo: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
-	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(OCUDDINC) -o runbddo runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(OCUDDLIBS)
+runbddo: runbdd.c console.o chunk.o table.o report.o bdd.o shadow-nochain.o msg.o agent.o
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(OCUDDINC) -o runbddo runbdd.c chunk.o console.o table.o report.o bdd.o shadow-nochain.o msg.o agent.o $(OCUDDLIBS)
 
 bworker: bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o
 	$(CC) $(CFLAGS) -o bworker bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o

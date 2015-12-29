@@ -24,6 +24,8 @@
 */
 
 
+typedef enum { CHAIN_NONE, CHAIN_CONSTANT, CHAIN_ALL } chaining_t;
+
 typedef struct {
     DdManager *bdd_manager;
     ref_mgr ref_mgr;
@@ -39,7 +41,7 @@ typedef struct {
     size_t nvars;
 } shadow_ele, *shadow_mgr;
 
-shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist);
+shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t chaining);
 void free_shadow_mgr(shadow_mgr mgr);
 
 ref_t shadow_one(shadow_mgr mgr);

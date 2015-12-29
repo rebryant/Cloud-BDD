@@ -145,7 +145,7 @@ static bool check_refs(shadow_mgr mgr, ref_t rlocal, ref_t rdist) {
     return true;
 }
 
-shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist) {
+shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t chaining) {
     if (!(do_cudd || do_local || do_dist)) {
 	err(true, "Must have at least one active evaluation mode");
     }
@@ -165,6 +165,26 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist) {
 	/* Default 67,108,864 */
 	unsigned long int maxMemory = (1u<<31) + (1ul << 34); 
 	mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
+#ifndef NO_CHAINING
+	Cudd_ChainingType ct;
+	switch (chaining) {
+	case CHAIN_NONE:
+	    ct = CUDD_CHAIN_NONE;
+	    printf("No chaining enabled\n");
+	    break;
+	case CHAIN_CONSTANT:
+	    ct = CUDD_CHAIN_CONSTANT;
+	    printf("Constant chaining enabled\n");
+	    break;
+	case CHAIN_ALL:
+	    ct = CUDD_CHAIN_ALL;
+	    printf("General chaining enabled\n");
+	    break;
+	default:
+	    err(true, "Invalid chaining mode %d\n", chaining);
+	}
+	Cudd_SetChaining(mgr->bdd_manager, ct);
+#endif	
 	n = Cudd_ReadLogicZero(mgr->bdd_manager);
 	printf("Using CUDD Version %s\n", CUDD_VERSION);
     }

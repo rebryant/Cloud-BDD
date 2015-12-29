@@ -31,6 +31,9 @@ int enable_collect = 1;
 int do_cudd = 0;
 int do_local = 0;
 int do_dist = 0;
+/* What type of chaining should be used? */
+chaining_t chaining_type = CHAIN_NONE;
+
 /* When counting solutions,
    should I assume all variables are in support of function? */
 int all_vars = 1;
@@ -84,7 +87,7 @@ static void client_gc_finish();
 
 
 static void bdd_init() {
-    smgr = new_shadow_mgr(do_cudd, do_local, do_dist);
+    smgr = new_shadow_mgr(do_cudd, do_local, do_dist, chaining_type);
     nametable = keyvalue_new(string_hash, string_equal);
     vectable = keyvalue_new(string_hash, string_equal);
     reftable = word_keyvalue_new();
@@ -166,7 +169,7 @@ static bool bdd_quit(int argc, char *argv[]) {
 
 static void usage(char *cmd) {
     printf(
-"Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE]\n",
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
@@ -178,6 +181,7 @@ static void usage(char *cmd) {
     printf("\t-P PORT    Use PORT as controller port\n");
     printf("\t-r         Try to use local router\n");
     printf("\t-L FILE    Echo results to FILE\n");
+    printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Complete chaining\n");
     exit(0);
 }
 
@@ -195,11 +199,13 @@ int main(int argc, char *argv[]) {
     char hbuf[BUFSIZE] = "localhost";
     unsigned port = CPORT;
     bool try_local_router = false;
-
+    
     do_cudd = 0;
     do_local = 0;
     do_dist = 0;
-    while ((c = getopt(argc, argv, "hn:v:f:cldH:P:rL:")) != -1) {
+    chaining_type = CHAIN_NONE;
+
+    while ((c = getopt(argc, argv, "hn:v:f:cldH:P:rL:C:")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -233,6 +239,21 @@ int main(int argc, char *argv[]) {
 	case 'L':
 	    logfile_name = strncpy(lbuf, optarg, BUFSIZE-1);
 	    lbuf[BUFSIZE-1] = '\0';
+	    break;
+	case 'C':
+	    switch (optarg[0]) {
+	    case 'n':
+		chaining_type = CHAIN_NONE;
+		break;
+	    case 'c':
+		chaining_type = CHAIN_CONSTANT;
+		break;
+	    case 'a':
+		chaining_type = CHAIN_ALL;
+		break;
+	    default:
+		err(true, "Invalid chaining type '%c'\n", optarg[0]);
+	    }
 	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
