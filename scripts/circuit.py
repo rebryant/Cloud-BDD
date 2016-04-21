@@ -266,6 +266,9 @@ class Circuit:
         ls.extend(argList)
         self.cmdSequence("xor", ls)
 
+    def zc(self, dest, n):
+        self.cmdLine("zconvert", [dest, n])
+
     def maj3(self, dest, n1, n2, n3):
         p12 = self.tmpNode()
         p23 = self.tmpNode()
@@ -491,179 +494,248 @@ def tExactly1(n, f = sys.stdout):
     ok = ckt.node("ok")
     ckt.exactly1(ok, v, nv)
 
-# Generate constraints for n-queens problem
-def nQueens(n, f = sys.stdout):
-    ckt = Circuit(f)
-    # Generate variables for each square
-    snames = [sq(i/n, i%n) for i in range(n*n)]
-    nsnames = ["!%s" % name for name in snames]
-    sv = Vec(snames)
-    nsv = Vec(nsnames)
-    ckt.write("time")
-    ckt.declare(sv)
-    okr = ckt.nameVec("okr", n)
-    okR = ckt.node("okR")
-    okc = ckt.nameVec("okc", n)
-    okC = ckt.node("okC")
-    okd = ckt.nameVec("okd", n+n-1)
-    okD = ckt.node("okD")
-    oko = ckt.nameVec("oko", n+n-1)
-    okO = ckt.node("okO")
-    ckt.comment("Row Constraints")
-    # Row constraints
-    for r in range(n):
-        ckt.comment("Row %d" % r)
-        ckt.exactly1(okr.nodes[r], row(n, r), row(n, r, True))
-    ckt.andN(okR, okr.nodes)
-    ckt.decRefs([okr])
-    ckt.comment("Column Constraints")
-    # Column constraints
-    for c in range(n):
-        ckt.comment("Column %d" % c)
-        ckt.exactly1(okc.nodes[c], col(n, c), col(n, c, True))
-    ckt.andN(okC, okc.nodes)
-    ckt.decRefs([okc])
-    # Diagonal constraints:
-    ckt.comment("Diagonal Constraints")
-    for i in range(-n+1,n):
-        ckt.comment("Diagonal %d" % i)
-        out = okd.nodes[i+n-1]
-        ckt.atMost1(out, diag(n,i), diag(n, i, True))
-    ckt.andN(okD, okd.nodes)
-    ckt.decRefs([okd])
-    # Off diagonal constraints
-    ckt.comment("Off-diagonal Constraints")
-    for i in range(-n+1,n):
-        ckt.comment("Off-diagonal %d" % i)
-        out = oko.nodes[i+n-1]
-        ckt.atMost1(out, offDiag(n,i), offDiag(n, i, True))
-    ckt.andN(okO, oko.nodes)
-    ckt.decRefs([oko])
-    ckt.comment("Combine Constraints")
-    ok = ckt.node("ok")
-    ckt.andN(ok, [okR, okC])
-    ckt.decRefs([okR, okC])
-    ckt.andN(ok, [ok, okD])
-    ckt.decRefs([okD])
-    ckt.andN(ok, [ok, okO])
-    ckt.decRefs([okO])
-    ckt.write("time")
-    ckt.count([ok])
-    
+# Class to define point at which to add preconstraints
+class PC:
+    none, row, column, diagonal, offdiagonal = range(5)
+    names = ["None", "Row", "Column", "Diagonal", "Off-Diagonal"]
+    snames = ["uncon", "rwcon", "clcon", "dicon", "odcon"]
+
+    def name(self, id):
+        return self.names[id]
+
+    def sname(self, id):
+        return self.snames[id]
+
 def bigLog2(x):
     val = 0
     while ((1<<val) < x):
         val+=1
     return val
 
-# Version of nqueens using logarithmic encoding of column numbers
-def lQueens(n, f = sys.stdout, careful = False, info = False):
+# Generate constraints for n-queens problem
+def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, preconstrain = PC.none, zdd = False):
+    encoding = "binary" if binary else "one-hot"
     ckt = Circuit(f)
-    m = bigLog2(n)
-    rows = [ckt.nameVec("v-%d" % r, m) for r in range(n)]
-    nrows = [ckt.nameVec("v-%d" % r, m) for r in range(n)]
-# Interleave variables with MSB first
-#    vars = Vec(["v-%d.%d" % (i %  n, m-1 - (i / n)) for i in range(m*n)])
-# Interleave variables with LSB first
-#    vars = Vec(["v-%d.%d" % (i %  n, (i / n)) for i in range(m*n)])
-# Do variables for each row in succession, MSB first
-    vars = Vec(["v-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
-    ckt.write("time")
-    ckt.declare(vars)
-    snames = [sq(i/n, i%n)for i in range(n*n)]
-    nsnames = ["!%s" % name for name in snames]
-    sv = Vec(snames)
-    nsv = Vec(nsnames)
-    ckt.comment("Individual square functions")
-    for r in range(n):
-        for c in range(n):
-            ckt.matchVal(c, rows[r], sq(r,c))
+    ckt.comment("N-queens with %s encoding.  N = %d" % (encoding, n))
+    ckt.comment("Preconstrain method: %s" % PC().name(preconstrain))
+#    ckt.write("time")
+    pc = ckt.node("preconstrain")
+    ckt.andN(pc, [])
+    okR = ckt.node("okR")
+    if zdd:
+        zokR = ckt.node("zokR")
+    if binary:
+        m = bigLog2(n)
+        rows = [ckt.nameVec("v-%d" % r, m) for r in range(n)]
+        # Do variables for each row in succession, MSB first
+        vars = Vec(["v-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
+        ckt.declare(vars)
+        ckt.comment("Individual square functions")
+        for r in range(n):
+            for c in range(n):
+                ckt.matchVal(c, rows[r], sq(r,c))
+        ckt.andN(okR, [])
+    else:
+        # Generate variables for each square
+        snames = [sq(i/n, i%n) for i in range(n*n)]
+        sv = Vec(snames)
+        ckt.declare(sv)
+        # Row constraints
+        ckt.comment("Row Constraints")
+        okr = ckt.nameVec("okr", n)
+        for r in range(n):
+            ckt.comment("Row %d" % r)
+            ckt.exactly1(okr.nodes[r], row(n, r), row(n, r, True))
+        ckt.andN(okR, okr.nodes)
+        ckt.decRefs([okr])
+        if preconstrain >= PC.row:
+            ckt.andN(pc, [okR])
+        if zdd:
+            ckt.zc(zokR, okR)
+            ckt.decRefs([okR])
+
     okc = ckt.nameVec("okc", n)
     okC = ckt.node("okC")
+    okRC = ckt.node("okRC")
     okd = ckt.nameVec("okd", n+n-1)
     okD = ckt.node("okD")
+    okRCD = ckt.node("okRCD")
     oko = ckt.nameVec("oko", n+n-1)
     okO = ckt.node("okO")
-    ckt.comment("Column Constraints")
+    ok = ckt.node("ok")
+
+    if (zdd):
+        zokC = ckt.node("zokC")
+        zokD = ckt.node("zokD")
+        zokO = ckt.node("zokO")
+        zokRC = ckt.node("zokRC")
+        zokRCD = ckt.node("zokRCD")
+        zok = ckt.node("zok")
+
     # Column constraints
+    ckt.comment("Column Constraints")
     for c in range(n):
         ckt.comment("Column %d" % c)
         ckt.exactly1(okc.nodes[c], col(n, c), col(n, c, True))
+        ckt.andN(okc.nodes[c], [okc.nodes[c], pc])
     ckt.andN(okC, okc.nodes)
     ckt.decRefs([okc])
+    if preconstrain >= PC.row:
+        ckt.decRefs([okR])
+    if zdd:
+        ckt.zc(zokC, okC)
+        ckt.decRefs([okC])
+        ils = [zokC]
+    else:
+        ils = [okC]
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
         ckt.status()
     if info:
-        ckt.information([okC])
-        ckt.count([okC])
+        ckt.information(ils)
+
+    if zdd:
+        if binary:
+            ckt.comment("Row constraint implicit")
+            ckt.andN(zokRC, [zokC])
+            ils = [zokRC]
+            dls = [zokC]
+        else:
+            ckt.comment("Combine row and column")
+            ckt.andN(zokRC, [zokR, zokC])
+            ils = [zokRC]
+            dls = [zokR, zokC]
+    elif preconstrain < PC.row:
+        ckt.comment("Combine row and column")
+        ckt.andN(okRC, [okR, okC])
+        ils = [okRC]
+        dls = [okR, okC]
+    else:
+        ckt.comment("Row constraints already incorporated into column constraints")
+        ckt.andN(okRC, [okC])
+        ils = [okRC]
+        dls = [okC]
+    if not zdd and preconstrain >= PC.column:
+        ckt.andN(pc, [okRC])
+    ckt.decRefs(dls)
+    if careful:
+        ckt.comment("Forced GC")
+        ckt.collect()
+        ckt.status()
+    if info:
+        ckt.information(ils)
+
     # Diagonal constraints:
     ckt.comment("Diagonal Constraints")
     for i in range(-n+1,n):
         ckt.comment("Diagonal %d" % i)
         out = okd.nodes[i+n-1]
         ckt.atMost1(out, diag(n,i), diag(n, i, True))
+        ckt.andN(out, [out, pc])
     ckt.andN(okD, okd.nodes)
     ckt.decRefs([okd])
+    if zdd:
+        ckt.zc(zokD, okD)
+        ckt.decRefs([okD])
+        ils = [zokD]
+    else:
+        ils = [okD]
+
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
         ckt.status()
     if info:
-        ckt.information([okD])
-        ckt.count([okD])
-    ckt.comment("Combine Constraints: column + diagonal")
-    okCD = ckt.node("okCD")
-    ckt.andN(okCD, [okC, okD])
-    ckt.decRefs([okC, okD])
+        ckt.information(ils)
+
+    if zdd or preconstrain < PC.column:
+        ckt.comment("Add diagonal to row & column")
+        if zdd:
+            ckt.andN(zokRCD, [zokRC, zokD])
+            ils = [zokRCD]
+        else:
+            ckt.andN(okRCD, [okRC, okD])
+            ils = [okRCD]
+    else:
+        ckt.comment("Row & column constraints already incorporated into diagonal constraints")
+        ckt.andN(okRCD, [okD])
+    if not zdd and preconstrain >= PC.diagonal:
+        ckt.andN(pc, [okRCD])
+    if zdd:
+        ckt.decRefs([zokRC, zokD])
+    else:
+        ckt.decRefs([okRC, okD])
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
         ckt.status()
     if info:
-        ckt.information([okCD])
-        ckt.count([okCD])
+        ckt.information(ils)
+
     # Off diagonal constraints
     ckt.comment("Off-diagonal Constraints")
     for i in range(-n+1,n):
         ckt.comment("Off-diagonal %d" % i)
         out = oko.nodes[i+n-1]
         ckt.atMost1(out, offDiag(n,i), offDiag(n, i, True))
+        ckt.andN(out, [out, pc])
     ckt.andN(okO, oko.nodes)
     ckt.decRefs([oko])
+    if zdd:
+        ckt.zc(zokO, okO)
+        ckt.decRefs([okO])
+        ils = [zokO]
+    else:
+        ils = [okO]
     if careful:
         ckt.comment("Forced GC")
         ckt.collect()
         ckt.status()
     if info:
-        ckt.information([okO])
-        ckt.count([okO])
-    ckt.comment("Combine Constraints: Add off-diagonal")
-    ok = ckt.node("ok")
-    ckt.andN(ok, [okCD, okO])
-    ckt.decRefs([okCD, okO])
-    if careful:
-        ckt.comment("Forced GC")
-        ckt.collect()
-        ckt.status()
+        ckt.information(ils)
+
+    if zdd or preconstrain < PC.diagonal:
+        ckt.comment("Add off diagonal to row, column, and diagonal")
+        if zdd:
+            ckt.andN(zok, [zokRCD, zokO])
+            ils = [zok]
+        else:
+            ckt.andN(ok, [okRCD, okO])
+            ils = [ok]
+    else:
+        ckt.comment("Row, column, & diagonal constraints already incorporated into off-diagonal constraints")
+        ckt.andN(ok, [okO])
+    if zdd:
+        ckt.decRefs([zokRCD, zokO])
+    else:
+        ckt.decRefs([okRCD, okO])
+    ckt.decRefs([pc])
     ckt.comment("BDD generation completed")
     ckt.write("time")
-    ckt.information([ok])
+    ckt.information(ils)
     ckt.comment("Model counting")
-    ckt.count([ok])
-    if careful:
-        ckt.comment("Forced GC")
-        ckt.collect()
-    ckt.write("time")
+    ckt.count(ils)
     ckt.status()
     ckt.comment("Flush state")
     ckt.write("flush")
     ckt.comment("Exit")
     ckt.write("quit")
 
+def qname(n, binary = False, careful = False, info = False, preconstrain = PC.none, zdd = False):
+    scnt = "%.2d" % n
+    sencode = "bin" if binary else "onh"
+    scare = "slow" if careful else "fast"
+    sinfo = "v" if info else "q"
+    sname = PC().sname(preconstrain)
+    szdd = "z" if zdd else "b"
+    return "q%s%s-%s-%s-%s-%s" % (szdd, scnt, sencode, scare, sinfo, sname)
 
-    
-    
-    
-    
+def qgen(n, binary = False, careful = False, info = False, preconstrain = PC.none, zdd = False):
+    fname = qname(n, binary, careful, info, preconstrain, zdd) + ".cmd"
+    try:
+        f = open(fname, "w")
+    except:
+        print "Couldn't open file %d" % fname
+        sys.exit(1)
+    nQueens(n, f, binary, careful, info, preconstrain, zdd)

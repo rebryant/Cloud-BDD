@@ -39,6 +39,10 @@ typedef struct {
     bool do_dist;
     /* Total number of variables created */
     size_t nvars;
+    /* Total number of ZDD variables created */
+    size_t nzvars;
+    /* For DD's, indicates which ones are ZDDs */
+    set_ptr zfuns;
 } shadow_ele, *shadow_mgr;
 
 shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t chaining);
@@ -65,6 +69,8 @@ bool shadow_equal(shadow_mgr mgr, ref_t aref, ref_t bref);
 
 bool shadow_gc_check(shadow_mgr mgr);
 
+/* Convert function to ZDD.  This should only be done after all BDD variables have been declared */
+ref_t shadow_zconvert(shadow_mgr mgr, ref_t r);
 
 /* Create key-value table mapping set of root nodes to their densities. */
 keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots);
@@ -80,6 +86,10 @@ set_ptr shadow_support(shadow_mgr mgr, set_ptr roots);
 
 /* Use CUDD to compute number of BDD nodes to represent set of functions */
 size_t cudd_size(shadow_mgr mgr, set_ptr roots);
+
+/* Have CUDD perform garbage collection */
+/* Returns number of nodes collected */
+int cudd_collect(shadow_mgr mgr);
 
 /* Create key-value table mapping set of root nodes to their restrictions,
    with respect to a set of literals (given as a set of refs)

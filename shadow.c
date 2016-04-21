@@ -21,6 +21,10 @@
 #include "util.h"
 #include "shadow.h"
 
+/* From cuddInt.h */
+extern int cuddGarbageCollect (DdManager *unique, int clearCache);
+
+
 /* Trick:
    When running CUDD only, use DdNode * value serve as an artificial ref.
    When not running CUDD, use refs as DdNode *values
@@ -40,7 +44,9 @@ void shadow_show(shadow_mgr mgr, ref_t r, char *buf) {
     if (do_ref(mgr)) {
 	ref_show(r, buf);
     } else {
-	sprintf(buf, "%p", (DdNode *) r);
+	DdNode *n = (DdNode *) r;
+	bool is_zdd = set_member(mgr->zfuns, (word_t) n, false);
+	sprintf(buf, "%c%p", is_zdd ? 'Z' : 'B', (DdNode *) r);
     }		
 }
 
@@ -64,6 +70,7 @@ static DdNode *get_ddnode(shadow_mgr mgr, ref_t r) {
 static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
     ref_t rother;
     DdNode *nother;
+    bool is_zdd = set_member(mgr->zfuns, (word_t) n, false);
     if (do_ref(mgr) && REF_IS_INVALID(r)) {
 	/* Don't record matches with invalid refs */
 	return;
@@ -72,6 +79,7 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 	r = (ref_t) n;
     if (!mgr->do_cudd)
 	n = (DdNode *) r;
+
     bool rother_found = keyvalue_find(mgr->c2r_table, (word_t ) n,
 				      (word_t *) &rother);
     bool nother_found = keyvalue_find(mgr->r2c_table, (word_t ) r,
@@ -109,20 +117,22 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 #endif
 	    keyvalue_insert(mgr->c2r_table, (word_t ) n, (word_t ) r);
 	    keyvalue_insert(mgr->r2c_table, (word_t ) r, (word_t ) n);
-	    /* Create entries for negations */
-	    ref_t rn = shadow_negate(mgr, r);
-	    DdNode *nn;
-	    if (mgr->do_cudd) {
-		nn = Cudd_Not(n);
-	    } else {
-		nn = (DdNode *) rn;
-	    }
+	    if (!is_zdd) {
+		/* Create entries for negations */
+		ref_t rn = shadow_negate(mgr, r);
+		DdNode *nn;
+		if (mgr->do_cudd) {
+		    nn = Cudd_Not(n);
+		} else {
+		    nn = (DdNode *) rn;
+		}
 #if RPT >= 5
-	    shadow_show(mgr, rn, buf);
-	    report(5, "Added ref %s for node %p", buf, nn);
+		shadow_show(mgr, rn, buf);
+		report(5, "Added ref %s for node %p", buf, nn);
 #endif
-	    keyvalue_insert(mgr->c2r_table, (word_t ) nn, (word_t ) rn);
-	    keyvalue_insert(mgr->r2c_table, (word_t ) rn, (word_t ) nn);
+		keyvalue_insert(mgr->c2r_table, (word_t ) nn, (word_t ) rn);
+		keyvalue_insert(mgr->r2c_table, (word_t ) rn, (word_t ) nn);
+	    }
 	}
     }
 }
@@ -163,7 +173,13 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 	unsigned int numSlots = 1u<<18; /* Default 256 */
 	unsigned int cacheSize = 1u<<22; /* Default 262144 */
 	/* Default 67,108,864 */
-	unsigned long int maxMemory = (1u<<31) + (1ul << 34); 
+	unsigned long int maxMemory = (1u<<31) + (1ul << 34);
+#if 0
+	// Use defaults
+	numSlots = 256;
+	cacheSize = 262144;
+	maxMemory = 67108864;
+#endif
 	mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
 #ifndef NO_CHAINING
 	Cudd_ChainingType ct;
@@ -198,6 +214,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
     mgr->r2c_table = word_keyvalue_new();
     add_ref(mgr, r, n);
     mgr->nvars = 0;
+    mgr->zfuns = word_set_new();
     return mgr;
 }
 
@@ -210,6 +227,7 @@ void free_shadow_mgr(shadow_mgr mgr) {
     keyvalue_free(mgr->c2r_table);
     keyvalue_free(mgr->r2c_table);
     free_block((void *) mgr, sizeof(shadow_ele));
+    set_free(mgr->zfuns);
 }
 
 ref_t shadow_one(shadow_mgr mgr) {
@@ -275,6 +293,12 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     ref_t r = 0;
     DdNode *n = NULL;
     if (mgr->do_cudd) {
+	if (set_member(mgr->zfuns, (word_t) in, false) ||
+	    set_member(mgr->zfuns, (word_t) tn, false) ||
+	    set_member(mgr->zfuns, (word_t) en, false)) {
+	    err(fatal, "Attempt to perform ITE on ZDD nodes");
+	    return REF_INVALID;
+	}
 	n = Cudd_bddIte(mgr->bdd_manager, in, tn, en);
 	Cudd_Ref(n);
     }
@@ -302,8 +326,14 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 ref_t shadow_negate(shadow_mgr mgr, ref_t r) {
     if (do_ref(mgr))
 	return REF_NEGATE(r);
-    else 
-	return (ref_t) Cudd_Not((DdNode *) r);
+    else {
+	DdNode *n = get_ddnode(mgr, r);
+	if (set_member(mgr->zfuns, (word_t) n, false)) {
+	    err(fatal, "Attempt to negate ZDD node");
+	    return REF_INVALID;
+	}
+	return (ref_t) Cudd_Not(n);
+    }
 }
 
 ref_t shadow_absval(shadow_mgr mgr, ref_t r) {
@@ -314,18 +344,64 @@ ref_t shadow_absval(shadow_mgr mgr, ref_t r) {
 }
 
 ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
-    ref_t r = shadow_ite(mgr, aref, bref, shadow_zero(mgr));
+    ref_t r = REF_ZERO;
+    bool zdd = false;
+    if (mgr->nzvars > 0) {
+	/* Check whether arguments are ZDDs */
+	DdNode *an = get_ddnode(mgr, aref);
+	DdNode *bn = get_ddnode(mgr, bref);
+	DdNode *rn;
+	bool za = set_member(mgr->zfuns, (word_t) an, false);
+	bool zb = set_member(mgr->zfuns, (word_t) bn, false);
+	bool refa = false;
+	bool refb = false;
+	if (za || zb) {
+	    zdd = true;
+	    /* Make sure they're both ZDDs */
+	    if (!za) {
+		an = (DdNode *) shadow_zconvert(mgr, aref);
+		Cudd_Ref(an);
+		refa = true;
+	    }
+	    if (!zb) {
+		bn = (DdNode *) shadow_zconvert(mgr, bref);
+		Cudd_Ref(bn);
+		refb = true;
+	    }
+	    rn = Cudd_zddIntersect(mgr->bdd_manager, an, bn);
+	    if (!set_member(mgr->zfuns, (word_t) rn, false)) {
+		set_insert(mgr->zfuns, (word_t) rn);
+	    }
+	    Cudd_Ref(rn);
+	    r = (ref_t) rn;
+	    if (refa)
+		Cudd_RecursiveDerefZdd(mgr->bdd_manager, an);
+	    if (refb)
+		Cudd_RecursiveDerefZdd(mgr->bdd_manager, bn);
+	}
+    }
+    if (!zdd)
+	r = shadow_ite(mgr, aref, bref, shadow_zero(mgr));
+
 #if RPT >= 4
     char buf1[24], buf2[24], buf3[24];
     shadow_show(mgr, aref, buf1);
     shadow_show(mgr, bref, buf2);
     shadow_show(mgr, r, buf3);
-    report(4, "%s AND %s --> %s", buf1, buf2, buf3);
+    report(4, "%s %s %s --> %s", buf1, zdd ? "ZAND" : "AND", buf2, buf3);
 #endif
     return r;
 }
 
 ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
+    DdNode *an = get_ddnode(mgr, aref);
+    DdNode *bn = get_ddnode(mgr, bref);
+    if (set_member(mgr->zfuns, (word_t) an, false) ||
+	set_member(mgr->zfuns, (word_t) bn, false)) {
+	err(fatal, "Attempt to compute OR with ZDD node");
+	return REF_INVALID;
+    }
+
     ref_t r = shadow_ite(mgr, aref, shadow_one(mgr), bref);
 #if RPT >= 4
     char buf1[24], buf2[24], buf3[24];
@@ -338,6 +414,14 @@ ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
 }
 
 ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
+    DdNode *an = get_ddnode(mgr, aref);
+    DdNode *bn = get_ddnode(mgr, bref);
+    if (set_member(mgr->zfuns, (word_t) an, false) ||
+	set_member(mgr->zfuns, (word_t) bn, false)) {
+	err(fatal, "Attempt to compute XOR with ZDD node");
+	return REF_INVALID;
+    }
+
     ref_t r = shadow_ite(mgr, aref, shadow_negate(mgr, bref), bref);
 #if RPT >= 4
     char buf1[24], buf2[24], buf3[24];
@@ -358,23 +442,34 @@ bool shadow_gc_check(shadow_mgr mgr) {
 
 /* Only call this when removing r from unique table */
 void shadow_deref(shadow_mgr mgr, ref_t r) {
+    if (!mgr->do_cudd)
+	return;
     DdNode *n = get_ddnode(mgr, r);
-    ref_t nr = shadow_negate(mgr, r);
-    DdNode *nn = get_ddnode(mgr, nr);
-    if (mgr->do_cudd) {
+    bool zdd = set_member(mgr->zfuns, (word_t) n, true);
+    ref_t nr = REF_ZERO;
+    DdNode *nn = NULL;
+    if (zdd) 
+	Cudd_RecursiveDerefZdd(mgr->bdd_manager, n);
+    else {
 	Cudd_RecursiveDeref(mgr->bdd_manager, n);
+	nr = shadow_negate(mgr, r);
+	nn = get_ddnode(mgr, nr);
     }
 #if RPT >= 5
     char buf[24];
     shadow_show(mgr, r, buf);
     report(5, "Deleting reference %s for node %p", buf, n);
-    shadow_show(mgr, nr, buf);
-    report(5, "Deleting reference %s for node %p", buf, nn);
+    if (!zdd) {
+	shadow_show(mgr, nr, buf);
+	report(5, "Deleting reference %s for node %p", buf, nn);
+    }
 #endif
     keyvalue_remove(mgr->c2r_table, (word_t ) n, NULL, NULL);
     keyvalue_remove(mgr->r2c_table, (word_t ) r, NULL, NULL);
-    keyvalue_remove(mgr->c2r_table, (word_t ) nn, NULL, NULL);
-    keyvalue_remove(mgr->r2c_table, (word_t ) nr, NULL, NULL);
+    if (!zdd) {
+	keyvalue_remove(mgr->c2r_table, (word_t ) nn, NULL, NULL);
+	keyvalue_remove(mgr->r2c_table, (word_t ) nr, NULL, NULL);
+    }
 }
 
 /*** Unary Operations ***/
@@ -489,19 +584,24 @@ static word_t apa2word(DdApaNumber num, int digits) {
 static keyvalue_table_ptr cudd_count(shadow_mgr mgr, set_ptr roots) {
     word_t wk, wv;
     keyvalue_table_ptr result = word_keyvalue_new();
-    size_t nvars = mgr->nvars;
     set_iterstart(roots);
     while (set_iternext(roots, &wk)) {
 	ref_t r = (ref_t) wk;
 	DdNode *n = get_ddnode(mgr, r);
+	bool zdd = set_member(mgr->zfuns, (word_t) n, false);
 #if USE_APA
 	int digits;
-	DdApaNumber num = Cudd_ApaCountMinterm(mgr->bdd_manager, n, nvars,
+	DdApaNumber num = Cudd_ApaCountMinterm(mgr->bdd_manager, n, mgr->nvars,
 					       &digits);
 	wv = apa2word(num, digits);
 	FREE(num);
 #else
-	double fv = Cudd_CountMinterm(mgr->bdd_manager, n, nvars);
+	double fv = 0.0;
+	if (zdd) {
+	    fv = Cudd_zddCountMinterm(mgr->bdd_manager, n, mgr->nzvars);
+	} else {
+	    fv = Cudd_CountMinterm(mgr->bdd_manager, n, mgr->nvars);
+	}
 	wv = (word_t) fv;
 #endif
 	keyvalue_insert(result, wk, wv);
@@ -685,6 +785,13 @@ size_t cudd_size(shadow_mgr mgr, set_ptr roots) {
     return (size_t) cnt;
 }
 
+/* Have CUDD perform garbage collection.  Return number of nodes collected */
+int cudd_collect(shadow_mgr mgr) {
+    if (!mgr->do_cudd)
+	return 0;
+    int result = cuddGarbageCollect(mgr->bdd_manager, 1);
+    return result;
+}
 
 /* Convert a set of literals into a CUDD cube */
 static DdNode *cudd_lit_cube(shadow_mgr mgr, set_ptr lits) {
@@ -792,6 +899,27 @@ static keyvalue_table_ptr reconcile_maps(shadow_mgr mgr, keyvalue_table_ptr lmap
     return map;
 }
 
+/* ZDD support */
+/* Convert function to ZDD.  This should only be done after all BDD variables have been declared */
+ref_t shadow_zconvert(shadow_mgr mgr, ref_t r) {
+    if (do_ref(mgr))
+	/* Only applies when in pure CUDD mode */
+	return r;
+    if (mgr->nzvars < mgr->nvars) {
+	Cudd_zddVarsFromBddVars(mgr->bdd_manager, 1);
+	mgr->nzvars = mgr->nvars;
+    }
+    DdNode *n = get_ddnode(mgr, r);
+    if (set_member(mgr->zfuns, (word_t) n, false)) {
+	return (ref_t) n;
+    }
+    DdNode *zn = Cudd_zddPortFromBdd(mgr->bdd_manager, n);
+    if (!set_member(mgr->zfuns, (word_t) zn, false)) {
+	Cudd_Ref(zn);
+	set_insert(mgr->zfuns, (word_t) zn);
+    }
+    return (ref_t) zn;
+}
 
 /* Create key-value table mapping set of root nodes to their restrictions,
    with respect to a set of literals (given as a set of refs)

@@ -2342,9 +2342,9 @@ void uop_start(unsigned id, unsigned opcode, unsigned nword, word_t *data) {
     ref_mgr mgr = dmgr->rmgr;
     void *auxinfo = NULL;
     word_t *wstore = NULL;
+    set_ptr dset = NULL;
+    keyvalue_table_ptr dtable = NULL;
     switch(opcode) {
-	set_ptr dset = NULL;
-	keyvalue_table_ptr dtable = NULL;
     case UOP_MARK:
     case UOP_SUPPORT:
 	dset = word_set_new();
