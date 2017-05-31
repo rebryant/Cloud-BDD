@@ -182,7 +182,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 #endif
 	mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
 #ifndef NO_CHAINING
-	Cudd_ChainingType ct;
+	Cudd_ChainingType ct = CUDD_CHAIN_NONE;
 	switch (chaining) {
 	case CHAIN_NONE:
 	    ct = CUDD_CHAIN_NONE;
