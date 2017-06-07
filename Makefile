@@ -5,10 +5,8 @@ OCUDDDIR = ./cudd-symlink-original
 CUDDINC= -I$(CUDDDIR)/cudd -I$(CUDDDIR)/mtr -I$(CUDDDIR)/epd -I$(CUDDDIR)/util
 CUDDLIBS = $(CUDDDIR)/cudd/libcudd.a  $(CUDDDIR)/mtr/libmtr.a  $(CUDDDIR)/st/libst.a $(CUDDDIR)/epd/libepd.a $(CUDDDIR)/util/libutil.a -lm
 
-OCUDDINC= -I$(OCUDDDIR)/cudd -I$(OCUDDDIR)/mtr -I$(OCUDDDIR)/epd -I$(OCUDDDIR)/util
-OCUDDLIBS = $(OCUDDDIR)/cudd/libcudd.a  $(OCUDDDIR)/mtr/libmtr.a  $(OCUDDDIR)/st/libst.a $(OCUDDDIR)/epd/libepd.a $(OCUDDDIR)/util/libutil.a -lm
-
-CUDDFLAGS = -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=8
+OCUDDINC= -I$(OCUDDDIR)/include
+OCUDDLIBS = $(OCUDDDIR)/lib/libcudd.a  -lm
 
 VLEVEL=3
 
@@ -50,7 +48,7 @@ shadow.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg
 	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC)  -c shadow.c
 
 shadow-nochain.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg.h
-	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -DNO_CHAINING -c shadow.c -o shadow-nochain.o
+	$(CC) $(CFLAGS) $(BDDFLAGS) $(OCUDDINC) -DNO_CHAINING -c shadow.c -o shadow-nochain.o
 
 console.o: console.c console.h report.h
 	$(CC) $(CFLAGS) -c console.c

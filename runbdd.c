@@ -67,6 +67,7 @@ bool do_information(int argc, char *argv[]);
 bool do_ite(int argc, char *argv[]);
 bool do_nothing(int argc, char *argv[]);
 bool do_or(int argc, char *argv[]);
+bool do_satisfy(int argc, char *argv[]);
 bool do_shift(int argc, char *argv[]);
 bool do_size(int argc, char *argv[]);
 bool do_status(int argc, char *argv[]);
@@ -123,6 +124,8 @@ static void console_init(bool do_dist) {
 	    " fd f1 f2 ...   | fd <- f1 | f2 | ...");
     add_cmd("info", do_information,
 	    " f1 ..          | Display combined information about functions");
+    add_cmd("satisfy", do_satisfy,
+	    " f1 ..          | Print satisfying values for functions");
     add_cmd("shift", do_shift,
 	    " fd f v1' v1 ...| Variable shift");
     add_cmd("size", do_nothing,
@@ -956,6 +959,22 @@ bool do_uquant(int argc, char *argv[]) {
     return ok;
 }
 
+
+bool do_satisfy(int argc, char *argv[]) {
+    size_t i;
+    for (i = 1; i < argc; i++) {
+	ref_t r;
+	word_t wv;
+	if (keyvalue_find(nametable, (word_t) argv[i], &wv)) {
+	    r = (ref_t) wv;
+	    report(1, "%s:", argv[i]);
+	    shadow_satisfy(smgr, r);
+	} else {
+	    report(1, "%s: NOT FOUND", argv[i]);
+	}
+    }
+    return true;
+}
 
 bool do_shift(int argc, char *argv[]) {
     char buf[24];

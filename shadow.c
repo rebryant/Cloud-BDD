@@ -18,8 +18,11 @@
 #include "bdd.h"
 
 #include "cudd.h"
-#include "util.h"
 #include "shadow.h"
+
+#ifndef CUDD_VERSION
+#define CUDD_VERSION "3.0.0"
+#endif
 
 /* From cuddInt.h */
 extern int cuddGarbageCollect (DdManager *unique, int clearCache);
@@ -182,7 +185,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 #endif
 	mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
 #ifndef NO_CHAINING
-	Cudd_ChainingType ct = CUDD_CHAIN_NONE;
+	Cudd_ChainingType ct;
 	switch (chaining) {
 	case CHAIN_NONE:
 	    ct = CUDD_CHAIN_NONE;
@@ -394,41 +397,104 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 }
 
 ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
-    DdNode *an = get_ddnode(mgr, aref);
-    DdNode *bn = get_ddnode(mgr, bref);
-    if (set_member(mgr->zfuns, (word_t) an, false) ||
-	set_member(mgr->zfuns, (word_t) bn, false)) {
-	err(fatal, "Attempt to compute OR with ZDD node");
-	return REF_INVALID;
+    ref_t r = REF_ONE;
+    bool zdd = false;
+    if (mgr->nzvars > 0) {
+	/* Check whether arguments are ZDDs */
+	DdNode *an = get_ddnode(mgr, aref);
+	DdNode *bn = get_ddnode(mgr, bref);
+	DdNode *rn;
+	bool za = set_member(mgr->zfuns, (word_t) an, false);
+	bool zb = set_member(mgr->zfuns, (word_t) bn, false);
+	bool refa = false;
+	bool refb = false;
+	if (za || zb) {
+	    zdd = true;
+	    /* Make sure they're both ZDDs */
+	    if (!za) {
+		an = (DdNode *) shadow_zconvert(mgr, aref);
+		Cudd_Ref(an);
+		refa = true;
+	    }
+	    if (!zb) {
+		bn = (DdNode *) shadow_zconvert(mgr, bref);
+		Cudd_Ref(bn);
+		refb = true;
+	    }
+	    rn = Cudd_zddUnion(mgr->bdd_manager, an, bn);
+	    if (!set_member(mgr->zfuns, (word_t) rn, false)) {
+		set_insert(mgr->zfuns, (word_t) rn);
+	    }
+	    Cudd_Ref(rn);
+	    r = (ref_t) rn;
+	    if (refa)
+		Cudd_RecursiveDerefZdd(mgr->bdd_manager, an);
+	    if (refb)
+		Cudd_RecursiveDerefZdd(mgr->bdd_manager, bn);
+	}
     }
+    if (!zdd)
+	r = shadow_ite(mgr, aref, shadow_one(mgr), bref);
 
-    ref_t r = shadow_ite(mgr, aref, shadow_one(mgr), bref);
 #if RPT >= 4
     char buf1[24], buf2[24], buf3[24];
     shadow_show(mgr, aref, buf1);
     shadow_show(mgr, bref, buf2);
     shadow_show(mgr, r, buf3);
-    report(4, "%s OR %s --> %s", buf1, buf2, buf3);
+    report(4, "%s %s %s --> %s", buf1, zdd ? "ZOR" : "OR", buf2, buf3);
 #endif
     return r;
 }
 
 ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
-    DdNode *an = get_ddnode(mgr, aref);
-    DdNode *bn = get_ddnode(mgr, bref);
-    if (set_member(mgr->zfuns, (word_t) an, false) ||
-	set_member(mgr->zfuns, (word_t) bn, false)) {
-	err(fatal, "Attempt to compute XOR with ZDD node");
-	return REF_INVALID;
+    ref_t r = REF_ZERO;
+    bool zdd = false;
+    if (mgr->nzvars > 0) {
+	/* Check whether arguments are ZDDs */
+	DdNode *an = get_ddnode(mgr, aref);
+	DdNode *bn = get_ddnode(mgr, bref);
+	DdNode *rn;
+	bool za = set_member(mgr->zfuns, (word_t) an, false);
+	bool zb = set_member(mgr->zfuns, (word_t) bn, false);
+	bool refa = false;
+	bool refb = false;
+	if (za || zb) {
+	    err(fatal, "Attempt to perform XOR on ZDD nodes");
+	    return REF_INVALID;
+	    zdd = true;
+	    /* Make sure they're both ZDDs */
+	    if (!za) {
+		an = (DdNode *) shadow_zconvert(mgr, aref);
+		Cudd_Ref(an);
+		refa = true;
+	    }
+	    if (!zb) {
+		bn = (DdNode *) shadow_zconvert(mgr, bref);
+		Cudd_Ref(bn);
+		refb = true;
+	    }
+	    // Need symmetric difference here
+	    rn = Cudd_zddDiff(mgr->bdd_manager, an, bn);
+	    if (!set_member(mgr->zfuns, (word_t) rn, false)) {
+		set_insert(mgr->zfuns, (word_t) rn);
+	    }
+	    Cudd_Ref(rn);
+	    r = (ref_t) rn;
+	    if (refa)
+		Cudd_RecursiveDerefZdd(mgr->bdd_manager, an);
+	    if (refb)
+		Cudd_RecursiveDerefZdd(mgr->bdd_manager, bn);
+	}
     }
+    if (!zdd)
+	r = shadow_ite(mgr, aref, shadow_negate(mgr, bref), bref);
 
-    ref_t r = shadow_ite(mgr, aref, shadow_negate(mgr, bref), bref);
 #if RPT >= 4
     char buf1[24], buf2[24], buf3[24];
     shadow_show(mgr, aref, buf1);
     shadow_show(mgr, bref, buf2);
     shadow_show(mgr, r, buf3);
-    report(4, "%s XOR %s --> %s", buf1, buf2, buf3);
+    report(4, "%s %s %s --> %s", buf1, zdd ? "ZXOR" : "XOR", buf2, buf3);
 #endif
     return r;
 }
@@ -471,6 +537,23 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
 	keyvalue_remove(mgr->r2c_table, (word_t ) nr, NULL, NULL);
     }
 }
+
+void shadow_satisfy(shadow_mgr mgr, ref_t r) {
+    if (!mgr->do_cudd)
+	return;
+    DdNode *n = get_ddnode(mgr, r);
+    bool zdd = set_member(mgr->zfuns, (word_t) n, true);
+    if (zdd) {
+	Cudd_zddPrintMinterm(mgr->bdd_manager, n);
+	Cudd_zddPrintDebug(mgr->bdd_manager, n, mgr->nzvars, 4);
+    }
+    else {
+	Cudd_PrintMinterm(mgr->bdd_manager, n);
+	Cudd_PrintDebug(mgr->bdd_manager, n, mgr->nvars, 4);
+    }
+}
+
+
 
 /*** Unary Operations ***/
 

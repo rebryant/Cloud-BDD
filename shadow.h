@@ -72,6 +72,9 @@ bool shadow_gc_check(shadow_mgr mgr);
 /* Convert function to ZDD.  This should only be done after all BDD variables have been declared */
 ref_t shadow_zconvert(shadow_mgr mgr, ref_t r);
 
+/* Print satisfying values for BDD/ZDD.  Only works for CUDD */
+void shadow_satisfy(shadow_mgr mgr, ref_t r);
+
 /* Create key-value table mapping set of root nodes to their densities. */
 keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots);
 
