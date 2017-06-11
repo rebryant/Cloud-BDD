@@ -8,7 +8,8 @@ def usage(name):
     print "Usage %s [-h] [-a] [-z] [-n N] [-b] [-c] [-v] [-p r|c|d]" % name
     print " -h       Print this message"
     print " -a       Generate all combinations"
-    print " -z       Use ZDDs"
+    print " -z       Convert to ZDDs part way through"
+    print " -Z       Do entirely with ZDDs"
     print " -n N     Encode N x N chessboard"
     print " -b       Use binary encoding"
     print " -c       Careful management of garbage collections"
@@ -26,8 +27,8 @@ def run(name, args):
     info = False
     preconstrain = circuit.PC.none
     genall = False
-    zdd = False
-    optlist, args = getopt.getopt(args, 'hazn:bcvp:')
+    zdd = circuit.Z.none
+    optlist, args = getopt.getopt(args, 'hazZn:bcvp:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -35,7 +36,9 @@ def run(name, args):
         if opt == '-a':
             genall = True
         elif opt == '-z':
-            zdd = True
+            zdd = circuit.Z.convert
+        elif opt == '-Z':
+            zdd = circuit.Z.vars
         elif opt == '-n':
             n = int(val)
         elif opt == '-b':
@@ -64,9 +67,8 @@ def run(name, args):
             for b in [True, False]:
                 for c in [True, False]:
                     for p in [circuit.PC.none, circuit.PC.row, circuit.PC.column]:
-                        circuit.qgen(n, b, c, c, p, False)
-                    for p in [circuit.PC.none, circuit.PC.row]:
-                        circuit.qgen(n, b, c, c, p, True)
+                        for z in [circuit.Z.none, circuit.Z.vars, circuit.Z.convert]:
+                            circuit.qgen(n, b, c, c, p, z)
     else:
         circuit.qgen(n, binary, careful, info, preconstrain, zdd)
 

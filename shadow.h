@@ -41,8 +41,8 @@ typedef struct {
     size_t nvars;
     /* Total number of ZDD variables created */
     size_t nzvars;
-    /* For DD's, indicates which ones are ZDDs */
-    set_ptr zfuns;
+    /* Reference counts for ZDD nodes */
+    keyvalue_table_ptr zcounts;
 } shadow_ele, *shadow_mgr;
 
 shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t chaining);

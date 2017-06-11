@@ -1,18 +1,19 @@
 CUDDDIR = ./cudd-symlink
 OCUDDDIR = ./cudd-symlink-original
-#CUDDDIR= ../../../boolean/cudd-2.5.0
 
-CUDDINC= -I$(CUDDDIR)/cudd -I$(CUDDDIR)/mtr -I$(CUDDDIR)/epd -I$(CUDDDIR)/util
-CUDDLIBS = $(CUDDDIR)/cudd/libcudd.a  $(CUDDDIR)/mtr/libmtr.a  $(CUDDDIR)/st/libst.a $(CUDDDIR)/epd/libepd.a $(CUDDDIR)/util/libutil.a -lm
+CUDDINC= -I$(CUDDDIR)/include
+CUDDLIBS = $(CUDDDIR)/lib/libcudd.a 
 
 OCUDDINC= -I$(OCUDDDIR)/include
-OCUDDLIBS = $(OCUDDDIR)/lib/libcudd.a  -lm
+OCUDDLIBS = $(OCUDDDIR)/lib/libcudd.a
 
-VLEVEL=3
+CUDDFLAGS = -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=8
+
+VLEVEL=5
 
 CC=gcc
-#CFLAGS= -Wall -g -DRPT=$(VLEVEL)
-CFLAGS = -Wall -O2 -DRPT=$(VLEVEL)
+CFLAGS= -Wall -g -DRPT=$(VLEVEL)
+#CFLAGS = -Wall -O2 -DRPT=$(VLEVEL)
 
 # Optionally test version with very small hash signatures to stress aliasing code
 BDDFLAGS=
@@ -48,7 +49,7 @@ shadow.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg
 	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC)  -c shadow.c
 
 shadow-nochain.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg.h
-	$(CC) $(CFLAGS) $(BDDFLAGS) $(OCUDDINC) -DNO_CHAINING -c shadow.c -o shadow-nochain.o
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -DNO_CHAINING -c shadow.c -o shadow-nochain.o
 
 console.o: console.c console.h report.h
 	$(CC) $(CFLAGS) -c console.c

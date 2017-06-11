@@ -28,9 +28,11 @@
 /* Global parameters */
 /* Should I perform garbage collection? */
 int enable_collect = 1;
-int do_cudd = 0;
-int do_local = 0;
-int do_dist = 0;
+bool do_cudd = false;
+bool do_local = false;
+bool do_dist = false;
+
+
 /* What type of chaining should be used? */
 chaining_t chaining_type = CHAIN_NONE;
 
@@ -67,6 +69,7 @@ bool do_information(int argc, char *argv[]);
 bool do_ite(int argc, char *argv[]);
 bool do_nothing(int argc, char *argv[]);
 bool do_or(int argc, char *argv[]);
+bool do_not(int argc, char *argv[]);
 bool do_satisfy(int argc, char *argv[]);
 bool do_shift(int argc, char *argv[]);
 bool do_size(int argc, char *argv[]);
@@ -122,6 +125,8 @@ static void console_init(bool do_dist) {
 	    " fd fi ft fe    | fd <- ITE(fi, ft, fe)");
     add_cmd("or", do_or,
 	    " fd f1 f2 ...   | fd <- f1 | f2 | ...");
+    add_cmd("not", do_not,
+	    " fd f           | fd <- ~f");
     add_cmd("info", do_information,
 	    " f1 ..          | Display combined information about functions");
     add_cmd("satisfy", do_satisfy,
@@ -210,7 +215,7 @@ int main(int argc, char *argv[]) {
     do_dist = 0;
     chaining_type = CHAIN_NONE;
 
-    while ((c = getopt(argc, argv, "hn:v:f:cldH:P:rL:C:")) != -1) {
+    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:C:")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -360,12 +365,27 @@ static void assign_ref(char *name, ref_t r, bool saturate) {
 	sname = (char *) wk;
 	rold = (ref_t) wv;
 	root_deref(rold);
+#if RPT >= 5
 	if (verblevel >= 5) {
 	    char buf[24];
 	    shadow_show(smgr, rold, buf);
-#if RPT >= 5
 	    report(5, "Removed entry %s:%s from name table", name, buf);
+	}
 #endif
+	if (name[0] != '!') {
+	    char nname[MAX_CHAR];
+	    sprintf(nname, "!%s", name);
+	    if (keyvalue_remove(nametable, (word_t) nname, &wk, &wv)) {
+		rold = (ref_t) wv;
+		root_deref(rold);
+#if RPT >= 5
+		if (verblevel >= 5) {
+		    char buf[24];
+		    shadow_show(smgr, rold, buf);
+		    report(5, "Removed entry %s:%s from name table", name, buf);
+		}
+#endif
+	    }
 	}
     } else {
 	sname = strsave_or_fail(name, "assign_ref");
@@ -387,18 +407,26 @@ static void assign_ref(char *name, ref_t r, bool saturate) {
 static ref_t get_ref(char *name) {
     ref_t r;
     word_t wv;
-    bool negate = (*name == '!');
-    if (negate)
-	name++;
+
+    // See if have value stored
     if (keyvalue_find(nametable, (word_t) name, &wv)) {
 	r = (ref_t) wv;
-	if (negate)
-	    r = shadow_negate(smgr, r);
 	return r;
-    } else {
-	report(0, "Function '%s' undefined", name);
-	return REF_INVALID;
     }
+    // See if this is a negated reference
+    if (*name == '!') {
+	char *pname = name+1;
+	// See if have positive value stored
+	if (keyvalue_find(nametable, (word_t) pname, &wv)) {
+	    ref_t nr = (ref_t) wv;
+	    r = shadow_negate(smgr, nr);
+	    // Create record of resulting value
+	    assign_ref(name, r, false);
+	    return r;
+	}
+    }
+    report(0, "Function '%s' undefined", name);
+    return REF_INVALID;
 }
 
 /* Create set of refs from collection of names */
@@ -608,6 +636,34 @@ bool do_or(int argc, char *argv[]) {
 bool do_xor(int argc, char *argv[]) {
     return do_reduce(argc, argv, shadow_zero(smgr), shadow_xor);
 }
+
+bool do_not(int argc, char *argv[]) {
+    char buf[24];
+    if (argc != 3) {
+	report(0, "Not requires 1 argument");
+	return false;
+    }
+    ref_t rf = get_ref(argv[2]);
+    if (do_ref(smgr) && REF_IS_INVALID(rf))
+	return false;
+    ref_t rval = shadow_negate(smgr, rf);
+    if (do_ref(smgr) && REF_IS_INVALID(rval))
+	return false;
+    assign_ref(argv[1], rval, false);
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
+#if RPT >= 2
+    shadow_show(smgr, rval, buf);
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
+    return true;
+
+}
+
 
 bool do_ite(int argc, char *argv[]) {
     char buf[24];

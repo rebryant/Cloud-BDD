@@ -269,6 +269,9 @@ class Circuit:
     def zc(self, dest, n):
         self.cmdLine("zconvert", [dest, n])
 
+    def zcV(self, dest, v):
+        self.cmdSequence("zconvert", [dest, v])
+
     def maj3(self, dest, n1, n2, n3):
         p12 = self.tmpNode()
         p23 = self.tmpNode()
@@ -387,7 +390,8 @@ class Circuit:
         return ((v>>i) &1)
 
     # Create product term to match specified value
-    def matchVal(self, v, vec, out):
+    # nvec is negation of vec
+    def matchVal(self, v, vec, nvec, out):
         names = [(("!%s" if self.getBit(v, i) == 0 else "%s") % vec.nodes[i]) for i in range(len(vec.nodes))]
         lits = Vec(names)
         self.andN(out, lits.nodes)
@@ -506,6 +510,19 @@ class PC:
     def sname(self, id):
         return self.snames[id]
 
+# Class to define use of ZDDs
+class Z:
+    none, vars, convert = range(3)
+    names = ["none", "vars", "convert"]
+    suffixes = ["b", "v", "z"]
+
+    def name(self, id):
+        return self.names[id]
+
+    def suffix(self, id):
+        return self.suffixes[id]
+
+
 def bigLog2(x):
     val = 0
     while ((1<<val) < x):
@@ -513,23 +530,29 @@ def bigLog2(x):
     return val
 
 # Generate constraints for n-queens problem
-def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, preconstrain = PC.none, zdd = False):
+def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, preconstrain = PC.none, zdd = Z.none):
     encoding = "binary" if binary else "one-hot"
     ckt = Circuit(f)
     ckt.comment("N-queens with %s encoding.  N = %d" % (encoding, n))
     ckt.comment("Preconstrain method: %s" % PC().name(preconstrain))
+    ckt.comment("ZDD mode = %s" % Z().name(zdd))
 #    ckt.write("time")
     pc = ckt.node("preconstrain")
     ckt.andN(pc, [])
     okR = ckt.node("okR")
-    if zdd:
+    if zdd == Z.convert:
         zokR = ckt.node("zokR")
     if binary:
         m = bigLog2(n)
         rows = [ckt.nameVec("v-%d" % r, m) for r in range(n)]
         # Do variables for each row in succession, MSB first
         vars = Vec(["v-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
-        ckt.declare(vars)
+        if zdd == Z.vars:
+            zvars = Vec(["bv-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
+            ckt.declare(zvars)
+            ckt.zcV(vars, zvars)
+        else:
+            ckt.declare(vars)
         ckt.comment("Individual square functions")
         for r in range(n):
             for c in range(n):
@@ -539,7 +562,13 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
         # Generate variables for each square
         snames = [sq(i/n, i%n) for i in range(n*n)]
         sv = Vec(snames)
-        ckt.declare(sv)
+        if zdd == Z.vars:
+            znames = ["b" + s for s in snames]
+            zv = Vec(znames)
+            ckt.declare(zv)
+            ckt.zcV(sv, zv)
+        else:
+            ckt.declare(sv)
         # Row constraints
         ckt.comment("Row Constraints")
         okr = ckt.nameVec("okr", n)
@@ -550,7 +579,7 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
         ckt.decRefs([okr])
         if preconstrain >= PC.row:
             ckt.andN(pc, [okR])
-        if zdd:
+        if zdd == Z.convert:
             ckt.zc(zokR, okR)
             ckt.decRefs([okR])
 
@@ -564,7 +593,7 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
     okO = ckt.node("okO")
     ok = ckt.node("ok")
 
-    if (zdd):
+    if zdd == Z.convert:
         zokC = ckt.node("zokC")
         zokD = ckt.node("zokD")
         zokO = ckt.node("zokO")
@@ -582,7 +611,7 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
     ckt.decRefs([okc])
     if preconstrain >= PC.row:
         ckt.decRefs([okR])
-    if zdd:
+    if zdd == Z.convert:
         ckt.zc(zokC, okC)
         ckt.decRefs([okC])
         ils = [zokC]
@@ -595,7 +624,7 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
     if info:
         ckt.information(ils)
 
-    if zdd:
+    if zdd == Z.convert:
         if binary:
             ckt.comment("Row constraint implicit")
             ckt.andN(zokRC, [zokC])
@@ -616,7 +645,7 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
         ckt.andN(okRC, [okC])
         ils = [okRC]
         dls = [okC]
-    if not zdd and preconstrain >= PC.column:
+    if zdd != Z.convert and preconstrain >= PC.column:
         ckt.andN(pc, [okRC])
     ckt.decRefs(dls)
     if careful:
@@ -635,7 +664,7 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
         ckt.andN(out, [out, pc])
     ckt.andN(okD, okd.nodes)
     ckt.decRefs([okd])
-    if zdd:
+    if zdd == Z.convert:
         ckt.zc(zokD, okD)
         ckt.decRefs([okD])
         ils = [zokD]
@@ -649,9 +678,9 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
     if info:
         ckt.information(ils)
 
-    if zdd or preconstrain < PC.column:
+    if zdd == Z.convert or preconstrain < PC.column:
         ckt.comment("Add diagonal to row & column")
-        if zdd:
+        if zdd == Z.convert:
             ckt.andN(zokRCD, [zokRC, zokD])
             ils = [zokRCD]
         else:
@@ -660,9 +689,9 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
     else:
         ckt.comment("Row & column constraints already incorporated into diagonal constraints")
         ckt.andN(okRCD, [okD])
-    if not zdd and preconstrain >= PC.diagonal:
+    if zdd != Z.convert and preconstrain >= PC.diagonal:
         ckt.andN(pc, [okRCD])
-    if zdd:
+    if zdd == Z.convert:
         ckt.decRefs([zokRC, zokD])
     else:
         ckt.decRefs([okRC, okD])
@@ -682,7 +711,7 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
         ckt.andN(out, [out, pc])
     ckt.andN(okO, oko.nodes)
     ckt.decRefs([oko])
-    if zdd:
+    if zdd == Z.convert:
         ckt.zc(zokO, okO)
         ckt.decRefs([okO])
         ils = [zokO]
@@ -695,9 +724,9 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
     if info:
         ckt.information(ils)
 
-    if zdd or preconstrain < PC.diagonal:
+    if zdd == Z.convert or preconstrain < PC.diagonal:
         ckt.comment("Add off diagonal to row, column, and diagonal")
-        if zdd:
+        if zdd == Z.convert:
             ckt.andN(zok, [zokRCD, zokO])
             ils = [zok]
         else:
@@ -706,7 +735,7 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
     else:
         ckt.comment("Row, column, & diagonal constraints already incorporated into off-diagonal constraints")
         ckt.andN(ok, [okO])
-    if zdd:
+    if zdd == Z.convert:
         ckt.decRefs([zokRCD, zokO])
     else:
         ckt.decRefs([okRCD, okO])
@@ -722,16 +751,16 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
     ckt.comment("Exit")
     ckt.write("quit")
 
-def qname(n, binary = False, careful = False, info = False, preconstrain = PC.none, zdd = False):
+def qname(n, binary = False, careful = False, info = False, preconstrain = PC.none, zdd = Z.none):
     scnt = "%.2d" % n
     sencode = "bin" if binary else "onh"
     scare = "slow" if careful else "fast"
     sinfo = "v" if info else "q"
     sname = PC().sname(preconstrain)
-    szdd = "z" if zdd else "b"
+    szdd = Z().suffix(zdd)
     return "q%s%s-%s-%s-%s-%s" % (szdd, scnt, sencode, scare, sinfo, sname)
 
-def qgen(n, binary = False, careful = False, info = False, preconstrain = PC.none, zdd = False):
+def qgen(n, binary = False, careful = False, info = False, preconstrain = PC.none, zdd = Z.none):
     fname = qname(n, binary, careful, info, preconstrain, zdd) + ".cmd"
     try:
         f = open(fname, "w")
