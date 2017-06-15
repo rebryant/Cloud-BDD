@@ -266,7 +266,7 @@ int buf_select(int nfds, fd_set *readfds, fd_set *writefds,
         maxfd = nfds - 1;
     }
 #if RPT >= 5
-    report(5, "maxfd: %d, nfds: %d", maxfd, nfds);
+    report(6, "maxfd: %d, nfds: %d", maxfd, nfds);
 #endif
     // if buffered, we do non-blocking select and make sure the returned
     // set sets both buffered and readable set
@@ -285,7 +285,7 @@ int buf_select(int nfds, fd_set *readfds, fd_set *writefds,
     if (!isBuffered)
     {
 #if RPT >= 5
-        report(5, "unbuffered select on up through %d", maxfd);
+        report(6, "unbuffered select on up through %d", maxfd);
 #endif
         returnVal = select(maxfd+1, readfds, writefds, exceptfds, timeout);
         for (i = 0; i < maxfd+1; i++)
@@ -316,7 +316,7 @@ int buf_select(int nfds, fd_set *readfds, fd_set *writefds,
         }
 
 #if RPT >= 5
-        report(5, "buffered select on up through %d", maxfd);
+        report(6, "buffered select on up through %d", maxfd);
 #endif
         returnVal = select(maxfd+1, &in_set, writefds, exceptfds,
 			   (timeout == NULL ? &zeroval : timeout));
@@ -339,7 +339,7 @@ int buf_select(int nfds, fd_set *readfds, fd_set *writefds,
 
     }
 #if RPT >= 5
-    report(5, "leaving buf_select with returnval %d\n", returnVal);
+    report(6, "leaving buf_select with returnval %d\n", returnVal);
 #endif
     return returnVal;
 }
@@ -364,7 +364,7 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp,
     while (cnt < len)
     {
 #if RPT >= 5
-        report(5, "waiting for %d bytes", (len - cnt));
+        report(6, "waiting for %d bytes", (len - cnt));
 #endif
         //if there's stuff in the buffer, copy it over
         if (curr_node->length > 0)
@@ -372,10 +372,10 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp,
             copyLen = ((len - cnt) < curr_node->length ?
 		       (len - cnt) : curr_node->length);
 #if RPT >= 5
-            report(5,
+            report(6,
 "copying a buffer of length %d from total length %d, to the return buffer",
 		   copyLen, curr_node->length);
-            report(5, "old length = %d, new length = %d",
+            report(6, "old length = %d, new length = %d",
 		   curr_node->length, curr_node->length - copyLen);
 #endif
             memcpy(buf + cnt,
@@ -391,14 +391,14 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp,
                 curr_node->location = curr_node->location + copyLen;
             }
 #if RPT >= 5
-            report(5, "new location: %d\n", curr_node->location);
+            report(6, "new location: %d\n", curr_node->location);
 #endif
         }
         //otherwise, we refill the buffer
         else
         {
 #if RPT >= 5
-            report(5, "fill the saved buffer!");
+            report(6, "fill the saved buffer!");
 #endif
             ssize_t n = read(curr_node->fd,
 			     curr_node->buf + curr_node->location +
@@ -420,7 +420,7 @@ static ssize_t buf_read(buf_node* curr_node, bool* eofp,
             }
             curr_node->length = curr_node->length + n;
 #if RPT >= 5
-            report(5,
+            report(6,
 "added %d bytes to the saved buffer; length is now %d at location %d\n",
 		   n, curr_node->length, curr_node->location);
 #endif
@@ -453,7 +453,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
 				       "chunk_read create head");
         buf_list_head->fd = fd;
 #if RPT >= 5
-        report(5, "created a node for fd %d as head\n", fd);
+        report(6, "created a node for fd %d as head\n", fd);
 #endif
         buf_list_head->length = 0;
         buf_list_head->location = 0;
@@ -468,7 +468,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
             if (fd == temp_node->fd) {
                 curr_node = temp_node;
 #if RPT >= 5
-                report(5, "found node for fd %d\n", fd);
+                report(6, "found node for fd %d\n", fd);
 #endif
             }
             temp_node = temp_node->next;
@@ -484,7 +484,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
         curr_node->buf = calloc_or_fail(CHUNK_MAX_SIZE, 2,
 					"chunk_read create head buf");
 #if RPT >= 5
-        report(5, "created a node for fd %d at head\n", fd);
+        report(6, "created a node for fd %d at head\n", fd);
 #endif
         buf_list_head = curr_node;
     }
@@ -506,7 +506,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
 	&& bufferReadBool && !(!(FD_ISSET(fd, &in_set))) )
     {
 #if RPT >= 5
-        report(5, "reading for %d\n", curr_node->fd);
+        report(6, "reading for %d\n", curr_node->fd);
 #endif
         ssize_t n = read(curr_node->fd,
 			 curr_node->buf + curr_node->location + curr_node->length,
@@ -515,7 +515,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
     }
 
 #if RPT >= 5
-    report(5, "about to get header for %d\n", fd);
+    report(6, "about to get header for %d\n", fd);
 #endif
     // get header of chunk
     size_t need_cnt = sizeof(chunk_t);
@@ -528,22 +528,22 @@ chunk_ptr chunk_read(int fd, bool* eofp)
 	return NULL;
     }
 #if RPT >= 5
-    report(5, "about to get rest of chunk for fd %d\n", fd);
+    report(6, "about to get rest of chunk for fd %d\n", fd);
 #endif
     // get rest of chunk
     chunk_ptr creadp = (chunk_ptr) buf_ptr;
     size_t len = creadp->length;
 #if RPT >= 5
-    report(5, "len needed: %d", len);
+    report(6, "len needed: %d", len);
 #endif
     if (len > 1) {
 	need_cnt = WORD_BYTES * (len - 1);
 #if RPT >= 5
-        report(5, "head buf pointer at %p", buf_ptr);
+        report(6, "head buf pointer at %p", buf_ptr);
 #endif
         buf_ptr = (unsigned char *)(buf_ptr + n);
 #if RPT >= 5
-        report(5, "moved pointer to %p for rest", buf_ptr);
+        report(6, "moved pointer to %p for rest", buf_ptr);
 #endif
         ssize_t n = buf_read(curr_node, eofp, buf_ptr, need_cnt);
         //ssize_t n = read(curr_node->fd, buf_ptr, need_cnt);
@@ -557,7 +557,7 @@ chunk_ptr chunk_read(int fd, bool* eofp)
     }
 
 #if RPT >= 5
-    report(5, "exiting chunk_read_buffered_builtin!\n");
+    report(6, "exiting chunk_read_buffered_builtin!\n");
 #endif
     if (eofp)
 	*eofp = false;

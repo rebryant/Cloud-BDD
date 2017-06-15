@@ -47,42 +47,43 @@ bool do_ref(shadow_mgr mgr) {
     return mgr->do_local || mgr->do_dist;
 }
 
-static bool is_zdd(shadow_mgr mgr, DdNode *n) {
-    word_t count;
-    if (!mgr->do_cudd)
-	return false;
-    return keyvalue_find(mgr->zcounts, (word_t) n, &count) && count > 0;
-}
-
-static void register_zdd(shadow_mgr mgr, DdNode *n) {
-    word_t count = 0;
-    keyvalue_remove(mgr->zcounts, (word_t) n, NULL, &count);
-    count++;
-    keyvalue_insert(mgr->zcounts, (word_t) n, count);
-}
-
-static bool unregister_zdd(shadow_mgr mgr, DdNode *n) {
-    word_t count = 0;
-    bool found = keyvalue_remove(mgr->zcounts, (word_t) n, NULL, &count) && count > 0;
-    if (found && count > 1) {
-	count--;
-	keyvalue_insert(mgr->zcounts, (word_t) n, count);
+/* When using only CUDD, ref is copy of DdNode for BDD, DdNode +2 for ZDD */
+static ref_t dd2ref(DdNode *n, bool zdd) {
+    unsigned  = (ref_t) n;
+    if (zdd) {
+	r += 2;
     }
-    return found;
+    return r;
 }
 
-static void ref_dd(shadow_mgr mgr, DdNode *n, bool is_zdd) {
+static bool is_zdd(shadow_mgr mgr, ref_t r) {
+    if (do_ref(mgr))
+	return false;
+    return (r & 0x2) != 0;
+}
+
+static DdNode *ref2dd(shadow_mgr mgr, ref_t r) {
+    bool zdd = is_zdd(mgr, r);
+    if (!zdd)
+	r -= 2;
+    }
+    return (DdNode *) r;
+}
+
+static void reference_dd(shadow_mgr mgr, DdNode *n) {
     if (!mgr->do_cudd)
 	return;
+    if (!n) {
+	err(fatal, "Attempt to reference NULL DdNode");
+	n = Cudd_ReadLogicZero(mgr->bdd_manager);
+    }
     Cudd_Ref(n);
-    if (is_zdd)
-	register_zdd(mgr, n);
 }
 
-static void unref_dd(shadow_mgr mgr, DdNode *n) {
+static void unreference_dd(shadow_mgr mgr, DdNode *n, bool zdd) {
     if (!mgr->do_cudd)
 	return;
-    if (unregister_zdd(mgr, n)) {
+    if (zdd) {
 	Cudd_RecursiveDerefZdd(mgr->bdd_manager, n);
     } else {
 	Cudd_RecursiveDeref(mgr->bdd_manager, n);
@@ -97,7 +98,7 @@ static DdNode *zconvert(shadow_mgr mgr, DdNode *n) {
 	mgr->nzvars = mgr->nvars;
     }
     DdNode *zn = Cudd_zddPortFromBdd(mgr->bdd_manager, n);
-    ref_dd(mgr, zn, true);
+    reference_dd(mgr, zn);
     return zn;
 }
 
@@ -105,26 +106,29 @@ void shadow_show(shadow_mgr mgr, ref_t r, char *buf) {
     if (do_ref(mgr)) {
 	ref_show(r, buf);
     } else {
-	DdNode *n = (DdNode *) r;
-	bool zdd = is_zdd(mgr, n);
-	sprintf(buf, "%c%p", zdd ? 'Z' : 'B', (DdNode *) r);
+	bool zdd = is_zdd(mgr, r);
+	DdNode *n = ref2dd(mgr, r);
+	sprintf(buf, "%c%p", zdd ? 'Z' : 'B', n);
     }		
 }
 
 static DdNode *get_ddnode(shadow_mgr mgr, ref_t r) {
+    bool zdd = is_zdd(mgr, r);
     DdNode *n;
     if (!do_ref(mgr)) {
-	n = (DdNode *) r;
+	n = ref2dd(mgr, r);
     } else if (REF_IS_INVALID(r)) {
 	err(fatal, "No node associated with invalid ref");
 	n = Cudd_ReadLogicZero(mgr->bdd_manager);
+	add_reference(mgr, n);
     } else if (!keyvalue_find(mgr->r2c_table, (word_t ) r, (word_t *) &n)) {
 	char buf[24];
 	shadow_show(mgr, r, buf);
 	err(fatal, "No node associated with ref %s (0x%llx)", buf, r);
 	n = mgr->do_cudd ? Cudd_ReadLogicZero(mgr->bdd_manager) :
 	    (DdNode *) REF_ZERO;
-    } 
+	add_reference(mgr, n);
+    }
     return n;
 }
 
@@ -140,12 +144,8 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 	return;
     }
 
-    if (!do_ref(mgr))
-	r = (ref_t) n;
     if (!mgr->do_cudd)
-	n = (DdNode *) r;
-
-    bool zdd = is_zdd(mgr, n);
+	n = ref2dd(mgr, r);
 
     bool rother_found = keyvalue_find(mgr->c2r_table, (word_t ) n,
 				      (word_t *) &rother);
@@ -159,7 +159,7 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 	    /* Already exists.  Check if match */
 	    if (nother == n && rother == r) {
 		// Remove reference 
-		unref_dd(mgr, n);
+		unreference_dd(mgr, n, zdd);
 	    } else {
 		shadow_show(mgr, r, buf1);
 		shadow_show(mgr, rother, buf2);
@@ -170,7 +170,7 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 	} else {
 	    shadow_show(mgr, r, buf1);
 	    shadow_show(mgr, rother, buf2);
-	    err(fatal, "Ref Collision.  Refs %s and %s map to BDD node 0x%p",
+	    err(fatal, "Ref Collision.  Refs %s and %s map to BDD node %p",
 		buf1, buf2, nother);
 	}
     } else {
@@ -187,14 +187,14 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 #endif
 	    keyvalue_insert(mgr->c2r_table, (word_t ) n, (word_t ) r);
 	    keyvalue_insert(mgr->r2c_table, (word_t ) r, (word_t ) n);
-	    if (!zdd) {
+	    if (!is_zdd(mgr, r)) {
 		/* Create entries for negations */
 		ref_t rn = shadow_negate(mgr, r);  // Creates reference
 		DdNode *nn;
 		if (mgr->do_cudd) {
 		    nn = Cudd_Not(n);
 		} else {
-		    nn = (DdNode *) rn;
+		    nn = ref2dd(mgr, rn);
 		}
 #if RPT >= 5
 		shadow_show(mgr, rn, buf);
@@ -238,7 +238,6 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
     mgr->c2r_table = word_keyvalue_new();
     mgr->r2c_table = word_keyvalue_new();
     mgr->nvars = 0;
-    mgr->zcounts = word_keyvalue_new();
 
     ref_t r = REF_ZERO;
     DdNode *n = NULL;
@@ -284,10 +283,10 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
     if (do_ref(mgr)) {
 	mgr->ref_mgr = new_ref_mgr();
 	if (!do_cudd) {
-	    n = (DdNode *) r;
+	    n = ref2dd(mgr, r);
 	}
     }
-    ref_dd(mgr, n, false);
+    reference_dd(mgr, n);
     add_ref(mgr, r, n);
     return mgr;
 }
@@ -301,21 +300,26 @@ void free_shadow_mgr(shadow_mgr mgr) {
     keyvalue_free(mgr->c2r_table);
     keyvalue_free(mgr->r2c_table);
     free_block((void *) mgr, sizeof(shadow_ele));
-    keyvalue_free(mgr->zcounts);
 }
 
 ref_t shadow_one(shadow_mgr mgr) {
     if (do_ref(mgr))
 	return REF_ONE;
-    else
-	return (ref_t) Cudd_ReadOne(mgr->bdd_manager);
+    else {
+	DdNode *n = Cudd_ReadOne(mgr->bdd_manager);
+	reference_dd(mgr, n);
+	return dd2ref(n, false);
+    }
 }
 
 ref_t shadow_zero(shadow_mgr mgr) {
     if (do_ref(mgr))
 	return REF_ZERO;
-    else
-	return (ref_t) Cudd_ReadLogicZero(mgr->bdd_manager);
+    else {
+	DdNode * n = Cudd_ReadLogicZero(mgr->bdd_manager);
+	reference_dd(mgr, n);
+	return dd2ref(n, false);
+    }
 }
 
 ref_t shadow_new_variable(shadow_mgr mgr) {
@@ -323,7 +327,7 @@ ref_t shadow_new_variable(shadow_mgr mgr) {
     DdNode *n = NULL;
     if (mgr->do_cudd) {
 	n = Cudd_bddNewVar(mgr->bdd_manager);
-	ref_dd(mgr, n, false);
+	reference_dd(mgr, n);
     }
     if (mgr->do_local) {
 	r = ref_new_variable(mgr->ref_mgr);
@@ -337,9 +341,9 @@ ref_t shadow_new_variable(shadow_mgr mgr) {
 	    r = rdist;
     }
     if (!mgr->do_cudd)
-	n = (DdNode *) r;
+	n = ref2dd(mgr, r);
     if (!do_ref(mgr)) 
-	r = (ref_t) n;
+	r = dd2ref(n, false);
     add_ref(mgr, r, n);
     mgr->nvars++;
     return r;
@@ -354,14 +358,14 @@ ref_t shadow_get_variable(shadow_mgr mgr, size_t index) {
     DdNode *n = NULL;
     if (mgr->do_cudd) {
 	n = Cudd_bddIthVar(mgr->bdd_manager, index);
-	ref_dd(mgr, n, false);
+	reference_dd(mgr, n);
     }
     if (do_ref(mgr)) {
 	r = REF_VAR(index);
 	if (!mgr->do_cudd)
 	    n = (DdNode *) r;
     } else {
-	r = (ref_t) n;
+	r = dd2ref(n, false);
     }
     add_ref(mgr, r, n);
     return r;
@@ -407,50 +411,57 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 		    en = zconvert(mgr, en);
 		}
 		n = Cudd_zddIte(mgr->bdd_manager, in, tn, en);
-		ref_dd(mgr, n, true);
+		reference_dd(mgr, n);
 		if (!zi)
-		    unref_dd(mgr, in);
+		    unreference_dd(mgr, in);
 		if (!zt)
-		    unref_dd(mgr, tn);
+		    unreference_dd(mgr, tn);
 		if (!ze)
-		    unref_dd(mgr, en);
+		    unreference_dd(mgr, en);
 	    }
 	}
 	if (!zdd) {
 	    n = Cudd_bddIte(mgr->bdd_manager, in, tn, en);
-	    ref_dd(mgr, n, false);
+	    reference_dd(mgr, n, false);
 	}
     } else {
-	n = (DdNode *) r;
+	n = ref2dd(mgr, r);
     }
     if (!do_ref(mgr))
-	r = (ref_t) n;
+	r = dd2ref(n, true);
     add_ref(mgr, r, n);
     return r;
 }
 
 /* Compute negation.  Creates CUDD reference.  For ZDDs, records as reference */
 ref_t shadow_negate(shadow_mgr mgr, ref_t a) {
+    ref_t r = REF_INVALID;
     if (do_ref(mgr))
-	return REF_NEGATE(a);
+	r = REF_NEGATE(a);
     else {
 	DdNode *an = get_ddnode(mgr, a);
-	if (is_zdd(mgr, an)) {
+	if (is_zdd(mgr, a)) {
 	    DdNode *zone = Cudd_ReadZddOne(mgr->bdd_manager, 0);
-	    ref_dd(mgr, zone, true);
+	    reference_dd(mgr, zone);
 	    DdNode *rn = Cudd_zddDiff(mgr->bdd_manager, zone, an);
-	    ref_dd(mgr, rn, true);
-	    unref_dd(mgr, zone);
-	    ref_t r = (ref_t) rn;
+	    rn = reference_dd(mgr, rn, true);
+	    unreference_dd(mgr, zone);
+	    r = (ref_t) rn;
 	    // For ZDDs, don't already have negated values recorded
 	    add_ref(mgr, r, rn);
-	    return r;
 	} else {
 	    DdNode *ann = Cudd_Not(an);
-	    ref_dd(mgr, ann, false);
-	    return (ref_t) ann;
+	    ann = reference_dd(mgr, ann, false);
+	    r = (ref_t) ann;
 	}
     }
+#if RPT >= 5
+    char buf[24], nbuf[24];
+    shadow_show(mgr, a, buf);
+    shadow_show(mgr, r, nbuf);
+    report(5, "Negated %s to get %s", buf, nbuf);
+#endif
+    return r;
 }
 
 ref_t shadow_absval(shadow_mgr mgr, ref_t r) {
@@ -480,13 +491,13 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		bn = zconvert(mgr, bn);
 	    }
 	    rn = Cudd_zddIntersect(mgr->bdd_manager, an, bn);
-	    ref_dd(mgr, rn, true);
+	    rn = reference_dd(mgr, rn, true);
 	    r = (ref_t) rn;
 	    add_ref(mgr, r, rn);
 	    if (!za)
-		unref_dd(mgr, an);
+		unreference_dd(mgr, an);
 	    if (!zb)
-		unref_dd(mgr, bn);
+		unreference_dd(mgr, bn);
 	}
     }
     if (!zdd)
@@ -522,13 +533,13 @@ ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		bn = zconvert(mgr, bn);
 	    }
 	    rn = Cudd_zddUnion(mgr->bdd_manager, an, bn);
-	    ref_dd(mgr, rn, true);
+	    rn = reference_dd(mgr, rn, true);
 	    r = (ref_t) rn;
 	    add_ref(mgr, r, rn);
 	    if (!za)
-		unref_dd(mgr, an);
+		unreference_dd(mgr, an);
 	    if (!zb)
-		unref_dd(mgr, bn);
+		unreference_dd(mgr, bn);
 	}
     }
     if (!zdd)
@@ -564,13 +575,13 @@ ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		bn = zconvert(mgr, bn);
 	    }
 	    rn = Cudd_zddSymmetricDiff(mgr->bdd_manager, an, bn);
-	    ref_dd(mgr, rn, true);
+	    rn = reference_dd(mgr, rn, true);
 	    r = (ref_t) rn;
 	    add_ref(mgr, r, rn);
 	    if (!za)
-		unref_dd(mgr, an);
+		unreference_dd(mgr, an);
 	    if (!zb)
-		unref_dd(mgr, bn);
+		unreference_dd(mgr, bn);
 	}
     }
     if (!zdd)
@@ -608,7 +619,7 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
 
     keyvalue_remove(mgr->c2r_table, (word_t ) n, NULL, NULL);
     keyvalue_remove(mgr->r2c_table, (word_t ) r, NULL, NULL);
-    unref_dd(mgr, n);
+    unreference_dd(mgr, n);
     if (!zdd) {
 	ref_t nr = shadow_negate(mgr, r);
 	DdNode *nn = get_ddnode(mgr, nr);
@@ -618,7 +629,7 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
 #endif
 	keyvalue_remove(mgr->c2r_table, (word_t ) nn, NULL, NULL);
 	keyvalue_remove(mgr->r2c_table, (word_t ) nr, NULL, NULL);
-	unref_dd(mgr, nn);
+	unreference_dd(mgr, nn);
     }
 }
 
@@ -981,7 +992,7 @@ static DdNode *cudd_lit_cube(shadow_mgr mgr, set_ptr lits) {
 	i++;
     }
     DdNode *cube = Cudd_bddComputeCube(mgr->bdd_manager, vars, phase, nele);
-    ref_dd(mgr, cube, false);
+    cube = reference_dd(mgr, cube, false);
     free_array(vars, nele, sizeof(DdNode *));
     free_array(phase, nele, sizeof(int));
     return cube;
@@ -997,10 +1008,10 @@ static keyvalue_table_ptr cudd_restrict(shadow_mgr mgr, set_ptr roots,
 	ref_t r = (ref_t) w;
 	DdNode *n = get_ddnode(mgr, r);
 	DdNode *nr = Cudd_Cofactor(mgr->bdd_manager, n, cube);
-	ref_dd(mgr, nr, false);
+	nr = reference_dd(mgr, nr, false);
 	keyvalue_insert(rtable, w, (word_t) nr);
     }
-    unref_dd(mgr, cube);
+    unreference_dd(mgr, cube);
     return rtable;
 }
 
@@ -1110,10 +1121,10 @@ static keyvalue_table_ptr cudd_equant(shadow_mgr mgr,
 	ref_t r = (ref_t) w;
 	DdNode *n = get_ddnode(mgr, r);
 	DdNode *nr = Cudd_bddExistAbstract(mgr->bdd_manager, n, cube);
-	ref_dd(mgr, nr, false);
+	nr = reference_dd(mgr, nr, false);
 	keyvalue_insert(etable, w, (word_t) nr);
     }
-    unref_dd(mgr, cube);
+    unreference_dd(mgr, cube);
     return etable;
 }
 
@@ -1159,7 +1170,7 @@ static keyvalue_table_ptr cudd_shift(shadow_mgr mgr, set_ptr roots,
 	ref_t r = (ref_t) w;
 	DdNode *n = get_ddnode(mgr, r);
 	DdNode *ns = Cudd_bddVectorCompose(mgr->bdd_manager, n, vector);
-	ref_dd(mgr, ns, false);
+	ns = reference_dd(mgr, ns, false);
 	keyvalue_insert(stable, w, (word_t) ns);
     }
     free_array(vector, mgr->nvars, sizeof(DdNode *));

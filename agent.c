@@ -1086,6 +1086,8 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 "Unknown message code %u from controller (ignored)", code);
 		}
 	    } else {
+		dword_t dh;
+		word_t id = 0;
 		/* Must be message from router */
 		switch (code) {
 		case MSG_OPERATION:
@@ -1095,8 +1097,8 @@ chunk_ptr fire_and_wait_defer(chunk_ptr msg) {
 		    break;
 		case MSG_OPERAND:
 #if RPT >= 5
-		    dword_t dh = chunk_get_dword(msg, 0);
-		    word_t id = msg_get_dheader_op_id(dh);
+		    dh = chunk_get_dword(msg, 0);
+		    id = msg_get_dheader_op_id(dh);
 		    report(5, "Received operand with id 0x%lx", id);
 #endif
 		    rval = msg;

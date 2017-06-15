@@ -12,7 +12,7 @@ CUDDFLAGS = -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=8
 VLEVEL=5
 
 CC=gcc
-CFLAGS= -Wall -g -DRPT=$(VLEVEL)
+CFLAGS= -Wall -g -O0 -DRPT=$(VLEVEL)
 #CFLAGS = -Wall -O2 -DRPT=$(VLEVEL)
 
 # Optionally test version with very small hash signatures to stress aliasing code
