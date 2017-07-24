@@ -259,7 +259,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 #endif
 	mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
 #ifndef NO_CHAINING
-	Cudd_ChainingType ct;
+	Cudd_ChainingType ct = CUDD_CHAIN_NONE;
 	switch (chaining) {
 	case CHAIN_NONE:
 	    ct = CUDD_CHAIN_NONE;
@@ -439,6 +439,8 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 /* Compute negation.  Creates CUDD reference.  For ZDDs, records as reference */
 ref_t shadow_negate(shadow_mgr mgr, ref_t a) {
     ref_t r = REF_INVALID;
+    if (REF_IS_INVALID(a))
+	return a;
     if (do_ref(mgr))
 	r = REF_NEGATE(a);
     else {

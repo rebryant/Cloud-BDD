@@ -27,12 +27,13 @@ void init_files(FILE *efile, FILE *vfile)
 
 static char fail_buf[1024];
 
+volatile int rval = 0;
 
 /* Default fatal function */
 void default_fatal_fun() {
     sprintf(fail_buf, "FATAL.  Memory: allocated = %.3f GB, resident = %.3f GB\n",
 	   gigabytes(current_bytes), gigabytes(resident_bytes()));
-    write(STDOUT_FILENO, fail_buf, strlen(fail_buf)+1);
+    rval = write(STDOUT_FILENO, fail_buf, strlen(fail_buf)+1);
     if (logfile)
 	fputs(fail_buf, logfile);
 }
@@ -128,7 +129,7 @@ void fail_fun(char *format, char *msg) {
     /* Tack on return */
     fail_buf[strlen(fail_buf)] = '\n';
     /* Use write to avoid any buffering issues */
-    write(STDOUT_FILENO, fail_buf, strlen(fail_buf)+1);
+    rval = write(STDOUT_FILENO, fail_buf, strlen(fail_buf)+1);
     if (logfile) {
 	/* Don't know file descriptor for logfile */
 	fputs(fail_buf, logfile);

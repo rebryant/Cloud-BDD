@@ -9,11 +9,11 @@ OCUDDLIBS = $(OCUDDDIR)/lib/libcudd.a
 
 CUDDFLAGS = -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=8
 
-VLEVEL=3
+VLEVEL=5
 
 CC=gcc
 #CFLAGS= -Wall -g -O0 -DRPT=$(VLEVEL)
-CFLAGS = -Wall -O2 -DRPT=$(VLEVEL)
+CFLAGS = -Wall -g -O2 -DRPT=$(VLEVEL)
 
 # Optionally test version with very small hash signatures to stress aliasing code
 BDDFLAGS=
@@ -82,7 +82,7 @@ console_test: console_test.c console.h report.h console.o report.o chunk.o table
 	$(CC) $(CFLAGS) -o console_test console_test.c console.o report.o chunk.o table.o
 
 runbdd: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
-	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS)
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS) -lm
 
 runbddo: runbdd.c console.o chunk.o table.o report.o bdd.o shadow-nochain.o msg.o agent.o
 	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(OCUDDINC) -o runbddo runbdd.c chunk.o console.o table.o report.o bdd.o shadow-nochain.o msg.o agent.o $(OCUDDLIBS)

@@ -768,3 +768,81 @@ def qgen(n, binary = False, careful = False, info = False, preconstrain = PC.non
         print "Couldn't open file %d" % fname
         sys.exit(1)
     nQueens(n, f, binary, careful, info, preconstrain, zdd)
+
+# Generate constraints for n-queens problem
+def lQueens(n, f = sys.stdout, binary = False, careful = False, info = False, zdd = Z.none):
+    encoding = "binary" if binary else "one-hot"
+    ckt = Circuit(f)
+    ckt.comment("Layered construction of N-queens with %s encoding.  N = %d" % (encoding, n))
+    ckt.comment("ZDD mode = %s" % Z().name(zdd))
+    if binary:
+        m = bigLog2(n)
+        rows = [ckt.nameVec("v-%d" % r, m) for r in range(n)]
+        # Do variables for each row in succession, MSB first
+        vars = Vec(["v-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
+        if zdd == Z.vars:
+            zvars = Vec(["bv-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
+            ckt.declare(zvars)
+            ckt.zcV(vars, zvars)
+        else:
+            ckt.declare(vars)
+        ckt.comment("Individual square functions")
+        for r in range(n):
+            for c in range(n):
+                ckt.matchVal(c, rows[r], sq(r,c))
+        ckt.andN(okR, [])
+    else:
+        # Generate variables for each square
+        snames = [sq(i/n, i%n) for i in range(n*n)]
+        sv = Vec(snames)
+        if zdd == Z.vars:
+            znames = ["b" + s for s in snames]
+            zv = Vec(znames)
+            ckt.declare(zv)
+            ckt.zcV(sv, zv)
+        else:
+            ckt.declare(sv)
+        # Row constraints
+        ckt.comment("Row Constraints")
+        okr = ckt.nameVec("okr", n)
+        for r in range(n):
+            ckt.comment("Row %d" % r)
+            ckt.exactly1(okr.nodes[r], row(n, r), row(n, r, True))
+
+    cfree = Vec(["one" for i in range(n)])
+    dfree = Vec(["one" for i in range(n)])
+    ofree = Vec(["one" for i in range(n)])
+    vok = ckt.nameVec("ok", n+1)
+    ckt.orN(vok.nodes[n], [])
+#    for i in range(n):
+#        r = n-1-i
+#        for j in range(n):
+            
+
+    ckt.comment("BDD generation completed")
+    ckt.write("time")
+    ckt.information(ils)
+    ckt.comment("Model counting")
+    ckt.count(ils)
+    ckt.status()
+    ckt.comment("Flush state")
+    ckt.write("flush")
+    ckt.comment("Exit")
+    ckt.write("quit")
+
+def lqname(n, binary = False, careful = False, info = False, zdd = Z.none):
+    scnt = "%.2d" % n
+    sencode = "bin" if binary else "onh"
+    scare = "slow" if careful else "fast"
+    sinfo = "v" if info else "q"
+    szdd = Z().suffix(zdd)
+    return "lq%s%s-%s-%s-%s-%s" % (szdd, scnt, sencode, scare, sinfo)
+
+def lqgen(n, binary = False, careful = False, info = False, zdd = Z.none):
+    fname = qname(n, binary, careful, info, preconstrain, zdd) + ".cmd"
+    try:
+        f = open(fname, "w")
+    except:
+        print "Couldn't open file %d" % fname
+        sys.exit(1)
+    lQueens(n, f, binary, careful, info, zdd)
