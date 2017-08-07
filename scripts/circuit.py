@@ -391,7 +391,7 @@ class Circuit:
 
     # Create product term to match specified value
     # nvec is negation of vec
-    def matchVal(self, v, vec, nvec, out):
+    def matchVal(self, v, vec, out):
         names = [(("!%s" if self.getBit(v, i) == 0 else "%s") % vec.nodes[i]) for i in range(len(vec.nodes))]
         lits = Vec(names)
         self.andN(out, lits.nodes)
@@ -769,12 +769,41 @@ def qgen(n, binary = False, careful = False, info = False, preconstrain = PC.non
         sys.exit(1)
     nQueens(n, f, binary, careful, info, preconstrain, zdd)
 
-# Generate constraints for n-queens problem
-def lQueens(n, f = sys.stdout, binary = False, careful = False, info = False, zdd = Z.none):
+# Interleave the rows of a set of declared variables
+def interleaveRows(vars, n):
+    nvars = [""] * len(vars)
+    m = len(vars) / n
+    # Currently organized as rows 0 .. n-1, each consisting of n variables
+    oddn = n % 2 == 1
+    for vr in range(n):
+        midn = (n-1)/2 if oddn else n/2
+        bigvr = vr >= midn
+        if oddn:
+            if vr == midn:
+                r = 0
+            elif bigvr:
+                r = (vr - midn - 1) * 2 + 1
+            else:
+                r = (midn - vr) * 2
+        else:
+            if bigvr:
+                r = (vr - midn) * 2 + 1
+            else:
+                r = (midn - vr - 1) * 2
+        for c in range(m):
+            oidx = vr * m + c
+            nidx = r * m + c
+            nvars[nidx] = vars[oidx]
+    return nvars
+
+# Generate constraints for n-queens problem using layered construction
+def lQueens(n, f = sys.stdout, binary = False, careful = False, info = False, zdd = Z.none, interleave = False):
     encoding = "binary" if binary else "one-hot"
     ckt = Circuit(f)
     ckt.comment("Layered construction of N-queens with %s encoding.  N = %d" % (encoding, n))
     ckt.comment("ZDD mode = %s" % Z().name(zdd))
+    ckt.comment("%s of variables" % ("Interleaving" if interleave else "No interleaving"))
+    okr = ckt.nameVec("okr", n)
     if binary:
         m = bigLog2(n)
         rows = [ckt.nameVec("v-%d" % r, m) for r in range(n)]
@@ -782,15 +811,16 @@ def lQueens(n, f = sys.stdout, binary = False, careful = False, info = False, zd
         vars = Vec(["v-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
         if zdd == Z.vars:
             zvars = Vec(["bv-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
-            ckt.declare(zvars)
+            dvars = Vec(interleaveRows(zvars.nodes, n)) if interleave else zvars
+            ckt.declare(dvars)
             ckt.zcV(vars, zvars)
         else:
-            ckt.declare(vars)
+            dvars = Vec(interleaveRows(vars.nodes, n)) if interleave else vars
+            ckt.declare(dvars)
         ckt.comment("Individual square functions")
         for r in range(n):
             for c in range(n):
                 ckt.matchVal(c, rows[r], sq(r,c))
-        ckt.andN(okR, [])
     else:
         # Generate variables for each square
         snames = [sq(i/n, i%n) for i in range(n*n)]
@@ -798,51 +828,110 @@ def lQueens(n, f = sys.stdout, binary = False, careful = False, info = False, zd
         if zdd == Z.vars:
             znames = ["b" + s for s in snames]
             zv = Vec(znames)
-            ckt.declare(zv)
+            dvars = Vec(interleaveRows(znames, n)) if interleave else zv
+            ckt.declare(dvars)
             ckt.zcV(sv, zv)
         else:
-            ckt.declare(sv)
-        # Row constraints
-        ckt.comment("Row Constraints")
-        okr = ckt.nameVec("okr", n)
-        for r in range(n):
-            ckt.comment("Row %d" % r)
-            ckt.exactly1(okr.nodes[r], row(n, r), row(n, r, True))
+            dvars = Vec(interleaveRows(snames, n)) if interleave else sv
+            ckt.declare(dvars)
+    # Row constraints
+    ckt.comment("Row Constraints")
+    for r in range(n):
+        ckt.comment("Row %d" % r)
+        ckt.exactly1(okr.nodes[r], row(n, r), row(n, r, True))
 
-    cfree = Vec(["one" for i in range(n)])
-    dfree = Vec(["one" for i in range(n)])
-    ofree = Vec(["one" for i in range(n)])
+    ckt.comment("Create constraints from fictional row %d" % n)
+    # Column free 0 .. n-1
+    prevcfree = ckt.nameVec("cfree-%d" % n, n)
+    for i in range(0, n):
+        ckt.andN(prevcfree.nodes[i], [])
+    # Diagonal free 1 .. n-1
+    prevdfree = ckt.nameVec("dfree-%d" % n, n)
+    for i in range(1, n):
+        ckt.andN(prevdfree.nodes[i], [])
+    # Off diagonal free 0 .. n-2
+    prevofree = ckt.nameVec("ofree-%d" % n, n)
+    for i in range(0, n-1):
+        ckt.andN(prevofree.nodes[i], [])
     vok = ckt.nameVec("ok", n+1)
-    ckt.orN(vok.nodes[n], [])
-#    for i in range(n):
-#        r = n-1-i
-#        for j in range(n):
-            
+    ckt.andN(vok.nodes[n], [])
+    for r in range(n-1,-1,-1):
+        nrow = row(n, r, True)
+        # Check conditions at this layer
+        ckt.comment("Determine correctness for rows %d and above" % r)
+        clear = ckt.nameVec("clear-%d" % r, n)
+        ckt.andN(clear.nodes[0], [prevcfree.nodes[0], prevdfree.nodes[1]])
+        for c in range(1, n-1):
+            ckt.andN(clear.nodes[c], [prevofree.nodes[c-1], prevcfree.nodes[c], prevdfree.nodes[c+1]])
+        ckt.andN(clear.nodes[n-1], [prevofree.nodes[n-2], prevcfree.nodes[n-1]])
+        legal = ckt.nameVec("legal-%d" % r, n)
+        ckt.orV(legal, [nrow, clear])
+        alllegal = ckt.node("Legal-%d" % r)
+        ckt.andN(alllegal, legal.nodes)
+        ckt.andN(vok.nodes[r], [vok.nodes[r+1], okr.nodes[r], alllegal])
 
-    ckt.comment("BDD generation completed")
+        if r > 0:
+            # New constraints
+            ckt.comment("Generate constraints from rows %d and above" % r)
+            cfree = ckt.nameVec("cfree-%d" % r, n)
+            dfree = ckt.nameVec("dfree-%d" % r, n)
+            ofree = ckt.nameVec("ofree-%d" % r, n)
+            for i in range(0, n):
+                ckt.andN(cfree.nodes[i], [nrow.nodes[i], prevcfree.nodes[i]])
+            for i in range(1, n-1):
+                ckt.andN(dfree.nodes[i], [nrow.nodes[i], prevdfree.nodes[i+1]])
+            ckt.andN(dfree.nodes[n-1], [nrow.nodes[n-1]])
+            ckt.andN(ofree.nodes[0], [nrow.nodes[0]])
+            for i in range(1, n-1):
+                ckt.andN(ofree.nodes[i], [nrow.nodes[i], prevofree.nodes[i-1]])
+
+        prevdfree.nodes = prevdfree.nodes[1:]
+        prevofree.nodes = prevofree.nodes[:n-1]
+        ckt.decRefs([prevcfree, prevdfree, prevofree, clear, legal, alllegal,
+                     ckt.node(okr.nodes[r]), ckt.node(vok.nodes[r+1])])
+
+        if careful:
+            ckt.comment("Forced GC")
+            ckt.collect()
+            ckt.status()
+
+        if r > 0:
+            prevcfree = cfree
+            prevdfree = dfree
+            prevofree = ofree
+            if info:
+                ckt.information([vok.nodes[r]] + cfree.nodes + dfree.nodes[1:] + ofree.nodes[:n-1])
+
+    ok = ckt.node("ok")
+    ckt.andN(ok, [vok.nodes[0]])
+    ckt.decRefs([ckt.node(vok.nodes[0])])
+    ckt.comment("%s generation completed" % ("BDD" if zdd == Z.none else "ZDD"))
     ckt.write("time")
-    ckt.information(ils)
+    ckt.information(["ok"])
     ckt.comment("Model counting")
-    ckt.count(ils)
+    ckt.count(["ok"])
     ckt.status()
     ckt.comment("Flush state")
     ckt.write("flush")
     ckt.comment("Exit")
     ckt.write("quit")
 
-def lqname(n, binary = False, careful = False, info = False, zdd = Z.none):
+
+def lqname(n, binary = False, careful = False, info = False, zdd = Z.none, interleave = False):
     scnt = "%.2d" % n
     sencode = "bin" if binary else "onh"
     scare = "slow" if careful else "fast"
     sinfo = "v" if info else "q"
     szdd = Z().suffix(zdd)
-    return "lq%s%s-%s-%s-%s-%s" % (szdd, scnt, sencode, scare, sinfo)
+    iinfo = "i" if interleave else ""
+    return "lq%s%s%s-%s-%s-%s" % (iinfo, szdd, scnt, sencode, scare, sinfo)
 
-def lqgen(n, binary = False, careful = False, info = False, zdd = Z.none):
-    fname = qname(n, binary, careful, info, preconstrain, zdd) + ".cmd"
+
+def lqgen(n, binary = False, careful = False, info = False, zdd = Z.none, interleave = False):
+    fname = lqname(n, binary, careful, info, zdd, interleave) + ".cmd"
     try:
         f = open(fname, "w")
     except:
         print "Couldn't open file %d" % fname
         sys.exit(1)
-    lQueens(n, f, binary, careful, info, zdd)
+    lQueens(n, f, binary, careful, info, zdd, interleave)
