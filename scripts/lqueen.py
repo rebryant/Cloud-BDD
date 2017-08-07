@@ -13,6 +13,7 @@ def usage(name):
     print " -b       Use binary encoding"
     print " -c       Careful management of garbage collections"
     print " -v       Verbose information about functions"
+    print " -i       Interleave variables with middle row on top"
 
 def run(name, args):
     n = 8
