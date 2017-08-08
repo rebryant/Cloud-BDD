@@ -5,15 +5,16 @@ import getopt
 import circuit
 
 def usage(name):
-    print "Usage %s [-h] [-a] [-Z] [-n N] [-b] [-c] [-v] [-i]" % name
+    print "Usage %s [-h] [-a] | [[-Z] [-n N] [-b] [-c] [-v] [-i]]" % name
     print " -h       Print this message"
     print " -a       Generate all combinations"
+    print "NOTE: Rest apply only for single benchmark"
     print " -Z       Do entirely with ZDDs"
     print " -n N     Encode N x N chessboard"
     print " -b       Use binary encoding"
     print " -c       Careful management of garbage collections"
     print " -v       Verbose information about functions"
-    print " -i       Interleave variables with middle row on top"
+    print " -i       Use interleaved variable ordering"
 
 def run(name, args):
     n = 8
@@ -51,7 +52,8 @@ def run(name, args):
             for b in [True, False]:
                 for c in [True, False]:
                     for z in [circuit.Z.none, circuit.Z.vars]:
-                        circuit.lqgen(n, b, c, c, z, interleave)
+                        for i in [False, True]:
+                            circuit.lqgen(n, b, c, c, z, i)
     else:
         circuit.lqgen(n, binary, careful, info, zdd, interleave)
 

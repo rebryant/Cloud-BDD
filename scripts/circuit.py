@@ -923,8 +923,8 @@ def lqname(n, binary = False, careful = False, info = False, zdd = Z.none, inter
     scare = "slow" if careful else "fast"
     sinfo = "v" if info else "q"
     szdd = Z().suffix(zdd)
-    iinfo = "i" if interleave else ""
-    return "lq%s%s%s-%s-%s-%s" % (iinfo, szdd, scnt, sencode, scare, sinfo)
+    iinfo = "i" if interleave else "l"
+    return "%sq%s%s-%s-%s-%s" % (iinfo, szdd, scnt, sencode, scare, sinfo)
 
 
 def lqgen(n, binary = False, careful = False, info = False, zdd = Z.none, interleave = False):

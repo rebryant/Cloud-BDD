@@ -5,9 +5,10 @@ import getopt
 import circuit
 
 def usage(name):
-    print "Usage %s [-h] [-a] [-zZ] [-n N] [-b] [-c] [-v] [-p r|c|d]" % name
+    print "Usage %s [-h] [-a] | [[-zZ] [-n N] [-b] [-c] [-v] [-p r|c|d]]" % name
     print " -h       Print this message"
     print " -a       Generate all combinations"
+    print "NOTE: Rest apply only for single benchmark"
     print " -z       Convert to ZDDs part way through"
     print " -Z       Do entirely with ZDDs"
     print " -n N     Encode N x N chessboard"

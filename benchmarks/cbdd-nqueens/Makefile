@@ -4,23 +4,23 @@ COLUMNS = ./columnize.pl
 all: sizes.txt times.txt ops.txt mem.txt ops-detailed.txt sizes-okRCD.txt
 
 sizes.txt:
-	grep "Cudd size" q*/q*slow*.out | $(PARSE) -l okC:okRC:okD:okRCD:okO:ok | $(COLUMNS) > sizes.txt
+	grep "Cudd size" q*/q*slow*uncon*.out | $(PARSE) -l okC:okRC:okD:okRCD:okO:ok | $(COLUMNS) > sizes.txt
 
 sizes-okRCD.txt: sizes.txt
 	grep okRCD < sizes.txt > sizes-okRCD.txt
 
 times.txt:
-	grep "Delta" q*/q*fast*.out | $(PARSE) | $(COLUMNS) > times.txt
+	grep "Delta" q*/q*fast*uncon*.out | $(PARSE) | $(COLUMNS) > times.txt
 
 ops.txt:
-	grep "insertions" q*/q*fast*.out | $(PARSE) | $(COLUMNS) > ops.txt
+	grep "insertions" q*/q*fast*uncon*.out | $(PARSE) | $(COLUMNS) > ops.txt
 
 ops-detailed.txt:
-	grep "insertions" q*/q*slow*.out | $(PARSE) -l okC:okRC:okD:okRCD:okO:ok | $(COLUMNS) > ops-detailed.txt
+	grep "insertions" q*/q*slow*uncon*.out | $(PARSE) -l okC:okRC:okD:okRCD:okO:ok | $(COLUMNS) > ops-detailed.txt
 
 
 mem.txt:
-	grep "Memory" q*/q*fast*.out | $(PARSE) | $(COLUMNS) > mem.txt
+	grep "Memory" q*/q*fast*uncon*.out | $(PARSE) | $(COLUMNS) > mem.txt
 
 move:
 	-mv -f q*08*.out q08

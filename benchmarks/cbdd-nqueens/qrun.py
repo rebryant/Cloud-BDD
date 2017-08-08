@@ -37,8 +37,8 @@ dformats = [
 
 # Class to define use of ZDDs
 class Z:
-    none, vars, convert = range(3)
-    names = ["none", "vars", "convert"]
+    none, vars, convert, all = range(4)
+    names = ["none", "vars", "convert", "all"]
     suffixes = ["b", "v", "z"]
 
     def name(self, id):
@@ -47,48 +47,53 @@ class Z:
     def suffix(self, id):
         return self.suffixes[id]
 
-def benchrun(nstart = 8, nend = 14, fspec = "onh-fast-q-uncon", ctype = 'n', zdd = Z.none, col = True, diag = True):
-    aformats = uformats + rformats
+    def chars(self, id):
+        return self.suffixes if id == self.all else self.suffixes[id]
+
+
+def benchrun(nstart = 8, nend = 14, fspec = "onh-fast-q-uncon", ctype = 'n', zdd = Z.all, col = True, diag = True):
+    aformats = uformats # + rformats
     if col:
         aformats += cformats
     if diag:
         aformats += dformats
     flist = aformats if fspec == "" else [fspec]
-    prefix = Z().suffix(zdd)
+    prefixes = Z().chars(zdd)
     for n in range(nstart, nend+1):
         for format in flist:
-            root = "q%s%.2d-%s" % (prefix, n, format)
-            fname = "%s/%s.cmd" % (sdir, root)
-            clist = list(ctype)
-            for ct in clist:
-                lname = "%s-c%s.out" % (root, ct)
-                old = ct == 'o'
-                try:
-                    logfile = open(lname, 'w')
-                except:
-                    print "Couldn't open log file '%s'" % (lname)
-                    return
-                prog = [rbddo] if old else [rbdd]
-                flags = ["-c", "-v", "1", "-f", fname]
-                if not old:
-                    flags = flags + ["-C", ct]
-                clist = prog + flags
-                print "Running %s" % clist
-                rcode = subprocess.call(clist, stdout = logfile, stderr = logfile)
+            for prefix in prefixes:
+                root = "q%s%.2d-%s" % (prefix, n, format)
+                fname = "%s/%s.cmd" % (sdir, root)
+                clist = list(ctype)
+                for ct in clist:
+                    lname = "%s-c%s.out" % (root, ct)
+                    old = ct == 'o'
+                    try:
+                        logfile = open(lname, 'w')
+                    except:
+                        print "Couldn't open log file '%s'" % (lname)
+                        return
+                    prog = [rbddo] if old else [rbdd]
+                    flags = ["-c", "-v", "1", "-f", fname]
+                    if not old:
+                        flags = flags + ["-C", ct]
+                    clist = prog + flags
+                    print "Running %s" % clist
+                    rcode = subprocess.call(clist, stdout = logfile, stderr = logfile)
 
     
 def usage(name):
-    print "Usage %s [-h] [-n Ns] [-N Ne [-f FORMAT] [-z] [-C] [-D] [-c (o|n|c|a)]" % name
+    print "Usage %s [-h] [-n Ns] [-N Ne [-f FORMAT] [-bzZ] [-C] [-D] [-c (o|n|c|a)]" % name
     print "  -h     Print this message"
     print "  -n Ns  Specify starting size"
     print "  -N Ne  Specify ending size"
     print "  -f FMT Specify benchmark format string (Default: all)"
     print "  -C     Include column preconstraint (2nd most demanding computationally)"
     print "  -D     Include diagonal preconstraint (most demanding computationally)"
-    print "  -z     Convert to ZDDs"
-    print "  -Z     Compute using ZDDs"
+    print "  -b     Use BDDs (only)"
+    print "  -z     Convert to ZDDs (only)"
+    print "  -Z     Compute using ZDDs (only)"
     print "  -c     Specify chaining mode(s).  (Default: all but c)"
-    print "         'o' run unmodified CUDD"
     print "         'n' none"
     print "         'c' constant"
     print "         'a' all"
@@ -101,8 +106,8 @@ def run(name, args):
     ctype = "na"
     col = False
     diag = False
-    zdd = Z.none
-    optlist, args = getopt.getopt(args, 'hn:N:f:c:DCzZ')
+    zdd = Z.all
+    optlist, args = getopt.getopt(args, 'hn:N:f:c:DCzZb')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -111,6 +116,8 @@ def run(name, args):
             col = True
         elif opt == '-D':
             diag = True
+        elif opt == '-b':
+            zdd = Z.none
         elif opt == '-z':
             zdd = Z.convert
         elif opt == '-Z':
