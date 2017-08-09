@@ -239,6 +239,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
     mgr->c2r_table = word_keyvalue_new();
     mgr->r2c_table = word_keyvalue_new();
     mgr->nvars = 0;
+    mgr->nzvars = 0;
 
     ref_t r = REF_ZERO;
     DdNode *n = NULL;
