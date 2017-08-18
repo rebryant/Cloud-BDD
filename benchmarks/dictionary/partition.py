@@ -1,9 +1,9 @@
 #!/usr/bin/python
 
 import string
+import sys
 
-
-infile = "words-all.txt"
+infile = "source-words.txt"
 
 def outfile(n):
     return "words-%.2d.txt" % n
@@ -14,13 +14,16 @@ try:
     inf = open(infile, 'r')
 except:
     print "Couldn't open %s" % infile
-    exit(1)
+    sys.exit(1)
 
 def fixstring(s):
     s = string.lower(s)
-    while s[-1] in ' \n':
-        s = s[:-1]
-    return s
+    t = ""
+    for c in s:
+        x = ord(c)
+        if x >= ord('a') and x <= ord('z'):
+            t += c
+    return t
 
 for line in inf:
     s = fixstring(line)
@@ -36,7 +39,7 @@ for n in sets.keys():
         outf = open(fname, 'w')
     except:
         "Couldn't open outfile file %s" % outf
-        exit(1)
+        sys.exit(1)
     for s in sets[n]:
         outf.write(s + '\n')
     print "Length = %d.  Count = %d" % (n, len(sets[n]))

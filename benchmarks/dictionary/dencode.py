@@ -5,7 +5,7 @@
 
 import sys
 import getopt
-
+import string
 
 # Functions related to formula generation
 
@@ -16,25 +16,52 @@ class Formula:
     zdd = True
     radix = 26
     logradix = 5
+    alphabet = ""
+    c2i = {}
+    # Escape character in naming
+    echar = '@'
+    emap = { '@':'a', '!':'e', ' ':'b', '\t' : 't' }
     template = "-%.2d.%.2d"
     outfile = None
 
-    def __init__(self, depth, outfile = None, onh = True, zdd = True):
+    def __init__(self, depth, outfile = None, alphabet = "", onh = True, zdd = True):
         self.depth = depth
         self.outfile = sys.stdout if outfile == None else outfile
+        self.alphabet = string.ascii_lowercase if alphabet == "" else alphabet
+        self.radix = len(self.alphabet)
+        self.logradix = self.p2log(self.radix + 1) # Include enough to encode null character
+        self.c2i = {}
+        # Create mapping from characters to encodings
+        for i in range(self.radix):
+            self.c2i[self.alphabet[i]] = i
         self.onh = onh
         self.zdd = zdd
+
+    def p2log(self, x):
+        l = 0
+        v = 1
+        while (v < x):
+            l += 1
+            v *= 2
+        return l
+
+    # Create names for characters.  Most are self-named, except for some special ones
+    def cname(self, c):
+        if c in self.emap:
+            return self.echar + self.emap[c]
+        else:
+            return c
 
     def comment(self, str):
         self.outfile.write("# " + str + "\n")
 
     # Formula selecting char c at position i
     def selectorName(self, c, i):
-        prefix = "term" if c == '' else c
+        prefix = "term" if c == '' else self.cname(c)
         return "c-%s.%.2d" % (prefix, i)
     
     def declareVars(self, i):
-        self.comment("Generate encoding variables")
+        self.comment("Generate encoding variables for position %d" % i)
         prefix = 'b' if self.zdd else 'v'
         cnt = self.radix if self.onh else self.logradix
         vars = [prefix + self.template % (idx, i) for idx in range(cnt)]
@@ -54,7 +81,7 @@ class Formula:
 
     def genSelector(self, c, i):
         # Use '' to denote end marker for string
-        idx = self.radix if c == '' else ord(c) - ord('a') 
+        idx = self.radix if c == '' else self.c2i[c]
         name = self.selectorName(c, i)
         cnt = self.radix if self.onh else self.logradix
         literals = []
@@ -84,8 +111,7 @@ class Formula:
                 self.zconvert(i)
         for i in range(self.depth):
             self.comment("Generate selector functions for level %d" % i)
-            for idx in range(self.radix):
-                c = chr(idx + ord('a'))
+            for c in self.alphabet:
                 self.genSelector(c, i)
             self.genSelector('', i)
         for i in range(self.depth + 1):
@@ -95,14 +121,14 @@ class Formula:
         self.outfile.write("time\n")
         self.outfile.write("info dict\n")
         self.outfile.write("count dict\n")
-#        self.outfile.write("status\n")
+        self.outfile.write("status\n")
 
         
     
 class TrieNode:
 
     children = {}
-    endWord = '@'
+    endWord = 'END'
     
     def __init__(self):
         self.children = {}
@@ -110,16 +136,18 @@ class TrieNode:
 
     def addWord(self, w):
         if len(w) == 0:
-            self.children[self.endWord] = None
+            newword = not self.endWord in self.children
+            if newword:
+                self.children[self.endWord] = None
+            return newword
+        c = w[0]
+        rest = w[1:]
+        if c in self.children:
+            t = self.children[c]
         else:
-            c = w[0]
-            rest = w[1:]
-            if c in self.children:
-                t = self.children[c]
-            else:
-                t = TrieNode()
-                self.children[c] = t
-            t.addWord(rest)
+            t = TrieNode()
+            self.children[c] = t
+        return t.addWord(rest)
 
     def enumerate(self, prefix = ''):
         ls = []
@@ -148,54 +176,74 @@ class TrieNode:
                 cnt += t.count()
         return cnt
 
+    def size(self):
+        n = 1
+        for t in self.children.values():
+            if t != None:
+                n += t.size()
+        return n
+
     # Generate formula
-    def encode(self, prefix, form):
+    def encode(self, depth, prefix, form):
         subname = "d-" + prefix
-        name = "dict" if prefix == "" else subname
+        name = "dict" if depth == 0 else subname
         # First pass: Generate subformulas
         for c,t in self.children.items():
             if t != None:
-                nprefix = prefix + c
-                t.encode(nprefix, form)
+                nprefix = prefix + form.cname(c)
+                t.encode(depth+1, nprefix, form)
         # Second pass: Collect into formula
         form.outfile.write("or " + name + "\n")
         for c,t in self.children.items():
             if t == None:
-                form.outfile.write("or %s %s %s" % (name, name, form.terminalName(len(prefix))) + "\n")
+                form.outfile.write("or %s %s %s" % (name, name, form.terminalName(depth)) + "\n")
             else:
-                cname = subname+c
+                cname = subname+form.cname(c)
                 sname = "s-" + cname
-                form.outfile.write("and %s %s %s" % (sname, form.selectorName(c, len(prefix)), cname) + "\n")
+                form.outfile.write("and %s %s %s" % (sname, form.selectorName(c, depth), cname) + "\n")
                 form.outfile.write("or %s %s %s" % (name, name, sname) + "\n")
                 form.outfile.write("delete %s %s" % (cname, sname) + "\n")
 
 class Trie:
     root = None
     form = None
+    words = 0
+    alphaset = set()
     
     def __init__(self):
         self.root = TrieNode()
+        self.words = 0
+        self.alphaset = set()
     
     def cleanup(self, s):
         while len(s) > 0 and s[0] in " ":
             s = s[1:]
         while len(s) > 0 and s[-1] in " \n":
             s = s[:-1]
+        self.alphaset |= set(list(s))
         return s
 
     def addWords(self, f):
         for line in f:
             s = self.cleanup(line)
             if s != '':
-                self.root.addWord(s)
+                if self.root.addWord(s):
+                    self.words += 1
 
     def startFormula(self, outfile = None, onh = True, zdd = True):
         depth = self.root.height()
-        self.form = Formula(depth, outfile, onh, zdd)
+        alphalist = list(self.alphaset)
+        alphalist.sort()
+        alphabet = "".join(alphalist)
+        self.form = Formula(depth, outfile, alphabet, onh, zdd)
+        self.form.comment("Dictionary with %d words" % self.words)
+        self.form.comment("Alphabet = '%s' (radix = %d)" % (alphabet, len(alphabet)))
+        size = self.root.size()
+        self.form.comment("Encoding trie has %d nodes" % size)
         self.form.setup()
 
     def genFormula(self):
-        self.root.encode("", self.form)
+        self.root.encode(0, "", self.form)
 
     def finishFormula(self):
         self.form.finish()
@@ -255,7 +303,8 @@ def run(name, args):
     if outfile != None:
         outfile.close()
 
-run(sys.argv[0], sys.argv[1:])
+if  __name__ == "__main__":
+    run(sys.argv[0], sys.argv[1:])
 
 
                 
