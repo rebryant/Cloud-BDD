@@ -264,15 +264,19 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 	switch (chaining) {
 	case CHAIN_NONE:
 	    ct = CUDD_CHAIN_NONE;
-	    printf("No chaining enabled\n");
+	    report(0, "No chaining enabled");
 	    break;
 	case CHAIN_CONSTANT:
 	    ct = CUDD_CHAIN_CONSTANT;
-	    printf("Constant chaining enabled\n");
+	    report(0, "Constant chaining enabled");
 	    break;
 	case CHAIN_ALL:
 	    ct = CUDD_CHAIN_ALL;
-	    printf("General chaining enabled\n");
+	    report(0, "Or chaining enabled");
+	    break;
+	case CHAIN_ZERO:
+	    ct = CUDD_CHAIN_ZERO;
+	    report(0, "Zero chaining enabled");
 	    break;
 	default:
 	    err(true, "Invalid chaining mode %d\n", chaining);
@@ -280,7 +284,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 	Cudd_SetChaining(mgr->bdd_manager, ct);
 #endif	
 	n = Cudd_ReadLogicZero(mgr->bdd_manager);
-	printf("Using CUDD Version %s\n", CUDD_VERSION);
+	report(0, "Using CUDD Version %s", CUDD_VERSION);
     }
     if (do_ref(mgr)) {
 	mgr->ref_mgr = new_ref_mgr();

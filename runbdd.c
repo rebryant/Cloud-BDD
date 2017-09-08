@@ -191,7 +191,7 @@ static void usage(char *cmd) {
     printf("\t-P PORT    Use PORT as controller port\n");
     printf("\t-r         Try to use local router\n");
     printf("\t-L FILE    Echo results to FILE\n");
-    printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Complete chaining\n");
+    printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
     exit(0);
 }
 
@@ -259,7 +259,11 @@ int main(int argc, char *argv[]) {
 		chaining_type = CHAIN_CONSTANT;
 		break;
 	    case 'a':
+	    case 'o':
 		chaining_type = CHAIN_ALL;
+		break;
+	    case 'z':
+		chaining_type = CHAIN_ZERO;
 		break;
 	    default:
 		err(true, "Invalid chaining type '%c'\n", optarg[0]);
@@ -674,8 +678,7 @@ bool do_ite(int argc, char *argv[]) {
     ref_t ri = get_ref(argv[2]);
     ref_t rt = get_ref(argv[3]);
     ref_t re = get_ref(argv[4]);
-    if (do_ref(smgr) &&
-	(REF_IS_INVALID(ri) || REF_IS_INVALID(rt) || REF_IS_INVALID(re)))
+    if (REF_IS_INVALID(ri) || REF_IS_INVALID(rt) || REF_IS_INVALID(re))
 	return false;
     ref_t rval = shadow_ite(smgr, ri, rt, re);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
