@@ -20,7 +20,8 @@ class Formula:
     c2i = {}
     # Escape character in naming
     echar = '@'
-    emap = { '@':'a', '!':'e', ' ':'b', '\t' : 't' }
+    # Self-printing characters.  All others are escaped in hex
+    printChars = set(list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"))
     template = "-%.2d.%.2d"
     outfile = None
 
@@ -47,10 +48,10 @@ class Formula:
 
     # Create names for characters.  Most are self-named, except for some special ones
     def cname(self, c):
-        if c in self.emap:
-            return self.echar + self.emap[c]
-        else:
+        if c in self.printChars:
             return c
+        else:
+            return self.echar + hex(ord(c))
 
     def comment(self, str):
         self.outfile.write("# " + str + "\n")
@@ -120,7 +121,7 @@ class Formula:
     def finish(self):
         self.outfile.write("time\n")
         self.outfile.write("info dict\n")
-        self.outfile.write("count dict\n")
+        self.outfile.write("# Skipping: count dict\n")
         self.outfile.write("status\n")
 
         
@@ -210,10 +211,13 @@ class Trie:
     words = 0
     alphaset = set()
     
-    def __init__(self):
+    def __init__(self, fullRadix = False):
         self.root = TrieNode()
         self.words = 0
-        self.alphaset = set()
+        if fullRadix:
+            self.alphaset = set(map(chr, range(128)))
+        else:
+            self.alphaset = set()
     
     def cleanup(self, s):
         while len(s) > 0 and s[0] in " ":
@@ -237,7 +241,10 @@ class Trie:
         alphabet = "".join(alphalist)
         self.form = Formula(depth, outfile, alphabet, onh, zdd)
         self.form.comment("Dictionary with %d words" % self.words)
-        self.form.comment("Alphabet = '%s' (radix = %d)" % (alphabet, len(alphabet)))
+        if len(alphabet) == 128:
+            self.form.comment("Radix = %d" % len(alphabet))
+        else:
+            self.form.comment("Alphabet = '%s' (radix = %d)" % (alphabet, len(alphabet)))
         size = self.root.size()
         self.form.comment("Encoding trie has %d nodes" % size)
         self.form.setup()
@@ -249,8 +256,8 @@ class Trie:
         self.form.finish()
 
 
-def gen(infiles = [], outfile = None, onh = True, zdd = True):
-    t = Trie()
+def gen(infiles = [], outfile = None, onh = True, zdd = True, fullRadix = False):
+    t = Trie(fullRadix)
     if (len(infiles) == 0):
         infiles = [sys.stdin]
     for f in infiles:
@@ -261,10 +268,12 @@ def gen(infiles = [], outfile = None, onh = True, zdd = True):
 
 
 def usage(name):
-    print "Usage %s [-h] [-i f1:f2:..] [-b] [-z] -o [oufile]" % name
+    print "Usage %s [-h] [-i f1:f2:..] [-b] [-a] [-z] -o [oufile]" % name
     print "  -h          Print this message"
     print "  -i f1:f2:.. Specify input word file(s)"
     print "  -b          Use binary encoding"
+    print "  -a          Use full ASCII character set"
+    print "  -z          Use ZDDs"
     print "  -o outfile  Specify output file"
 
 def run(name, args):
@@ -272,7 +281,8 @@ def run(name, args):
     outfile = None
     zdd = False
     onh = True
-    optlist, args = getopt.getopt(args, 'hi:bzo:')
+    fullRange = False
+    optlist, args = getopt.getopt(args, 'hi:bazo:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -288,6 +298,8 @@ def run(name, args):
                 infiles.append(f)
         elif opt == '-b':
             onh = False
+        elif opt == '-a':
+            fullRange = True
         elif opt == '-z':
             zdd = True
         elif opt == '-o':
@@ -297,7 +309,7 @@ def run(name, args):
             except:
                 print "Could not open output file '%s'" % fname
                 return
-    gen(infiles, outfile, onh, zdd)
+    gen(infiles, outfile, onh, zdd, fullRange)
     for f in infiles:
         f.close()
     if outfile != None:

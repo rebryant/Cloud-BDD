@@ -274,10 +274,6 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 	    ct = CUDD_CHAIN_ALL;
 	    report(0, "Or chaining enabled");
 	    break;
-	case CHAIN_ZERO:
-	    ct = CUDD_CHAIN_ZERO;
-	    report(0, "Zero chaining enabled");
-	    break;
 	default:
 	    err(true, "Invalid chaining mode %d\n", chaining);
 	}

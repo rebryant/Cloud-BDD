@@ -3,10 +3,10 @@
 import string
 import sys
 
-infile = "source-words.txt"
+infile = "words.list"
 
 def outfile(n):
-    return "words-%.2d.txt" % n
+    return "all-words-%.2d.list" % n
 
 sets = {}
 

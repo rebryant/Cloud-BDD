@@ -262,9 +262,6 @@ int main(int argc, char *argv[]) {
 	    case 'o':
 		chaining_type = CHAIN_ALL;
 		break;
-	    case 'z':
-		chaining_type = CHAIN_ZERO;
-		break;
 	    default:
 		err(true, "Invalid chaining type '%c'\n", optarg[0]);
 	    }

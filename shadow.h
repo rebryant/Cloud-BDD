@@ -24,7 +24,7 @@
 */
 
 
-typedef enum { CHAIN_NONE, CHAIN_CONSTANT, CHAIN_ALL, CHAIN_ZERO } chaining_t;
+typedef enum { CHAIN_NONE, CHAIN_CONSTANT, CHAIN_ALL } chaining_t;
 
 typedef struct {
     DdManager *bdd_manager;
