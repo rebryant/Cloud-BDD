@@ -41,6 +41,8 @@ typedef struct {
     size_t nvars;
     /* Total number of ZDD variables created */
     size_t nzvars;
+    /* Total number of ADD variables created */
+    size_t navars;
 } shadow_ele, *shadow_mgr;
 
 shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t chaining);
@@ -70,7 +72,10 @@ bool shadow_gc_check(shadow_mgr mgr);
 /* Convert function to ZDD.  This should only be done after all BDD variables have been declared */
 ref_t shadow_zconvert(shadow_mgr mgr, ref_t r);
 
-/* Print satisfying values for BDD/ZDD.  Only works for CUDD */
+/* Convert function to ADD */
+ref_t shadow_aconvert(shadow_mgr mgr, ref_t r);
+
+/* Print satisfying values for ADD/BDD/ZDD.  Only works for CUDD */
 void shadow_satisfy(shadow_mgr mgr, ref_t r);
 
 /* Create key-value table mapping set of root nodes to their densities. */
