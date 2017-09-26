@@ -57,6 +57,7 @@ keyvalue_table_ptr reftable;
 
 
 /* Forward declarations */
+bool do_aconvert(int argc, char *argv[]);
 bool do_and(int argc, char *argv[]);
 bool do_collect(int argc, char *argv[]);
 bool do_delete(int argc, char *argv[]);
@@ -103,6 +104,8 @@ static void bdd_init() {
 }
 
 static void console_init(bool do_dist) {
+    add_cmd("aconvert", do_aconvert,
+	    " af f ...      | Convert f to ADD and name af");
     add_cmd("and", do_and,
 	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
     add_cmd("cofactor", do_cofactor,
@@ -809,6 +812,44 @@ bool do_zconvert(int argc, char *argv[]) {
 	    free_string(olds);
 	}
 	rnew = shadow_zconvert(smgr, rold);
+	assign_ref(argv[1], rnew, false);
+#if RPT >= 2
+	shadow_show(smgr, rold, bufold);
+	shadow_show(smgr, rnew, bufnew);
+	report(2, "%s: %s --> %s: %s", argv[2], bufold, argv[1], bufnew);
+#endif
+	return true;
+    } else {
+	report(0, "Function %s not found", argv[2]);
+	return false;
+    }
+}
+
+bool do_aconvert(int argc, char *argv[]) {
+    char bufold[24], bufnew[24];
+    if (argc != 3) {
+	report(0, "aconvert requires 2 arguments");
+	return false;
+    }
+    ref_t rold, rnew;
+    word_t wv;
+    if (keyvalue_find(nametable, (word_t) argv[2], &wv)) {
+	rold = (ref_t) wv;
+	if (strcmp(argv[1], argv[2]) == 0) {
+	    word_t wk;
+	    keyvalue_remove(nametable, (word_t) argv[2], &wk, &wv);
+	    char *olds = (char *) wk;
+#if RPT >= 5
+	    if (verblevel >= 5) {
+		char buf[24];
+		shadow_show(smgr, rold, buf);
+		report(5, "Removed entry %s:%s from name table", olds, buf);
+	    }
+#endif
+	    root_deref(rold);
+	    free_string(olds);
+	}
+	rnew = shadow_aconvert(smgr, rold);
 	assign_ref(argv[1], rnew, false);
 #if RPT >= 2
 	shadow_show(smgr, rold, bufold);

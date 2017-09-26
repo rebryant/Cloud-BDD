@@ -79,6 +79,10 @@ static bool is_zdd(shadow_mgr mgr, ref_t r) {
     return find_type(mgr, r) == IS_ZDD;
 }
 
+static bool is_add(shadow_mgr mgr, ref_t r) {
+    return find_type(mgr, r) == IS_ADD;
+}
+
 static DdNode *ref2dd(shadow_mgr mgr, ref_t r) {
     dd_type_t dtype = find_type(mgr, r);
     switch (dtype) {
@@ -106,10 +110,10 @@ static void reference_dd(shadow_mgr mgr, DdNode *n) {
     Cudd_Ref(n);
 }
 
-static void unreference_dd(shadow_mgr mgr, DdNode *n, bool zdd) {
+static void unreference_dd(shadow_mgr mgr, DdNode *n, dd_type_t dtype) {
     if (!mgr->do_cudd)
 	return;
-    if (zdd) {
+    if (dtype == IS_ZDD) {
 	Cudd_RecursiveDerefZdd(mgr->bdd_manager, n);
     } else {
 	Cudd_RecursiveDeref(mgr->bdd_manager, n);
@@ -128,13 +132,27 @@ static DdNode *zconvert(shadow_mgr mgr, DdNode *n) {
     return zn;
 }
 
+/* Convert function to ADD.  This should only be done after all BDD variables have been declared */
+static DdNode *aconvert(shadow_mgr mgr, DdNode *n) {
+#if 0    
+    /* Don't need to declare variables for Cudd */
+    while (mgr->navars < mgr->nvars) {
+	Cudd_addNewVar(mgr->bdd_manager);
+	mgr->navars++;
+    }
+#endif
+    DdNode *an = Cudd_BddToAdd(mgr->bdd_manager, n);
+    reference_dd(mgr, an);
+    return an;
+}
+
 void shadow_show(shadow_mgr mgr, ref_t r, char *buf) {
     if (do_ref(mgr)) {
 	ref_show(r, buf);
     } else {
-	bool zdd = is_zdd(mgr, r);
+	dd_type_t dtype = find_type(mgr, r);
 	DdNode *n = ref2dd(mgr, r);
-	sprintf(buf, "%c%p", zdd ? 'Z' : 'B', n);
+	sprintf(buf, "%c%p", dtype == IS_ZDD ? 'Z' : dtype == IS_ADD ? 'A' : 'B', n);
     }		
 }
 
@@ -158,9 +176,9 @@ static DdNode *get_ddnode(shadow_mgr mgr, ref_t r) {
     return n;
 }
 
-/* Associate n with reference r.  For non-Zdd's, also cross reference complements.
+/* Associate n with reference r.  For non-Zdd/Add's, also cross reference complements.
    Incoming n has recorded reference count.
-   Create single reference to node.  For non-ZDD, create single reference to its complement
+   Create single reference to node.  For non-ZDD/ADD, create single reference to its complement
 */
 static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
     ref_t rother;
@@ -173,7 +191,7 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
     if (!do_ref(mgr))
 	return;
 
-    bool zdd = is_zdd(mgr, r);
+    dd_type_t dtype = find_type(mgr, r);
 
     bool rother_found = keyvalue_find(mgr->c2r_table, (word_t ) n,
 				      (word_t *) &rother);
@@ -187,7 +205,7 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 	    /* Already exists.  Check if match */
 	    if (nother == n && rother == r) {
 		// Remove reference 
-		unreference_dd(mgr, n, zdd);
+		unreference_dd(mgr, n, dtype);
 	    } else {
 		shadow_show(mgr, r, buf1);
 		shadow_show(mgr, rother, buf2);
@@ -196,7 +214,7 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 		    n, nother, buf1, buf2);
 	    }
 	} else {
-	    if (is_zdd(mgr, rother) == zdd) {
+	    if (find_type(mgr, rother) == dtype) {
 		shadow_show(mgr, r, buf1);
 		shadow_show(mgr, rother, buf2);
 		err(fatal, "Ref Collision.  Refs %s and %s map to BDD node %p",
@@ -217,7 +235,7 @@ static void add_ref(shadow_mgr mgr, ref_t r, DdNode *n) {
 #endif
 	    keyvalue_insert(mgr->c2r_table, (word_t ) n, (word_t ) r);
 	    keyvalue_insert(mgr->r2c_table, (word_t ) r, (word_t ) n);
-	    if (!zdd) {
+	    if (dtype == IS_BDD) {
 		/* Create entries for negations */
 		ref_t rn = shadow_negate(mgr, r);  // Creates reference
 		DdNode *nn;
@@ -410,7 +428,7 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     DdNode *en = get_ddnode(mgr, eref);
     DdNode *n = NULL;
     ref_t r = REF_INVALID;
-    bool zdd = false;
+    dd_type_t dtype = IS_BDD;
 
     if (mgr->do_local) {
 	r = ref_ite(mgr->ref_mgr, iref, tref, eref);
@@ -433,7 +451,10 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 	    bool ze = is_zdd(mgr, eref);
 
 	    if (zi || zt || ze) {
-		zdd = true;
+		dtype = IS_ZDD;
+		if (is_add(mgr, iref) || is_add(mgr, tref) || is_add(mgr, eref)) {
+		    err(false, "Can't mix ADDs with ZDDs");
+		}
 		if (!zi) {
 		    in = zconvert(mgr, in);
 		}
@@ -446,14 +467,40 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 		n = Cudd_zddIte(mgr->bdd_manager, in, tn, en);
 		reference_dd(mgr, n);
 		if (!zi)
-		    unreference_dd(mgr, in, true);
+		    unreference_dd(mgr, in, IS_ZDD);
 		if (!zt)
-		    unreference_dd(mgr, tn, true);
+		    unreference_dd(mgr, tn, IS_ZDD);
 		if (!ze)
-		    unreference_dd(mgr, en, true);
+		    unreference_dd(mgr, en, IS_ZDD);
 	    }
 	}
-	if (!zdd) {
+	if (mgr->navars > 0) {
+	    bool ai = is_add(mgr, iref);
+	    bool at = is_add(mgr, tref);
+	    bool ae = is_add(mgr, eref);
+
+	    if (ai || at || ae) {
+		dtype = IS_ADD;
+		if (!ai) {
+		    in = aconvert(mgr, in);
+		}
+		if (!at) {
+		    tn = aconvert(mgr, tn);
+		}
+		if (!ae) {
+		    en = aconvert(mgr, en);
+		}
+		n = Cudd_addIte(mgr->bdd_manager, in, tn, en);
+		reference_dd(mgr, n);
+		if (!ai)
+		    unreference_dd(mgr, in, IS_ADD);
+		if (!at)
+		    unreference_dd(mgr, tn, IS_ADD);
+		if (!ae)
+		    unreference_dd(mgr, en, IS_ADD);
+	    }
+	}
+	if (dtype == IS_BDD) {
 	    n = Cudd_bddIte(mgr->bdd_manager, in, tn, en);
 	    reference_dd(mgr, n);
 	}
@@ -461,7 +508,7 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 	n = ref2dd(mgr, r);
     }
     if (!do_ref(mgr))
-	r = dd2ref(n, zdd ? IS_ZDD : IS_BDD);
+	r = dd2ref(n, dtype);
     add_ref(mgr, r, n);
     return r;
 }
@@ -480,9 +527,16 @@ ref_t shadow_negate(shadow_mgr mgr, ref_t a) {
 	    reference_dd(mgr, zone);
 	    DdNode *ann = Cudd_zddDiff(mgr->bdd_manager, zone, an);
 	    reference_dd(mgr, ann);
-	    unreference_dd(mgr, zone, true);
+	    unreference_dd(mgr, zone, IS_ZDD);
 	    r = dd2ref(ann, IS_ZDD);
 	    // For ZDDs, don't already have negated values recorded
+	    add_ref(mgr, r, ann);
+	} else if (is_add(mgr, a)) {
+	    DdNode *aone = Cudd_ReadOne(mgr->bdd_manager);
+	    DdNode *ann = Cudd_addApply(mgr->bdd_manager, Cudd_addXor, aone, an);
+	    reference_dd(mgr, ann);
+	    r = dd2ref(ann, IS_ADD);
+	    // For ADDs, don't already have negated values recorded
 	    add_ref(mgr, r, ann);
 	} else {
 	    DdNode *ann = Cudd_Not(an);
@@ -503,25 +557,31 @@ ref_t shadow_absval(shadow_mgr mgr, ref_t r) {
     if (do_ref(mgr))
 	return REF_ABSVAL(r);
     else {
-	bool zdd = is_zdd(mgr, r);
+	dd_type_t dtype = find_type(mgr, r);
 	DdNode *n = ref2dd(mgr, r);
 	DdNode *an = Cudd_Regular(n);
-	return dd2ref(an, zdd ? IS_ZDD : IS_ADD);
+	return dd2ref(an, dtype);
     }
 }
 
 ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
     ref_t r = REF_ZERO;
-    bool zdd = false;
+    dd_type_t dtype = IS_BDD;
+    bool za = is_zdd(mgr, aref);
+    bool zb = is_zdd(mgr, bref);
+    bool aa = is_add(mgr, aref);
+    bool ab = is_add(mgr, aref);
+
     if (mgr->do_cudd && mgr->nzvars > 0) {
 	/* Check whether arguments are ZDDs */
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);
 	DdNode *rn;
-	bool za = is_zdd(mgr, aref);
-	bool zb = is_zdd(mgr, bref);
 	if (za || zb) {
-	    zdd = true;
+	    if (aa || ab) {
+		err(false, "Can't mix ADDs and ZDDs");
+	    }
+	    dtype = IS_ZDD;
 	    /* Make sure they're both ZDDs */
 	    if (!za) {
 		an = zconvert(mgr, an);
@@ -534,12 +594,36 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 	    r = dd2ref(rn, IS_ZDD);
 	    add_ref(mgr, r, rn);
 	    if (!za)
-		unreference_dd(mgr, an, true);
+		unreference_dd(mgr, an, IS_ZDD);
 	    if (!zb)
-		unreference_dd(mgr, bn, true);
+		unreference_dd(mgr, bn, IS_ZDD);
 	}
     }
-    if (!zdd)
+    if (mgr->do_cudd && mgr->navars > 0) {
+	/* Check whether arguments are ADDs */
+	DdNode *an = get_ddnode(mgr, aref);
+	DdNode *bn = get_ddnode(mgr, bref);
+	DdNode *rn;
+	if (aa || ab) {
+	    dtype = IS_ADD;
+	    /* Make sure they're both ADDs */
+	    if (!aa) {
+		an = aconvert(mgr, an);
+	    }
+	    if (!ab) {
+		bn = aconvert(mgr, bn);
+	    }
+	    rn = Cudd_addApply(mgr->bdd_manager, Cudd_addAnd, an, bn);
+	    reference_dd(mgr, rn);
+	    r = dd2ref(rn, IS_ADD);
+	    add_ref(mgr, r, rn);
+	    if (!aa)
+		unreference_dd(mgr, an, IS_ADD);
+	    if (!ab)
+		unreference_dd(mgr, bn, IS_ADD);
+	}
+    }
+    if (dtype == IS_BDD)
 	r = shadow_ite(mgr, aref, bref, shadow_zero(mgr));
 
 #if RPT >= 4
@@ -547,23 +631,29 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
     shadow_show(mgr, aref, buf1);
     shadow_show(mgr, bref, buf2);
     shadow_show(mgr, r, buf3);
-    report(4, "%s %s %s --> %s", buf1, zdd ? "ZAND" : "AND", buf2, buf3);
+    report(4, "%s %sAND %s --> %s", buf1, dtype == IS_ZDD ? "Z" : dtype == IS_ADD ? "A" : "" , buf2, buf3);
 #endif
     return r;
 }
 
 ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
     ref_t r = REF_ONE;
-    bool zdd = false;
+    dd_type_t dtype = IS_BDD;
+    bool za = is_zdd(mgr, aref);
+    bool zb = is_zdd(mgr, bref);
+    bool aa = is_add(mgr, aref);
+    bool ab = is_add(mgr, aref);
+
     if (mgr->do_cudd && mgr->nzvars > 0) {
 	/* Check whether arguments are ZDDs */
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);
 	DdNode *rn;
-	bool za = is_zdd(mgr, aref);
-	bool zb = is_zdd(mgr, bref);
 	if (za || zb) {
-	    zdd = true;
+	    if (aa || ab) {
+		err(false, "Can't mix ADDs and ZDDs");
+	    }
+	    dtype = IS_ZDD;
 	    /* Make sure they're both ZDDs */
 	    if (!za) {
 		an = zconvert(mgr, an);
@@ -576,12 +666,36 @@ ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
 	    r = dd2ref(rn, IS_ZDD);
 	    add_ref(mgr, r, rn);
 	    if (!za)
-		unreference_dd(mgr, an, true);
+		unreference_dd(mgr, an, IS_ZDD);
 	    if (!zb)
-		unreference_dd(mgr, bn, true);
+		unreference_dd(mgr, bn, IS_ZDD);
 	}
     }
-    if (!zdd)
+    if (mgr->do_cudd && mgr->navars > 0) {
+	/* Check whether arguments are ADDs */
+	DdNode *an = get_ddnode(mgr, aref);
+	DdNode *bn = get_ddnode(mgr, bref);
+	DdNode *rn;
+	if (aa || ab) {
+	    dtype = IS_ADD;
+	    /* Make sure they're both ADDs */
+	    if (!aa) {
+		an = aconvert(mgr, an);
+	    }
+	    if (!ab) {
+		bn = aconvert(mgr, bn);
+	    }
+	    rn = Cudd_addApply(mgr->bdd_manager, Cudd_addOr, an, bn);
+	    reference_dd(mgr, rn);
+	    r = dd2ref(rn, IS_ADD);
+	    add_ref(mgr, r, rn);
+	    if (!aa)
+		unreference_dd(mgr, an, IS_ADD);
+	    if (!ab)
+		unreference_dd(mgr, bn, IS_ADD);
+	}
+    }
+    if (dtype == IS_BDD)
 	r = shadow_ite(mgr, aref, shadow_one(mgr), bref);
 
 #if RPT >= 4
@@ -589,23 +703,29 @@ ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
     shadow_show(mgr, aref, buf1);
     shadow_show(mgr, bref, buf2);
     shadow_show(mgr, r, buf3);
-    report(4, "%s %s %s --> %s", buf1, zdd ? "ZOR" : "OR", buf2, buf3);
+    report(4, "%s %sOR %s --> %s", buf1, dtype == IS_ZDD ? "Z" : dtype == IS_ADD ? "A" : "" , buf2, buf3);
 #endif
     return r;
 }
 
 ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
     ref_t r = REF_ZERO;
-    bool zdd = false;
+    dd_type_t dtype = IS_BDD;
+    bool za = is_zdd(mgr, aref);
+    bool zb = is_zdd(mgr, bref);
+    bool aa = is_add(mgr, aref);
+    bool ab = is_add(mgr, aref);
+
     if (mgr->do_cudd && mgr->nzvars > 0) {
 	/* Check whether arguments are ZDDs */
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);
 	DdNode *rn;
-	bool za = is_zdd(mgr, aref);
-	bool zb = is_zdd(mgr, bref);
 	if (za || zb) {
-	    zdd = true;
+	    if (aa || ab) {
+		err(false, "Can't mix ADDs and ZDDs");
+	    }
+	    dtype = IS_ZDD;
 	    /* Make sure they're both ZDDs */
 	    if (!za) {
 		an = zconvert(mgr, an);
@@ -618,12 +738,36 @@ ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
 	    r = dd2ref(rn, IS_ZDD);
 	    add_ref(mgr, r, rn);
 	    if (!za)
-		unreference_dd(mgr, an, true);
+		unreference_dd(mgr, an, IS_ZDD);
 	    if (!zb)
-		unreference_dd(mgr, bn, true);
+		unreference_dd(mgr, bn, IS_ZDD);
 	}
     }
-    if (!zdd)
+    if (mgr->do_cudd && mgr->navars > 0) {
+	/* Check whether arguments are ADDs */
+	DdNode *an = get_ddnode(mgr, aref);
+	DdNode *bn = get_ddnode(mgr, bref);
+	DdNode *rn;
+	if (aa || ab) {
+	    dtype = IS_ADD;
+	    /* Make sure they're both ADDs */
+	    if (!aa) {
+		an = aconvert(mgr, an);
+	    }
+	    if (!ab) {
+		bn = aconvert(mgr, bn);
+	    }
+	    rn = Cudd_addApply(mgr->bdd_manager, Cudd_addXor, an, bn);
+	    reference_dd(mgr, rn);
+	    r = dd2ref(rn, IS_ADD);
+	    add_ref(mgr, r, rn);
+	    if (!aa)
+		unreference_dd(mgr, an, IS_ADD);
+	    if (!ab)
+		unreference_dd(mgr, bn, IS_ADD);
+	}
+    }
+    if (dtype == IS_BDD)
 	r = shadow_ite(mgr, aref, shadow_negate(mgr, bref), bref);
 
 #if RPT >= 4
@@ -631,7 +775,7 @@ ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
     shadow_show(mgr, aref, buf1);
     shadow_show(mgr, bref, buf2);
     shadow_show(mgr, r, buf3);
-    report(4, "%s %s %s --> %s", buf1, zdd ? "ZXOR" : "XOR", buf2, buf3);
+    report(4, "%s %sXOR %s --> %s", buf1, dtype == IS_ZDD ? "Z" : dtype == IS_ADD ? "A" : "" , buf2, buf3);
 #endif
     return r;
 }
@@ -648,7 +792,7 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
     if (!mgr->do_cudd)
 	return;
     DdNode *n = get_ddnode(mgr, r);
-    bool zdd = is_zdd(mgr, r);
+    dd_type_t dtype = find_type(mgr, r);
 
 #if RPT >= 5
     char buf[24];
@@ -656,7 +800,7 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
     report(5, "Deleting reference %s for node %p", buf, n);
 #endif
 
-    unreference_dd(mgr, n, zdd);
+    unreference_dd(mgr, n, dtype);
 
     if (!do_ref(mgr))
 	return;
@@ -665,7 +809,7 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
     keyvalue_remove(mgr->r2c_table, (word_t ) r, NULL, NULL);
 
 
-    if (!zdd) {
+    if (dtype == IS_BDD) {
 	ref_t nr = shadow_negate(mgr, r);
 	DdNode *nn = get_ddnode(mgr, nr);
 #if RPT >= 5
@@ -674,7 +818,7 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
 #endif
 	keyvalue_remove(mgr->c2r_table, (word_t ) nn, NULL, NULL);
 	keyvalue_remove(mgr->r2c_table, (word_t ) nr, NULL, NULL);
-	unreference_dd(mgr, nn, false);
+	unreference_dd(mgr, nn, IS_BDD);
     }
 }
 
@@ -1056,7 +1200,7 @@ static keyvalue_table_ptr cudd_restrict(shadow_mgr mgr, set_ptr roots,
 	reference_dd(mgr, nr);
 	keyvalue_insert(rtable, w, (word_t) nr);
     }
-    unreference_dd(mgr, cube, false);
+    unreference_dd(mgr, cube, IS_BDD);
     return rtable;
 }
 
@@ -1131,10 +1275,33 @@ ref_t shadow_zconvert(shadow_mgr mgr, ref_t r) {
     if (is_zdd(mgr, r)) {
 	return r;
     }
+    if (is_add(mgr, r)) {
+	err(false, "Can't convert ADD to ZDD");
+	return REF_INVALID;
+    }
     DdNode *zn = zconvert(mgr, n);
     ref_t zr = dd2ref(zn, IS_ZDD);
     add_ref(mgr, zr, zn);
     return zr;
+}
+
+/* ADD conversion for external command */
+ref_t shadow_aconvert(shadow_mgr mgr, ref_t r) {
+    if (do_ref(mgr))
+	/* Only applies when in pure CUDD mode */
+	return r;
+    DdNode *n = get_ddnode(mgr, r);
+    if (is_add(mgr, r)) {
+	return r;
+    }
+    if (is_zdd(mgr, r)) {
+	err(false, "Can't convert ADD to ZDD");
+	return REF_INVALID;
+    }
+    DdNode *an = aconvert(mgr, n);
+    ref_t ar = dd2ref(an, IS_ADD);
+    add_ref(mgr, ar, an);
+    return ar;
 }
 
 /* Create key-value table mapping set of root nodes to their restrictions,
@@ -1169,7 +1336,7 @@ static keyvalue_table_ptr cudd_equant(shadow_mgr mgr,
 	reference_dd(mgr, nr);
 	keyvalue_insert(etable, w, (word_t) nr);
     }
-    unreference_dd(mgr, cube, false);
+    unreference_dd(mgr, cube, IS_BDD);
     return etable;
 }
 

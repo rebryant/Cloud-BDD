@@ -182,7 +182,6 @@ class Circuit:
             ele.decRef()
         self.flush()
 
-
     # Write to file.  Adds EOL
     def write(self, line):
         self.outfile.write(line + "\n")
@@ -238,6 +237,10 @@ class Circuit:
         ls.extend(argList)
         self.cmdLine("or", ls)
 
+    def norN(self, dest, argList):
+        nargs = [(s[1:] if s[0] == "!" else "!"+s) for s in argList]
+        self.andN(dest, nargs)
+
     def xorN(self, dest, argList):
         ls = [dest]
         ls.extend(argList)
@@ -269,8 +272,14 @@ class Circuit:
     def zc(self, dest, n):
         self.cmdLine("zconvert", [dest, n])
 
+    def ac(self, dest, n):
+        self.cmdLine("aconvert", [dest, n])
+
     def zcV(self, dest, v):
         self.cmdSequence("zconvert", [dest, v])
+
+    def acV(self, dest, v):
+        self.cmdSequence("aconvert", [dest, v])
 
     def maj3(self, dest, n1, n2, n3):
         p12 = self.tmpNode()
@@ -512,9 +521,9 @@ class PC:
 
 # Class to define use of ZDDs
 class Z:
-    none, vars, convert = range(3)
-    names = ["none", "vars", "convert"]
-    suffixes = ["b", "v", "z"]
+    none, vars, convert, avars = range(4)
+    names = ["none", "vars", "convert", "avars"]
+    suffixes = ["b", "v", "z", "a"]
 
     def name(self, id):
         return self.names[id]
@@ -551,6 +560,10 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
             zvars = Vec(["bv-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
             ckt.declare(zvars)
             ckt.zcV(vars, zvars)
+        elif zdd == Z.avars:
+            avars = Vec(["bv-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
+            ckt.declare(avars)
+            ckt.acV(vars, avars)
         else:
             ckt.declare(vars)
         ckt.comment("Individual square functions")
@@ -567,6 +580,11 @@ def nQueens(n, f = sys.stdout, binary = False, careful = False, info = False, pr
             zv = Vec(znames)
             ckt.declare(zv)
             ckt.zcV(sv, zv)
+        elif zdd == Z.avars:
+            anames = ["b" + s for s in snames]
+            av = Vec(anames)
+            ckt.declare(av)
+            ckt.acV(sv, av)
         else:
             ckt.declare(sv)
         # Row constraints
@@ -814,6 +832,11 @@ def lQueens(n, f = sys.stdout, binary = False, careful = False, info = False, zd
             dvars = Vec(interleaveRows(zvars.nodes, n)) if interleave else zvars
             ckt.declare(dvars)
             ckt.zcV(vars, zvars)
+        elif zdd == Z.avars:
+            avars = Vec(["bv-%d.%d" % (i /  m, m-1- (i % m)) for i in range(m*n)])
+            dvars = Vec(interleaveRows(avars.nodes, n)) if interleave else avars
+            ckt.declare(dvars)
+            ckt.acV(vars, avars)
         else:
             dvars = Vec(interleaveRows(vars.nodes, n)) if interleave else vars
             ckt.declare(dvars)
@@ -831,6 +854,12 @@ def lQueens(n, f = sys.stdout, binary = False, careful = False, info = False, zd
             dvars = Vec(interleaveRows(znames, n)) if interleave else zv
             ckt.declare(dvars)
             ckt.zcV(sv, zv)
+        if zdd == Z.avars:
+            anames = ["b" + s for s in snames]
+            av = Vec(anames)
+            dvars = Vec(interleaveRows(anames, n)) if interleave else av
+            ckt.declare(dvars)
+            ckt.acV(sv, av)
         else:
             dvars = Vec(interleaveRows(snames, n)) if interleave else sv
             ckt.declare(dvars)

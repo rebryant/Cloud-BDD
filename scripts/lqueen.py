@@ -10,6 +10,7 @@ def usage(name):
     print " -a       Generate all combinations"
     print "NOTE: Rest apply only for single benchmark"
     print " -Z       Do entirely with ZDDs"
+    print " -A       Do entirely with ADDs"
     print " -n N     Encode N x N chessboard"
     print " -b       Use binary encoding"
     print " -c       Careful management of garbage collections"
@@ -24,7 +25,7 @@ def run(name, args):
     genall = False
     zdd = circuit.Z.none
     interleave = False
-    optlist, args = getopt.getopt(args, 'haZn:bcvi')
+    optlist, args = getopt.getopt(args, 'haZAn:bcvi')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -33,6 +34,8 @@ def run(name, args):
             genall = True
         elif opt == '-Z':
             zdd = circuit.Z.vars
+        elif opt == '-A':
+            zdd = circuit.Z.avars
         elif opt == '-n':
             n = int(val)
         elif opt == '-b':
@@ -51,7 +54,7 @@ def run(name, args):
         for n in [4, 8, 9, 10, 11, 12, 13, 14, 15, 16]:
             for b in [True, False]:
                 for c in [True, False]:
-                    for z in [circuit.Z.none, circuit.Z.vars]:
+                    for z in [circuit.Z.none, circuit.Z.vars, circuit.Z.avars]:
                         for i in [False, True]:
                             circuit.lqgen(n, b, c, c, z, i)
     else:
