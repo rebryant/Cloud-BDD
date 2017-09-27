@@ -41,8 +41,6 @@ typedef struct {
     size_t nvars;
     /* Total number of ZDD variables created */
     size_t nzvars;
-    /* Total number of ADD variables created */
-    size_t navars;
 } shadow_ele, *shadow_mgr;
 
 shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t chaining);

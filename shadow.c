@@ -134,13 +134,6 @@ static DdNode *zconvert(shadow_mgr mgr, DdNode *n) {
 
 /* Convert function to ADD.  This should only be done after all BDD variables have been declared */
 static DdNode *aconvert(shadow_mgr mgr, DdNode *n) {
-#if 0    
-    /* Don't need to declare variables for Cudd */
-    while (mgr->navars < mgr->nvars) {
-	Cudd_addNewVar(mgr->bdd_manager);
-	mgr->navars++;
-    }
-#endif
     DdNode *an = Cudd_BddToAdd(mgr->bdd_manager, n);
     reference_dd(mgr, an);
     return an;
@@ -445,11 +438,11 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     }
 
     if (mgr->do_cudd) {
+
 	if (mgr->nzvars > 0) {
 	    bool zi = is_zdd(mgr, iref);
 	    bool zt = is_zdd(mgr, tref);
 	    bool ze = is_zdd(mgr, eref);
-
 	    if (zi || zt || ze) {
 		dtype = IS_ZDD;
 		if (is_add(mgr, iref) || is_add(mgr, tref) || is_add(mgr, eref)) {
@@ -474,7 +467,7 @@ ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
 		    unreference_dd(mgr, en, IS_ZDD);
 	    }
 	}
-	if (mgr->navars > 0) {
+	{
 	    bool ai = is_add(mgr, iref);
 	    bool at = is_add(mgr, tref);
 	    bool ae = is_add(mgr, eref);
@@ -532,8 +525,7 @@ ref_t shadow_negate(shadow_mgr mgr, ref_t a) {
 	    // For ZDDs, don't already have negated values recorded
 	    add_ref(mgr, r, ann);
 	} else if (is_add(mgr, a)) {
-	    DdNode *aone = Cudd_ReadOne(mgr->bdd_manager);
-	    DdNode *ann = Cudd_addApply(mgr->bdd_manager, Cudd_addXor, aone, an);
+	    DdNode *ann = Cudd_addCmpl(mgr->bdd_manager, an);
 	    reference_dd(mgr, ann);
 	    r = dd2ref(ann, IS_ADD);
 	    // For ADDs, don't already have negated values recorded
@@ -570,7 +562,7 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
     bool za = is_zdd(mgr, aref);
     bool zb = is_zdd(mgr, bref);
     bool aa = is_add(mgr, aref);
-    bool ab = is_add(mgr, aref);
+    bool ab = is_add(mgr, bref);
 
     if (mgr->do_cudd && mgr->nzvars > 0) {
 	/* Check whether arguments are ZDDs */
@@ -599,7 +591,7 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		unreference_dd(mgr, bn, IS_ZDD);
 	}
     }
-    if (mgr->do_cudd && mgr->navars > 0) {
+    if (mgr->do_cudd) {
 	/* Check whether arguments are ADDs */
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);
@@ -642,7 +634,7 @@ ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
     bool za = is_zdd(mgr, aref);
     bool zb = is_zdd(mgr, bref);
     bool aa = is_add(mgr, aref);
-    bool ab = is_add(mgr, aref);
+    bool ab = is_add(mgr, bref);
 
     if (mgr->do_cudd && mgr->nzvars > 0) {
 	/* Check whether arguments are ZDDs */
@@ -671,7 +663,7 @@ ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		unreference_dd(mgr, bn, IS_ZDD);
 	}
     }
-    if (mgr->do_cudd && mgr->navars > 0) {
+    if (mgr->do_cudd) {
 	/* Check whether arguments are ADDs */
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);
@@ -714,7 +706,7 @@ ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
     bool za = is_zdd(mgr, aref);
     bool zb = is_zdd(mgr, bref);
     bool aa = is_add(mgr, aref);
-    bool ab = is_add(mgr, aref);
+    bool ab = is_add(mgr, bref);
 
     if (mgr->do_cudd && mgr->nzvars > 0) {
 	/* Check whether arguments are ZDDs */
@@ -743,7 +735,7 @@ ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		unreference_dd(mgr, bn, IS_ZDD);
 	}
     }
-    if (mgr->do_cudd && mgr->navars > 0) {
+    if (mgr->do_cudd) {
 	/* Check whether arguments are ADDs */
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);

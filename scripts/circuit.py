@@ -934,7 +934,7 @@ def lQueens(n, f = sys.stdout, binary = False, careful = False, info = False, zd
     ok = ckt.node("ok")
     ckt.andN(ok, [vok.nodes[0]])
     ckt.decRefs([ckt.node(vok.nodes[0])])
-    ckt.comment("%s generation completed" % ("BDD" if zdd == Z.none else "ZDD"))
+    ckt.comment("%s generation completed" % ("ADD" if zdd == Z.avars else "BDD" if zdd == Z.none else "ZDD"))
     ckt.write("time")
     ckt.information(["ok"])
     ckt.comment("Model counting")
