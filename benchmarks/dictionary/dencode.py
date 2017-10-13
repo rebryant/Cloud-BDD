@@ -14,6 +14,7 @@ class Formula:
     depth = 0
     onh = True
     zdd = True
+    add = False
     radix = 26
     logradix = 5
     alphabet = ""
@@ -25,7 +26,7 @@ class Formula:
     template = "-%.2d.%.2d"
     outfile = None
 
-    def __init__(self, depth, outfile = None, alphabet = "", onh = True, zdd = True):
+    def __init__(self, depth, outfile = None, alphabet = "", onh = True, zdd = True, add = False):
         self.depth = depth
         self.outfile = sys.stdout if outfile == None else outfile
         self.alphabet = string.ascii_lowercase if alphabet == "" else alphabet
@@ -37,6 +38,7 @@ class Formula:
             self.c2i[self.alphabet[i]] = i
         self.onh = onh
         self.zdd = zdd
+        self.add = add
 
     def p2log(self, x):
         l = 0
@@ -63,7 +65,7 @@ class Formula:
     
     def declareVars(self, i):
         self.comment("Generate encoding variables for position %d" % i)
-        prefix = 'b' if self.zdd else 'v'
+        prefix = 'b' if self.zdd or self.add else 'v'
         cnt = self.radix if self.onh else self.logradix
         vars = [prefix + self.template % (idx, i) for idx in range(cnt)]
         # Declare variables
@@ -79,6 +81,17 @@ class Formula:
         zvars = ['v' + self.template % (idx, i) for idx in range(cnt)]
         for idx in range(cnt):
             self.outfile.write("zconvert %s %s" % (zvars[idx], vars[idx]) + "\n")
+
+    def aconvert(self, i):
+        if not self.add:
+            return
+        self.comment("Convert to ADDs")
+        prefix = 'b'
+        cnt = self.radix if self.onh else self.logradix
+        vars = [prefix + self.template % (idx, i) for idx in range(cnt)]
+        avars = ['v' + self.template % (idx, i) for idx in range(cnt)]
+        for idx in range(cnt):
+            self.outfile.write("aconvert %s %s" % (avars[idx], vars[idx]) + "\n")
 
     def genSelector(self, c, i):
         # Use '' to denote end marker for string
@@ -110,6 +123,9 @@ class Formula:
         if self.zdd:
             for i in range(self.depth):
                 self.zconvert(i)
+        elif self.add:
+            for i in range(self.depth):
+                self.aconvert(i)
         for i in range(self.depth):
             self.comment("Generate selector functions for level %d" % i)
             for c in self.alphabet:
@@ -121,7 +137,7 @@ class Formula:
     def finish(self):
         self.outfile.write("time\n")
         self.outfile.write("info dict\n")
-        self.outfile.write("# Skipping: count dict\n")
+        self.outfile.write("count dict\n")
         self.outfile.write("status\n")
 
         
@@ -234,12 +250,12 @@ class Trie:
                 if self.root.addWord(s):
                     self.words += 1
 
-    def startFormula(self, outfile = None, onh = True, zdd = True):
+    def startFormula(self, outfile = None, onh = True, zdd = True, add = False):
         depth = self.root.height()
         alphalist = list(self.alphaset)
         alphalist.sort()
         alphabet = "".join(alphalist)
-        self.form = Formula(depth, outfile, alphabet, onh, zdd)
+        self.form = Formula(depth, outfile, alphabet, onh, zdd, add)
         self.form.comment("Dictionary with %d words" % self.words)
         if len(alphabet) == 128:
             self.form.comment("Radix = %d" % len(alphabet))
@@ -256,33 +272,35 @@ class Trie:
         self.form.finish()
 
 
-def gen(infiles = [], outfile = None, onh = True, zdd = True, fullRadix = False):
+def gen(infiles = [], outfile = None, onh = True, zdd = True, add = False, fullRadix = False):
     t = Trie(fullRadix)
     if (len(infiles) == 0):
         infiles = [sys.stdin]
     for f in infiles:
         t.addWords(f)
-    t.startFormula(outfile, onh, zdd)
+    t.startFormula(outfile, onh, zdd, add)
     t.genFormula()
     t.finishFormula()
 
 
 def usage(name):
-    print "Usage %s [-h] [-i f1:f2:..] [-b] [-a] [-z] -o [oufile]" % name
+    print "Usage %s [-h] [-i f1:f2:..] [-b] [-a] [-ZA] -o [oufile]" % name
     print "  -h          Print this message"
     print "  -i f1:f2:.. Specify input word file(s)"
     print "  -b          Use binary encoding"
     print "  -a          Use full ASCII character set"
-    print "  -z          Use ZDDs"
+    print "  -Z          Use ZDDs"
+    print "  -A          Use ADDs"
     print "  -o outfile  Specify output file"
 
 def run(name, args):
     infiles = []
     outfile = None
     zdd = False
+    add = False
     onh = True
     fullRange = False
-    optlist, args = getopt.getopt(args, 'hi:bazo:')
+    optlist, args = getopt.getopt(args, 'hi:baAZo:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -300,7 +318,9 @@ def run(name, args):
             onh = False
         elif opt == '-a':
             fullRange = True
-        elif opt == '-z':
+        elif opt == '-A':
+            add = True
+        elif opt == '-Z':
             zdd = True
         elif opt == '-o':
             fname = val
@@ -309,7 +329,7 @@ def run(name, args):
             except:
                 print "Could not open output file '%s'" % fname
                 return
-    gen(infiles, outfile, onh, zdd, fullRange)
+    gen(infiles, outfile, onh, zdd, add, fullRange)
     for f in infiles:
         f.close()
     if outfile != None:

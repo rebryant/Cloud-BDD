@@ -134,7 +134,7 @@ void init_cmd() {
 void add_cmd(char *name, cmd_function operation, char *documentation) {
     cmd_ptr next_cmd = cmd_list;
     cmd_ptr *last_loc = &cmd_list;
-    while (next_cmd && strcmp(name, next_cmd->name) < 0) {
+    while (next_cmd && strcmp(name, next_cmd->name) > 0) {
 	last_loc = &next_cmd->next;
 	next_cmd = next_cmd->next;
     }
@@ -151,7 +151,7 @@ void add_param(char *name, int *valp, char *documentation,
 	       setter_function setter) {
     param_ptr next_param = param_list;
     param_ptr *last_loc = &param_list;
-    while (next_param && strcmp(name, next_param->name) < 0) {
+    while (next_param && strcmp(name, next_param->name) > 0) {
 	last_loc = &next_param->next;
 	next_param = next_param->next;
     }

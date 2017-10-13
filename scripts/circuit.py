@@ -64,8 +64,14 @@ class Vec:
     def __str__(self):
         return " ".join(self.nodes)
 
-    def length(self):
+    def __len__(self):
         return len(self.nodes)
+
+    def __getitem__(self, key):
+        return self.nodes[key]
+
+    def __setitem__(self, key, value):
+       self.nodes[key] = value
 
     # Various ways of constructing new nodes
 
@@ -105,12 +111,12 @@ class Vec:
 
     # Create interleaved vector
     def interleave(self, other):
-        if self.length() < other.length():
+        if len(self) < len(other):
             short, long = self.nodes, other.nodes
-            nshort, nlong = self.length(), other.length()
+            nshort, nlong = len(self), len(other)
         else:
             short, long = other.nodes, self.nodes
-            nshort, nlong = other.length(), self.length()
+            nshort, nlong = len(other), len(self)
         step = nlong / nshort
         ls = []
         for ele in short:
@@ -220,7 +226,7 @@ class Circuit:
     # Generate sequence of commands
     # argList should be list of vectors
     def cmdSequence(self, cmd, argList):
-        n = max([v.length() for v in argList])
+        n = max([len(v) for v in argList])
         nargList = [v.extend(n) for v in argList]
         lists = [v.nodes for v in nargList]
         for i in range(n):
@@ -292,7 +298,7 @@ class Circuit:
         self.decRefs([p12, p23, p13])
 
     def majorityV3(self, dest, a1, a2, a3):
-        n = dest.length()
+        n = len(dest)
         p12 = self.tmpVec(n)
         p23 = self.tmpVec(n)
         p13 = self.tmpVec(n)
@@ -303,7 +309,7 @@ class Circuit:
         self.decRefs([p12, p23, p13])
 
     def addV2(self, dest, a1, a2):
-        n = dest.length()
+        n = len(dest)
         cv = self.tmpVec(n-1)
         carry = cv.shiftLeft(1)
         lsd = dest.nodes
@@ -319,7 +325,7 @@ class Circuit:
         self.decRefs([cv])
 
     def addV(self, dest, argList):
-        n = dest.length()
+        n = len(dest)
         isTmp = [False for arg in argList]
         while len(argList) > 2:
             tmpV = self.tmpVec(n)
@@ -337,7 +343,7 @@ class Circuit:
             self.decRefs([argList[0]])
     
     def multV2(self, dest, p1, p2):
-        n = dest.length()
+        n = len(dest)
         np1 = p1.extend(n)
         np2 = p2.extend(n)
         pp = []
@@ -352,7 +358,7 @@ class Circuit:
         self.decRefs(tlist)
 
     def multV(self, dest, argList):
-        n = dest.length()
+        n = len(dest)
         isTmp = [False for arg in argList]
         while len(argList) > 2:
             tmpV = self.tmpVec(n)
@@ -404,6 +410,151 @@ class Circuit:
         names = [(("!%s" if self.getBit(v, i) == 0 else "%s") % vec.nodes[i]) for i in range(len(vec.nodes))]
         lits = Vec(names)
         self.andN(out, lits.nodes)
+
+        
+    # Components to build up C6288-style multipler
+    # Single partial product: a_{i,j}
+    def pprod(self, dest, avec, bvec, i, j):
+        self.andN(dest, [avec.nodes[j], bvec.nodes[i]])
+
+    # Vector of partial products for single level j
+    def pprodV(self, dv, avec, bvec, j):
+        m = len(dv)
+        for i in range(m):
+            self.pprod(dv.nodes[i], avec, bvec, i, j)
+
+    # Half adder
+    def hadd(self, carry, sum, x, z):
+        self.andN(carry, [x, z])
+        self.xorN(sum, [x, z])
+
+    # Vector of half adders
+    def haddV(self, cv, sv, xv, yv):
+        for i in range(len(cv)):
+            self.hadd(cv.nodes[i], sv.nodes[i], xv.nodes[i], yv.nodes[i])
+
+    # Full adder
+    def fadd(self, carry, sum, x, y, z):
+        self.xorN(sum, [x, y, z])
+        self.maj3(carry, x, y, z)
+
+    # Vector of full adders
+    def faddV(self, cv, sv, xv, yv, zv):
+        for i in range(len(cv)):
+            self.fadd(cv.nodes[i], sv.nodes[i], xv.nodes[i], yv.nodes[i], zv.nodes[i])
+        
+    # Top layer of multipler
+    # out: Generates bits 0 and 1 of product
+    # cvec: carry outputs (m-1)
+    # svec: sum outputs (m-2)
+    def tlayer(self, out, cvec, svec, avec, bvec):
+        self.comment("Building top level of multiplier")
+        m = len(avec)
+        n = len(bvec)
+        v0 = self.tmpVec(m-1)
+        pv0 = Vec([out.nodes[0]] + v0.nodes)
+        self.pprodV(pv0, avec, bvec, 0)
+        v1 = self.tmpVec(m-1)
+        self.pprodV(v1, avec, bvec, 1)
+        sveclong = Vec([out.nodes[1]] + svec.nodes)
+        self.haddV(cvec, sveclong, v0, v1)
+        self.decRefs([v0, v1])
+
+    # Middle layers of multiplier
+    # out: Generates bit j of product
+    # cvec: carry outputs (m-1)
+    # svec: sum outputs (m-2)
+    # cinvec: input carries (m-1)
+    # sinvec: input sums (m-2)
+    def mlayer(self, out, cvec, svec, cinvec, sinvec, avec, bvec, j):
+        self.comment("Building level %d of multiplier" % j)
+        m = len(avec)
+        n = len(bvec)
+        v = self.tmpVec(m-1)
+        self.pprodV(v, avec, bvec, j)
+        pp = self.tmpNode()
+        self.pprod(pp, avec, bvec, m-1, j-1)
+        sinveclong = Vec(sinvec.nodes + [pp])
+        sveclong = Vec([out.nodes[j]] + svec.nodes)
+        self.faddV(cvec, sveclong, sinveclong, cinvec, v)
+        self.decRefs([v, pp])
+
+    # Bottom level of multiplier
+    # out: Generates bits n .. m+n-1 of product
+    # cinvec: input carries (m-1)
+    # sinvec: input sums (m-2)
+    def blayer(self, out, cinvec, sinvec, avec, bvec):
+        self.comment("Building bottom level of multiplier")
+        m = len(avec)
+        n = len(bvec)
+        pp = self.tmpNode()
+        self.pprod(pp, avec, bvec, m-1, n-1)
+        cv = self.tmpVec(m-2)
+        self.hadd(cv.nodes[0], out.nodes[n], sinvec.nodes[0], cinvec.nodes[0])
+        for i in range(m-3):
+            self.fadd(cv.nodes[i+1], out.nodes[n+1+i], sinvec.nodes[i+1], cinvec.nodes[i+1], cv.nodes[i])
+        self.fadd(out.nodes[n+m-1], out.nodes[n+m-2], pp, cinvec.nodes[m-2], cv.nodes[m-3])
+        self.decRefs([cv, pp])
+
+    # m X n bit multiplier
+    def multiplier(self, out, avec, bvec, verbose=False):
+        # Require m >= 3, n >= 1
+        m = len(avec)
+        n = len(bvec)
+        svec = self.tmpVec(m-2)
+        cvec = self.tmpVec(m-1)
+        self.tlayer(out, cvec, svec, avec, bvec)
+        if verbose:
+            self.information(svec.nodes + cvec.nodes)
+        for j in range(2,n):
+            sinvec = svec
+            cinvec = cvec
+            svec = self.tmpVec(m-2)
+            cvec = self.tmpVec(m-1)
+            self.mlayer(out, cvec, svec, cinvec, sinvec, avec, bvec, j)
+            if verbose:
+                self.information(svec.nodes + cvec.nodes)
+            self.decRefs([sinvec, cinvec])
+        self.blayer(out, cvec, svec, avec, bvec)
+        self.decRefs([cvec, svec])
+        
+    # Construct function based on enumeration of function
+    # User provides function mapping list of integers to integer
+    def blast(self, out, inlist, ifun):
+        # Initialize nodes to 0
+        self.orV(out, [])
+        xval = [0 for input in inlist]
+        allnodes = []
+        for input in inlist:
+            allnodes = allnodes + input.nodes
+        allinputs = Vec(allnodes)
+        for idx in range(1 << len(allinputs)):
+            v = idx
+            for i in range(len(inlist)):
+                xval[i] = 0
+                for j in range(len(inlist[i])):
+                    xval[i] += ((v & 0x1) << j)
+                    v = v >> 1
+            y = ifun(xval)
+            select = None
+            for j in range(len(out)):
+                if y & (1 << j) != 0:
+                    if select == None:
+                        select = self.tmpNode()
+                        self.matchVal(idx, allinputs, select)
+                    self.orN(out[j], [out[j], select])
+            if select != None:
+                self.decRefs([select])
+    
+    def multfun(self, xlist):
+        v = 1
+        for x in xlist:
+            v *= x
+        return v
+
+    def multblast(self, out, avec, bvec):
+        self.blast(out, [avec, bvec], self.multfun)
+        
 
 ## Some benchmarks:
 # Show that addition is associative
@@ -530,7 +681,6 @@ class Z:
 
     def suffix(self, id):
         return self.suffixes[id]
-
 
 def bigLog2(x):
     val = 0
@@ -964,3 +1114,49 @@ def lqgen(n, binary = False, careful = False, info = False, zdd = Z.none, interl
         print "Couldn't open file %d" % fname
         sys.exit(1)
     lQueens(n, f, binary, careful, info, zdd, interleave)
+
+def Multiplier(n, f = sys.stdout, zdd = Z.none, reverseA = False, reverseB = False, interleave = False, check = False):
+    ckt = Circuit(f)
+    ckt.comment("Construction of %d x %d multiplier" % (n, n))
+    ckt.comment("ZDD mode = %s" % Z().name(zdd))
+    avec = ckt.nameVec("A", n)
+    bvec = ckt.nameVec("B", n)
+    if zdd == Z.none or zdd == Z.convert:
+        davec = avec
+        dbvec = bvec
+    else:
+        davec = ckt.nameVec("bA", n)
+        dbvec = ckt.nameVec("bB", n)
+    if reverseA:
+        davec = davec.reverse()
+    if reverseB:
+        dbvec = dbvec.reverse()
+    dvec = davec.interleave(dbvec) if interleave else Vec(davec.nodes + dbvec.nodes)
+    ckt.declare(dvec)
+    if zdd == Z.vars:
+        ckt.zcV(avec, davec)
+        ckt.zcV(bvec, dbvec)
+    elif zdd == Z.avars:
+        ckt.acV(avec, davec)
+        ckt.acV(bvec, dbvec)
+    outvec = ckt.nameVec("out", n+n)
+    outcvec = ckt.nameVec("outc", n+n) if zdd == Z.convert else outvec
+    ckt.multiplier(outcvec, avec, bvec)
+    if zdd == Z.convert:
+        ckt.zcV(outvec, outcvec)
+        ckt.decRefs([outcvec])
+    ckt.comment("%s generation completed" % ("ADD" if zdd == Z.avars else "BDD" if zdd == Z.none else "ZDD"))
+    ckt.write("time")
+    ckt.information(outvec.nodes)
+    if check:
+        checkvec = ckt.nameVec("cout", n+n)
+        ckt.multblast(checkvec, avec, bvec)
+        ckt.cmdSequence("equal", [outvec, checkvec])
+    ckt.status()
+    ckt.comment("Flush state")
+    ckt.write("flush")
+    ckt.comment("Exit")
+    ckt.write("quit")
+
+
+    
