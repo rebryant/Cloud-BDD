@@ -1,0 +1,12 @@
+Benchmarks for chained BDDs & ZDDs
+
+Directories:
+
+cbdd-lqueens: N-queens benchmarks
+
+dictionary: Dictionary benchmark
+
+iscas85: ISCAS '85 circuit benchmarks
+
+Consult the README file in each directory for instructions on how to run the benchmarks
+
