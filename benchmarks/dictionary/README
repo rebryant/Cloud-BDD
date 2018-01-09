@@ -1,7 +1,11 @@
 This directory contains all of the code needed to generate the
 dictionary benchmarks.
 
+The runbdd program must be installed in directory ../../
+
 Just type "make all" to generate, run, and tabulate the command files
+
+Run "make mini" to do this for a representative subset of the benchmarks
 
 Files:
 

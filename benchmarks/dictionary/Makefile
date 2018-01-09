@@ -3,8 +3,11 @@ RUN = ../../runbdd -c
 PARSE = ./sparse.pl
 
 
-all: words pwords awords apwords tables
+all: words pwords awords apwords move tables
 
+mini: all-words-ozn.out all-words-oba.out \
+      all-words_ascii-ozn.out all-words_ascii-oba.out \
+      move tables
 
 words: all-words-obn.out all-words-oba.out \
 	all-words-ozn.out all-words-oza.out \
@@ -279,10 +282,14 @@ passwords_ascii-baa.out: passwords_ascii-ba.cmd
 	$(RUN) -f passwords_ascii-ba.cmd -C a > passwords_ascii-baa.out
 
 move: # rwords pwords longwords longpwords
-	cp -p passwords_ascii-*.out passwords_ascii
-	cp -p all-words_ascii-*.out all-words_ascii
-	cp -p passwords-*.out passwords
-	cp -p all-words-*.out all-words
+	-mkdir passwords_ascii
+	-mv passwords_ascii-*.out passwords_ascii
+	-mkdir all-words_ascii
+	-mv all-words_ascii-*.out all-words_ascii
+	-mkdir passwords
+	-mv passwords-*.out passwords
+	-mkdir all-words
+	-mv all-words-*.out all-words
 
 clean:
 	rm -f *~ *.out *.cmd *.pyc *.txt

@@ -1,5 +1,11 @@
 Benchmarks for chained BDDs & ZDDs
 
+Use:
+
+Run "make all" to generate and run all benchmarks
+
+Run "make mini" to generate and run a representative subset of the benchmarks
+
 Directories:
 
 cbdd-lqueens: N-queens benchmarks
