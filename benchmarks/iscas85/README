@@ -1,0 +1,21 @@
+This directory contains the code needed to generate, run, and tabulate
+the ISCAS '85 circuit benchmarks.
+
+Run "make all" to do everything
+
+Files:
+
+iscparse.py: Generates command files from ISCAS circuits
+	     Run ./iscparse.py -A to generate all benchmarks for TACAS paper
+	     
+iscnet.py: Module file for iscparse.py
+
+c7552_reverse.py: Generate variable ordering for c7552 circuit based
+		  on reverse engineering of circuit design
+
+iscrun.py: Runs benchmarks
+
+sparse.pl: Parses results
+
+isc: Subdirectory with ISCAS benchmark files
+	   

@@ -213,10 +213,10 @@ int main(int argc, char *argv[]) {
     unsigned port = CPORT;
     bool try_local_router = false;
     
-    do_cudd = 0;
+    do_cudd = 1;
     do_local = 0;
     do_dist = 0;
-    chaining_type = CHAIN_NONE;
+    chaining_type = CHAIN_ALL;
 
     while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:C:")) != -1) {
 	switch(c) {

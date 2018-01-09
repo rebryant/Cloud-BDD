@@ -7,11 +7,14 @@ import getopt
 
 import iscnet
 
-def allIds():
-    return ["c17", "c432", "c499", "c880", "c1355", "c1908", "c2670", "c3540", "c5315", "c6288", "c7552"]
+allIds = ["c17", "c432", "c499", "c880", "c1355", "c1908", "c2670", "c3540", "c5315", "c6288", "c7552"]
+# Ordering: h=heuristic, f=file, c=custom
+allOrders = ['r', 'r', 'r', 'r', 'r', 'r', 'r', 'r', 'r', 'u', 'c']
 
 def usage(name):
-    print "Usage: %s [-h] [-i ID] [-r] [-b] [-z] [-a]" % name
+    print "Usage: %s [-h] [-A] [-i ID] [-r] [-b] [-z] [-a]" % name
+    print "  -A    Generate all benchmarks"
+    print "  The remaining options apply only for generating single benchmarks"
     print "  -h    Print this message"
     print "  -i ID Specify circuit ID (e.g., c432)"
     print "  -r    Reorder inputs (using fanin heuristic)"
@@ -23,42 +26,49 @@ def usage(name):
 def cktpath(id):
     return cktdir + "/" + id + ".isc"
 
-def outpath(id, dtype, reorder = False, customOrder = False):
+def outpath(id, dtype, order):
     dd = iscnet.DD()
-    ostring = "r" if reorder else "c" if customOrder else "u"
-    return id + "-" + dd.prefix(dtype) + ostring + ".cmd"
+    return id + "-" + dd.prefix(dtype) + order + ".cmd"
 
 def run(name, args):
-    ids = allIds()
+    ids = []
     types = []
-    reorder = False
-    customOrder = False
-    optlist, args = getopt.getopt(args, 'hi:rRbza')
+    orders = []
+    optlist, args = getopt.getopt(args, 'hAi:rRbza')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
+        if opt == '-A':
+            ids = allIds
+            orders = allOrders
+            types = [iscnet.DD.BDD, iscnet.DD.ZDD, iscnet.DD.ADD]
         elif opt == '-i':
             ids = [val]
         elif opt == '-r':
-            reorder = True
+            orders = ['r'] * len(ids)
         elif opt == '-R':
-            customOrder = True
+            orders = ['c'] * len(ids)
         elif opt == '-b':
-            types.append(iscnet.DD.BDD)
+            if iscnet.DD.BDD not in types:
+                types += [iscnet.DD.BDD]
         elif opt == '-z':
-            types.append(iscnet.DD.ZDD)
+            if iscnet.DD.ZDD not in types:
+                types += [iscnet.DD.ZDD]
         elif opt == '-a':
-            types.append(iscnet.DD.ADD)
-    for id in ids:
+            if iscnet.DD.ADD not in types:
+                types += [iscnet.DD.ADD]
+    if len(orders) < len(ids):
+        orders = ['u'] * len(ids)
+    for id, order in zip(ids, orders):
         inname = cktpath(id)
         c = iscnet.Netlist()
         if not c.readFile(inname):
             print "No output generated"
             sys.exit(0)
-        if reorder:
+        if order == 'r':
             c.reorder()
-        if customOrder:
+        if order == 'c':
             if id == "c7552":
                  c.reorderReversed()
             else:
@@ -68,7 +78,7 @@ def run(name, args):
         gcount = len(c.gates) - icount
         print "Circuit %s has %d inputs, %d outputs, %d gates" % (id, icount, ocount, gcount)
         for t in types:
-            outname = outpath(id, t, reorder, customOrder)
+            outname = outpath(id, t, order)
             try:
                 outfile = open(outname, "w")
             except:

@@ -1,0 +1,91 @@
+This directory contains files for constructing a distributed BDD
+package.  It also can be used as a command interpreter for the CUDD
+BDD package.  It has been updated to work with Chained BDDs, as
+described in the paper:
+
+``Chain reduction for binary and zero-suppressed decision diagrams,''
+TACAS, 2018.
+
+The only external code used is for the CUDD BDD package
+
+All code is in C, using Unix sockets as the communication mechanism.
+
+Installation:
+
+1. Install the modified CUDD package
+   https://github.com/rebryant/Chain-CUDD-3.0.0.  Follow the
+   instructions in the file ``RELEASE.NOTES''.
+
+2. Add a symbolic link "cudd-symlink" to the directory pointing to the
+   directory where Chain-CUDD-3.0.0 has been installed.
+
+3. Type "make" to install a the command-line interpreter "runbdd."
+   Type "make b" to generate the programs needed to support
+   distributed execution.
+
+Use:
+
+The runbdd provides a simple command-line interface for evaluating
+Boolean functions.  Start the program and type "help" for a list of
+commands.  Use the Makefile in the scripts subdirectory to generate
+some sample command sequences.
+
+Files:
+
+agent.{c,h}:
+    Support worker and client agents executing dynamic data-flow
+
+bdd.{c,h}:
+    BDD implementation based on "refs".  Support for both single-process
+    execution, as well as for data-flow based distributed execution
+
+bworker.c:
+    Worker agent for BDD execution
+
+chunk.{c,h}:
+chunk_test.c
+    Data structure for dynamically allocated, variable-length arrays
+    Underlying data structure for most data blocks, and for data-flow messages
+
+console.{c,h}:
+console_test.c
+    Support for command-line interfaces, used by both controller and
+    clients.
+
+dtype.h:
+    Declarations of widely used data types
+
+msg.{c,h}:
+    Support for messages and routing in data-flow execution model
+
+report.{c,h}:
+    Utilities for reporting events at different levels of verbosity
+    and for allocating/freeing memory in trackable way
+
+router.c:
+    Router to support communication between data-flow agents
+
+runbdd.c:
+    Can run as standalone BDD manipulator, as well as client for
+    distributed execution.  Supports evaluation by CUDD, by
+    single-processor, and by distributed implementation
+
+shadow.{c,h}:
+shadow_test.c
+    Common API to Boolean manipulation primitives, allowing any
+    combination of evaluation methods, and checking consistency among them.
+
+table.{c,h}:
+chunktable_test.c
+set_test.c
+    Support for dictionaries and sets
+
+tclient.c
+tworker.c:
+test_df.{h,c}
+    Testing framework for data-flow execution
+
+
+
+    
+

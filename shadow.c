@@ -291,7 +291,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 	unsigned int numSlots = 1u<<18; /* Default 256 */
 	unsigned int cacheSize = 1u<<22; /* Default 262144 */
 	/* Default 67,108,864 */
-	unsigned long int maxMemory = (1u<<31) + 32 * 1024 * 1024 * 1024;
+	unsigned long int maxMemory = (1u<<31) + 32UL * 1024 * 1024 * 1024;
 #if 0
 	// Use defaults
 	numSlots = 256;

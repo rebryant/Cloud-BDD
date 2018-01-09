@@ -1,0 +1,25 @@
+This directory contains Python code to generate different benchmark
+command files for runbdd.
+
+Files:
+
+Used in TACAS 2018 paper
+
+circuit.py: A (crufty) program for generating Boolean command files
+
+lqueen.py: Generate constraints for the n-queens problem by generating
+	   the constraints starting from the bottom row and working upward
+
+	   Run './lqueen -a' to generate 240 benchmark files for
+	   	   variants of n-queens ranging from n = 4 to n = 16
+
+Not used in TACAS 2018 paper
+
+nqueen.py: Generate constraints for the n-queens problem by generating
+	   a bunch of constraints and AND'ing them together.
+
+addassoc.py: Creates tests comparing (a+b)+c to a+(b+c)
+
+multassoc.py: Creates tests comparing (a*b)*c to a*(b*c)
+
+multiplier.py: Generate n-bit multipliers

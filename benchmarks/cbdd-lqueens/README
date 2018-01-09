@@ -1,0 +1,18 @@
+This directory is used for generating and tabulating the n-queens
+benchmarks, based on a construction that starts with the bottom row
+and adds constraints layer-by-layer up to the top.
+
+Usage:
+
+1. Make sure the runbdd program in the direction ../ is compiled.
+
+2. Generate lqueens command files in the directory ../scripts.
+   (See the README.txt file in that directory)
+
+3. Run the program ./lqrun.py to execute the command files.
+   E.g., for just the 15-queens benchmarks, run: ./lqrun.py -n 15 -N 15 
+
+4. Use "make move" to copy the results into directories according to
+   values of n.
+
+5. Run "make all" to tabulate the results

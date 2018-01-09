@@ -1,0 +1,16 @@
+This directory contains all of the code needed to generate the
+dictionary benchmarks.
+
+Just type "make all" to generate, run, and tabulate the command files
+
+Files:
+
+dencode.py: Create command files by encoding list of words into Trie
+	    and then generating DD representation.
+
+sparse.pl: Used for parsing the generated results
+
+words.list: List of 235,886 English words
+
+passwords.list: List of 1,049,937 passwords
+

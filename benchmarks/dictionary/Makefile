@@ -1,19 +1,12 @@
-PART = ./partition.py
 ENCODE = ./dencode.py
 RUN = ../../runbdd -c
 PARSE = ./sparse.pl
 
-all: rwords pwords awords apwords
 
-tables: final-sizes.txt max-sizes.txt times.txt ops.txt mem.txt
+all: words pwords awords apwords tables
 
-lwords: lowercase-words-obn.out lowercase-words-oba.out \
-	lowercase-words-ozn.out lowercase-words-oza.out \
-	lowercase-words-oan.out lowercase-words-oaa.out \
-	lowercase-words-bbn.out lowercase-words-bba.out \
-	lowercase-words-bzn.out lowercase-words-bza.out \
-	lowercase-words-ban.out lowercase-words-baa.out
-rwords: all-words-obn.out all-words-oba.out \
+
+words: all-words-obn.out all-words-oba.out \
 	all-words-ozn.out all-words-oza.out \
 	all-words-oan.out all-words-oaa.out \
 	all-words-bbn.out all-words-bba.out \
@@ -40,6 +33,7 @@ apwords: passwords_ascii-obn.out passwords_ascii-oba.out \
 	passwords_ascii-bzn.out passwords_ascii-bza.out \
 	passwords_ascii-ban.out passwords_ascii-baa.out 
 
+tables: final-sizes.txt max-sizes.txt times.txt ops.txt mem.txt
 
 final-sizes.txt:
 	grep "Cudd size" */*.out | $(PARSE) > final-sizes.txt
@@ -56,55 +50,8 @@ ops.txt:
 mem.txt:
 	grep "Memory" */*.out | $(PARSE) > mem.txt
 
-lowercase-words.list: words.list $(PART)
-	$(PART)
 
-# Words from dict/words converted to lower case
-
-lowercase-words-ob.cmd: lowercase-words.list $(ENCODE)
-	$(ENCODE) -i lowercase-words.list -o lowercase-words-ob.cmd
-
-lowercase-words-oz.cmd: lowercase-words.list $(ENCODE)
-	$(ENCODE) -i lowercase-words.list -o lowercase-words-oz.cmd -Z
-
-lowercase-words-oa.cmd: lowercase-words.list $(ENCODE)
-	$(ENCODE) -i lowercase-words.list -o lowercase-words-oa.cmd -A
-
-lowercase-words-bb.cmd: lowercase-words.list $(ENCODE)
-	$(ENCODE) -i lowercase-words.list -o lowercase-words-bb.cmd -b
-
-lowercase-words-bz.cmd: lowercase-words.list $(ENCODE)
-	$(ENCODE) -i lowercase-words.list -o lowercase-words-bz.cmd -b -Z
-
-lowercase-words-ba.cmd: lowercase-words.list $(ENCODE)
-	$(ENCODE) -i lowercase-words.list -o lowercase-words-ba.cmd -b -A
-
-lowercase-words-obn.out: lowercase-words-ob.cmd
-	$(RUN) -f lowercase-words-ob.cmd -C n > lowercase-words-obn.out
-
-lowercase-words-oba.out: lowercase-words-ob.cmd
-	$(RUN) -f lowercase-words-ob.cmd -C a > lowercase-words-oba.out
-
-lowercase-words-ozn.out: lowercase-words-oz.cmd
-	$(RUN) -f lowercase-words-oz.cmd -C n > lowercase-words-ozn.out
-
-lowercase-words-oza.out: lowercase-words-oz.cmd
-	$(RUN) -f lowercase-words-oz.cmd -C a > lowercase-words-oza.out
-
-lowercase-words-bbn.out: lowercase-words-bb.cmd
-	$(RUN) -f lowercase-words-bb.cmd -C n > lowercase-words-bbn.out
-
-lowercase-words-bba.out: lowercase-words-bb.cmd
-	$(RUN) -f lowercase-words-bb.cmd -C a > lowercase-words-bba.out
-
-lowercase-words-bzn.out: lowercase-words-bz.cmd
-	$(RUN) -f lowercase-words-bz.cmd -C n > lowercase-words-bzn.out
-
-lowercase-words-bza.out: lowercase-words-bz.cmd
-	$(RUN) -f lowercase-words-bz.cmd -C a > lowercase-words-bza.out
-
-
-# Raw words in dict/words using natural character set
+# Words in dict/words using natural character set
 
 all-words-ob.cmd: words.list $(ENCODE)
 	$(ENCODE) -i words.list -o all-words-ob.cmd
@@ -161,7 +108,7 @@ all-words-baa.out: all-words-ba.cmd
 	$(RUN) -f all-words-ba.cmd -C a > all-words-baa.out
 
 
-# Raw passwords using full natural character set
+# Passwords using full natural character set
 
 passwords-ob.cmd: passwords.list $(ENCODE)
 	$(ENCODE) -i passwords.list -o passwords-ob.cmd
@@ -217,7 +164,7 @@ passwords-ban.out: passwords-ba.cmd
 passwords-baa.out: passwords-ba.cmd
 	$(RUN) -f passwords-ba.cmd -C a > passwords-baa.out
 
-# Raw words in dict/words using full ASCII character set
+# Words in dict/words using full ASCII character set
 
 all-words_ascii-ob.cmd: words.list $(ENCODE)
 	$(ENCODE) -i words.list -o all-words_ascii-ob.cmd -a
@@ -275,7 +222,7 @@ all-words_ascii-baa.out: all-words_ascii-ba.cmd
 	$(RUN) -f all-words_ascii-ba.cmd -C a > all-words_ascii-baa.out
 
 
-# Raw passwords using full ASCII character set
+# Passwords using full ASCII character set
 
 passwords_ascii-ob.cmd: passwords.list $(ENCODE)
 	$(ENCODE) -i passwords.list -o passwords_ascii-ob.cmd -a
@@ -338,4 +285,5 @@ move: # rwords pwords longwords longpwords
 	cp -p all-words-*.out all-words
 
 clean:
-	rm -f *~ *.out *.cmd
+	rm -f *~ *.out *.cmd *.pyc *.txt
+

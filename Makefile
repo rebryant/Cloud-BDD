@@ -23,6 +23,8 @@ PFILES = agent.h bdd.h chunk.h console.h dtype.h msg.h report.h shadow.h table.h
 	agent.c bdd.c bworker.c chunk.c console.c controller.c msg.c report.c \
 	router.c runbdd.c shadow.c table.c 
 
+default: runbdd
+
 b: runbdd bworker controller router
 
 dft: controller router tworker tclient
@@ -83,9 +85,6 @@ console_test: console_test.c console.h report.h console.o report.o chunk.o table
 
 runbdd: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
 	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS) -lm
-
-runbddo: runbdd.c console.o chunk.o table.o report.o bdd.o shadow-nochain.o msg.o agent.o
-	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(OCUDDINC) -o runbddo runbdd.c chunk.o console.o table.o report.o bdd.o shadow-nochain.o msg.o agent.o $(OCUDDLIBS)
 
 bworker: bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o
 	$(CC) $(CFLAGS) -o bworker bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o

@@ -6,7 +6,7 @@ use Getopt::Std;
 
 # Typical entry:
 
-# out-c432/c432-ar-ca.out:  Cudd size: 31321 nodes
+# c432-ar-ca.out:  Cudd size: 31321 nodes
 
 # Convert to:
 
@@ -25,13 +25,11 @@ while (<>) {
     $line = $_;
     chomp $line;
     @fields = split(/[- :\/\t]+/, $line);
-#    $txt = join("+", @fields);
-#    print "Fields = $txt\n";
-    $bench = $fields[1];
-    @tfields = split "", $fields[3];
+    $bench = $fields[0];
+    @tfields = split "", $fields[2];
     $dd = $tfields[0];
     $order = $tfields[1];
-    @cfields = split "", $fields[4];
+    @cfields = split "", $fields[3];
     $chain = $cfields[1];
     $l2field = $fields[$fields-2];
     $l1field = $fields[$fields -1];
