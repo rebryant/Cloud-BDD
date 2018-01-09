@@ -1,6 +1,10 @@
 This directory contains Python code to generate different benchmark
 command files for runbdd.
 
+Use:
+
+Run "make lq" to generate all of the n-queens benchmarks used in TACAS 2018 paper
+
 Files:
 
 Used in TACAS 2018 paper

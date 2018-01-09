@@ -40,15 +40,25 @@ mem-iq.txt:
 	grep "Memory" q*/iq*fast*.out | $(PARSE) | $(COLUMNS) > mem-iq.txt
 
 move:
+	-mkdir q04
 	-mv -f *q*04*.out q04
+	-mkdir q08
 	-mv -f *q*08*.out q08
+	-mkdir q09
 	-mv -f *q*09*.out q09
+	-mkdir q10
 	-mv -f *q*10*.out q10
+	-mkdir q11
 	-mv -f *q*11*.out q11
+	-mkdir q12
 	-mv -f *q*12*.out q12
+	-mkdir q13	
 	-mv -f *q*13*.out q13
+	-mkdir q14
 	-mv -f *q*14*.out q14
+	-mkdir q15
 	-mv -f *q*15*.out q15
+	-mkdir q16
 	-mv -f *q*16*.out q16
 
 clean:

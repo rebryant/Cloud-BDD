@@ -1,6 +1,6 @@
 
 lq: lqueen.py
-	./lqueen.py -n 15 -a
+	./lqueen.py -a
 
 aa: aa2.cmd aa3.cmd aa4.cmd aa6.cmd aa8.cmd aa12.cmd aa16.cmd aa24.cmd aa32.cmd aa48.cmd aa64.cmd
 ma: ma2.cmd ma3.cmd ma4.cmd ma5.cmd ma6.cmd ma7.cmd ma8.cmd ma9.cmd ma10.cmd ma12.cmd

@@ -25,5 +25,5 @@ mem.txt:
 	grep "Memory" *.out | $(PARSE) > mem.txt
 
 clean:
-	rm *.txt *~ *.pyc
+	rm -f *.txt *~ *.pyc
 
