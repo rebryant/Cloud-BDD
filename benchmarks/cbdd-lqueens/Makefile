@@ -1,8 +1,25 @@
 PARSE = ./sparse.pl
 COLUMNS = ./columnize.pl
 MAX = ./max.pl
+LQRUN = ./lqrun.py
 
-all: final-sizes-lq.txt max-sizes-lq.txt times-lq.txt ops-lq.txt mem-lq.txt \
+all: runbdd benchmarks run move report
+
+mini: runbdd benchmarks mini-run move report
+
+runbdd:
+	(cd ../../ ; make runbdd)
+
+benchmarks:
+	(cd ../../scripts; make lq)
+
+run: $(LQRUN)
+	$(LQRUN) -N 15
+
+mini-run: $(LQRUN)
+	$(LQRUN) -N 10
+
+report: final-sizes-lq.txt max-sizes-lq.txt times-lq.txt ops-lq.txt mem-lq.txt \
 	final-sizes-iq.txt max-sizes-iq.txt times-iq.txt ops-iq.txt mem-iq.txt
 
 ## Regular variable ordering

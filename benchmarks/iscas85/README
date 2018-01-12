@@ -1,7 +1,9 @@
 This directory contains the code needed to generate, run, and tabulate
 the ISCAS '85 circuit benchmarks.
 
-Run "make all" to do everything
+Run "make all" to generate, run, and tabulate all benchmarks
+
+Run "make mini" to generate, run, and tabulate all benchmarks for a subset of the circuits
 
 Files:
 

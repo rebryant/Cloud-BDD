@@ -4,7 +4,8 @@ Use:
 
 Run "make all" to generate and run all benchmarks
 
-Run "make mini" to generate and run a representative subset of the benchmarks
+Run "make mini" to generate and run a representative subset of the
+benchmarks
 
 Directories:
 
@@ -14,5 +15,6 @@ dictionary: Dictionary benchmark
 
 iscas85: ISCAS '85 circuit benchmarks
 
-Consult the README file in each directory for instructions on how to run the benchmarks
+Consult the README file in each directory for instructions on how to
+run the benchmarks
 

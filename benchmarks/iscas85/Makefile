@@ -1,16 +1,19 @@
 PARSE = ./sparse.pl
 
-all: circuits runs tables
+all: runbdd circuits run tables
 
-mini: circuits mini-runs tables
+mini: runbdd circuits mini-run tables
+
+runbdd:
+	(cd ../../ ; make runbdd)
 
 circuits: iscparse.py
 	./iscparse.py -A
 
-mini-runs: iscrun.py
-	./iscrun.py -i c17:c432:c499:c880:c1355:c1908:c2670:c3540:c5315 -r -b -z -a
+mini-run: iscrun.py
+	./iscrun.py -i c17:c432:c499:c880:c1355:c1908:c2670 -r -b -z -a
 
-runs: iscrun.py
+run: iscrun.py
 	./iscrun.py -i c17:c432:c499:c880:c1355:c1908:c2670:c3540:c5315 -r -b -z -a
 	./iscrun.py -i c7552 -R -b -z -a
 	./iscrun.py -i c6288 -b -z -a

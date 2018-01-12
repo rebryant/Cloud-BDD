@@ -2,7 +2,13 @@ This directory is used for generating and tabulating the n-queens
 benchmarks, based on a construction that starts with the bottom row
 and adds constraints layer-by-layer up to the top.
 
-Usage:
+Quick Usage:
+
+Running "make mini" will generate, run, and tabulate benchmarks for 4, 8, 9, and 10 queens.
+
+Running "make all" will generate, run, and tabulate benchmarks for 4, 8, 9, 10, 11, 12, 13, and 14 queens.
+
+General Usage:
 
 1. Make sure the runbdd program in the direction ../ is compiled.
 
