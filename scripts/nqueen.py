@@ -3,6 +3,7 @@
 import sys
 import getopt
 import circuit
+import qcircuit
 
 def usage(name):
     print "Usage %s [-h] [-a] | [[-zZ] [-n N] [-b] [-c] [-v] [-p r|c|d]]" % name
@@ -26,7 +27,7 @@ def run(name, args):
     binary = False
     careful = False
     info = False
-    preconstrain = circuit.PC.none
+    preconstrain = qcircuit.PC.none
     genall = False
     zdd = circuit.Z.none
     optlist, args = getopt.getopt(args, 'hazZn:bcvp:')
@@ -51,11 +52,11 @@ def run(name, args):
         elif opt == '-p':
             m = val[0]
             if m == 'r':
-                preconstrain = circuit.PC.row
+                preconstrain = qcircuit.PC.row
             elif m == 'c':
-                preconstrain = circuit.PC.column
+                preconstrain = qcircuit.PC.column
             elif m == 'd':
-                preconstrain = circuit.PC.diagonal
+                preconstrain = qcircuit.PC.diagonal
             else:
                 print "Unknown preconstrain method '%s'" % m
                 return
@@ -67,10 +68,10 @@ def run(name, args):
         for n in [4, 8, 9, 10, 11, 12, 13, 14, 15, 16]:
             for b in [True, False]:
                 for c in [True, False]:
-                    for p in [circuit.PC.none, circuit.PC.row, circuit.PC.column]:
+                    for p in [qcircuit.PC.none, qcircuit.PC.row, qcircuit.PC.column]:
                         for z in [circuit.Z.none, circuit.Z.vars, circuit.Z.convert]:
-                            circuit.qgen(n, b, c, c, p, z)
+                            qcircuit.qgen(n, b, c, c, p, z)
     else:
-        circuit.qgen(n, binary, careful, info, preconstrain, zdd)
+        qcircuit.qgen(n, binary, careful, info, preconstrain, zdd)
 
 run(sys.argv[0], sys.argv[1:])

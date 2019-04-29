@@ -3,6 +3,7 @@
 import sys
 import getopt
 import circuit
+import qcircuit
 
 def usage(name):
     print "Usage %s [-h] [-a] | [[-Z] [-n N] [-b] [-c] [-v] [-i]]" % name
@@ -56,8 +57,8 @@ def run(name, args):
                 for c in [True, False]:
                     for z in [circuit.Z.none, circuit.Z.vars, circuit.Z.avars]:
                         for i in [False, True]:
-                            circuit.lqgen(n, b, c, c, z, i)
+                            qcircuit.lqgen(n, b, c, c, z, i)
     else:
-        circuit.lqgen(n, binary, careful, info, zdd, interleave)
+        qcircuit.lqgen(n, binary, careful, info, zdd, interleave)
 
 run(sys.argv[0], sys.argv[1:])
