@@ -26,10 +26,10 @@ while (<>) {
     chomp $line;
     @fields = split(/[- :\/\t]+/, $line);
     $bench = $fields[0];
-    @tfields = split "", $fields[2];
+    @tfields = split "", $fields[1];
     $dd = $tfields[0];
     $order = $tfields[1];
-    @cfields = split "", $fields[3];
+    @cfields = split "", $fields[2];
     $chain = $cfields[1];
     $l2field = $fields[$fields-2];
     $l1field = $fields[$fields -1];
