@@ -38,7 +38,7 @@ static double last_time;
   Must create stack of buffers to handle I/O with nested source commands.
 */
 
-#define RIO_BUFSIZE 8192
+#define RIO_BUFSIZE (8192 * 64)
 typedef struct RIO_ELE rio_t, *rio_ptr;
 
 struct RIO_ELE {
