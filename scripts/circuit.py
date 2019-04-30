@@ -275,6 +275,27 @@ class Circuit:
         ls.extend(argList)
         self.cmdLine("ite", ls)
 
+        
+    def assignConstant(self, dest, val):
+        if val == 1:
+            self.andN(dest, [])
+        elif val == 0:
+            self.orN(dest, [])
+        else:
+            self.comment("Couldn't assign value %s to node %s" % (val, dest)) 
+
+    def checkConstant(self, dest, val):
+        cnode = None
+        if val == 1:
+            cnode = self.one
+        elif val == 0:
+            cnode = self.zero
+        if cnode is None:
+            self.comment("Couldn't check that node %s = %d" % (dest, val))
+            return
+        self.cmdLine("equal", [dest, cnode])
+
+
     def notV(self, dest, v):
         self.cmdSequence("not", [dest, v])
 
