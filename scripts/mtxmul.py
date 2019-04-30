@@ -1,10 +1,17 @@
+#!/usr/bin/python
 # Find solutions to Brent equations
 # expressing different ways to multiply matrices with < n^3 multiplications
 
 import sys
 import getopt
-
 import circuit
+
+def usage(name):
+    print "Usage %s [-h] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
+    print " -h               Print this message"
+    print " -p AUX           Number of auxiliary variables"
+    print " -n N or N1:N2:N3 Matrix dimension(s)"
+    print " -o OUTF          Output file"
 
 # Sequence of digits starting at one
 def unitRange(n):
@@ -60,7 +67,6 @@ def iexpand(rlist, sofar = [[]]):
         for l in sofar:
             nsofar.append([idx] + l)
     return iexpand(rlist[:-1], nsofar)
-    
 
 
 def mencode(ckt, p, n1, n2, n3):
@@ -93,6 +99,7 @@ def mencode(ckt, p, n1, n2, n3):
         
 def solveMatrix(p, n1, n2, n3, f = sys.stdout, zdd = circuit.Z.none):
     ckt = circuit.Circuit(f)
+    ckt.cmdLine("option", ["echo", 1])
     ckt.comment("Solving Brent equations to derive matrix multiplication scheme")
     ckt.comment("Goal is to compute A (%d X %d) . B (%d X %d) = C (%d X %d) using %d multiplications" % (n1, n2, n2, n3, n1, n3, p))
     ckt.comment("ZDD mode = %s" % circuit.Z().name(zdd))
@@ -116,3 +123,39 @@ def solveMatrix(p, n1, n2, n3, f = sys.stdout, zdd = circuit.Z.none):
     ckt.count(bv)
     ckt.status()
 
+def run(name, args):
+    # Default is Strassens
+    n1, n2, n3 = 2, 2, 2
+    p = 7
+    outf = sys.stdout
+    optlist, args = getopt.getopt(args, 'hp:n:o:')
+    for (opt, val) in optlist:
+        if opt == '-h':
+            usage(name)
+            return
+        elif opt == '-p':
+            p = int(val)
+        elif opt == '-n':
+            fields = split(val, ':')
+            if len(fields) == 1:
+                n1 = n2 = n3 = int(fields[0])
+            elif len(fields) == 3:
+                n1, n2, n3 = int(fields[0]), int(fields[1]), int(fields[2])
+            else:
+                print "Invalid matrix dimension '%s'" % val
+                usage(name)
+                return
+        elif opt == '-o':
+            try:
+                outf = open(val, 'w')
+            except:
+                print "Couldn't open output file '%s'" % val
+                return
+        else:
+            print "Unknown option '%s'" % opt
+            usage(name)
+            return
+    solveMatrix(p, n1, n2, n3, outf)
+
+if __name__ == "__main__":
+    run(sys.argv[0], sys.argv[1:])
