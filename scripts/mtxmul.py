@@ -76,19 +76,26 @@ def mencode(ckt, p, n1, n2, n3, check = False):
     ranges = [n1, n2, n2, n3, n1, n2]
     indices = iexpand(ranges)
     ckt.comment("Generate all Brent terms")
+    first = True
     for i in indices:
         generateBrent(ckt, p, i, check = check)
-    names = circuit.Vec([brentName(i) for i in indices])
+        if first and not check:
+            first = False
+            name = circuit.Vec([brentName(i)])
+            ckt.comment("Find size of typical Brent term")
+            ckt.information(name)
+
     if not check:
-        ckt.comment("Find size of typical Brent term")
-        ckt.information(circuit.Vec([names[0]]))
+        names = circuit.Vec([brentName(i) for i in indices])
         ckt.comment("Find combined size of all Brent terms")
         ckt.information(names)
+
     for level in unitRange(6):
         ckt.comment("Combining terms at level %d" % level)
         gcount = ranges[-1]
         ranges = ranges[:-1]
         indices = iexpand(ranges)
+        first = True
         for i in indices:
             args = ckt.addVec(circuit.Vec([brentName(i + [x]) for x in unitRange(gcount)]))
             bn = brentName(i)
@@ -96,11 +103,13 @@ def mencode(ckt, p, n1, n2, n3, check = False):
             ckt.decRefs([args])
             if check:
                 ckt.checkConstant(bn, 1)
+            if first and not check:
+                first = False
+                name = circuit.Vec([brentName(i)])
+                ckt.comment("Find size of typical function at level %d" % level)
+                ckt.information(name)
         if not check:
             names = circuit.Vec([brentName(i) for i in indices])
-            if len(names) > 1:
-                ckt.comment("Find size of typical function at level %d" % level)
-                ckt.information(circuit.Vec([names[0]]))
             ckt.comment("Find combined size for terms at level %d" % level)
             ckt.information(names)
         
