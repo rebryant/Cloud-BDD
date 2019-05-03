@@ -448,7 +448,7 @@ class Circuit:
         k = len(destV) - 1
         n = len(v.nodes)
         t = self.tmpVec(k+1)
-        self.assignConstant[t[0], 1)
+        self.assignConstant(t[0], 1)
         for l in range(1,k+1):
             self.assignConstant(t[l], 0)
         for i in range(n-1):
