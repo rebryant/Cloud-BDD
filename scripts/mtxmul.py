@@ -113,9 +113,9 @@ def mencode(ckt, p, n1, n2, n3, check = False):
             ckt.comment("Find combined size for terms at level %d" % level)
             ckt.information(names)
         
-# Check that equations are correct by evaluating on known solutions
 
-# Encode Strassen's matrix multiplication
+
+# Check that equations are correct by evaluating on known solutions
 strassen = {
     'alpha':
         [[(1,1), (2,2)],
@@ -135,7 +135,7 @@ strassen = {
          [(1,1), (1,2)],
          [(2,1), (2,2)]
          ],
-    'gamma': 
+    'gamma':
     [[(1,1), (2,2)],
      [(2,1), (2,2)],
      [(1,2), (2,2)],
@@ -145,6 +145,7 @@ strassen = {
      [(1,1)]
      ]
     }
+
 
 def brentCheck(ckt, n1, n2, n3, scheme):
     alist = scheme['alpha']
