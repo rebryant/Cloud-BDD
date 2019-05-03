@@ -12,7 +12,16 @@ class BrentVariable:
     namer = {'a':'alpha', 'b':'beta', 'c':'gamma'}
     symbolizer = {'alpha':'a', 'beta':'b', 'gamma':'c'}
 
-    def __init__(self):
+
+    def __init__(self, prefix = None, row = None, column = None, level = None):
+        if prefix is not None:
+            self.prefix = prefix
+        if row is not None:
+            self.row = row
+        if column is not None:
+            self.column = column
+        if level is not None:
+            self.level = level
         self.fieldSplitter = re.compile('[-\.]')
 
     def fromName(self, name):
@@ -24,7 +33,8 @@ class BrentVariable:
         scol = fields[4]
         self.column = int(scol)
         slevel = fields[-1]
-        self.level = int(level)
+        self.level = int(slevel)
+        return self
 
     def fromSymbol(self, sym, permuteC = False):
         self.symbol = sym[0]
@@ -33,6 +43,7 @@ class BrentVariable:
         self.column = int(sym[2])
         if permuteC and self.prefix == 'gamma':
             self.row,self.column = self.column,self.row
+        return self
 
     # For use in formulas
     def generateName(self):
@@ -43,10 +54,13 @@ class BrentVariable:
     def generateSymbol(self, permuteC = False):
         sym = self.symbol
         s1 = str(self.row)
-        s2 = str(self.col)
+        s2 = str(self.column)
         if permuteC:
             s1, s2, = s2, s1
         return sym + s1 + s2
+
+    def __str__(self):
+        return self.generateName()
 
 # Describe encoding of matrix multiplication
 class MScheme:
@@ -61,6 +75,8 @@ class MScheme:
     betaList = []
     # Encoding of gamma variables
     gammaList = []
+    expressionSplitter = None
+
 
     # scheme is a dict with entries 'alpha', 'beta', 'gamma',
     # each giving lists of lenght auxCount
@@ -72,6 +88,7 @@ class MScheme:
         self.alphaList = []
         self.betaList = []
         self.gammaList = []
+        self.expressionSplitter = re.compile('[-+]')
         if scheme is not None:
             self.alphaList = scheme['alpha']
             self.auxCount = len(self.alphaList)
@@ -83,6 +100,7 @@ class MScheme:
         supportVars = [BrentVariable().fromName(s) for s in supportNames]
         self.auxCount = 0
         done = False
+        level = 1
         while not done:
             lists = {'a':[], 'b':[], 'c':[]}
             lcount = 0
@@ -98,11 +116,41 @@ class MScheme:
                 self.betaList.append(lists['b'])
                 self.gammaList.append(lists['c'])
                 self.auxCount += 1
+        return self
                 
     # Parse from printed solution
-    def parseFromWeb(self, str):
-        lines = str.split('\n')
+    def parseFromExpression(self, lines):
+        self.auxCount = len(lines)
+        level = 1
+        for line in lines:
+            # Remove parentheses
+            parts = line.split('*')
+            lists = [self.alphaList, self.betaList, self.gammaList]
+            for i in range(3):
+                p = parts[i]
+                # Strip parentheses
+                p = p[1:-1]
+                # Split with + and -:
+                terms = self.expressionSplitter.split(p)
+                # Remove empty ones
+                terms = [t for t in terms if t != ""]
+                # Create variables
+                vars = [BrentVariable(level = level).fromSymbol(t, permuteC = True) for t in terms]
+                lists[i].append(vars)
+            level += 1
+        return self
         
-            
+    # Generate formula encoding (partial) solution
+    def generateConstraints(self, ckt, subset = ['alpha', 'beta', 'gamma']):
+        pass
         
+strassenFormula = [
+    "(a11+a22)*(b11+b22)*(c11+c22)",
+    "(a21+a22)*(b11)*(c12+c22)",
+    "(a11)*(b12+b22)*(c21+c22)",
+    "(a22)*(b21+b11)*(c11+c12)",
+    "(a11+a12)*(b22)*(c11+c21)",
+    "(a21+a11)*(b11+b12)*(c22)",
+    "(a12+a22)*(b21+b22)*(c11)"
+    ]
         
