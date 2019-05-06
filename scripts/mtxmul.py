@@ -5,6 +5,7 @@
 import sys
 import getopt
 import circuit
+import brent
 
 def usage(name):
     print "Usage %s [-h] [-c] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
@@ -14,9 +15,6 @@ def usage(name):
     print " -n N or N1:N2:N3 Matrix dimension(s)"
     print " -o OUTF          Output file"
 
-# Sequence of digits starting at one
-def unitRange(n):
-    return range(1, n+1)
 
 # Literal representing value prefix p, row r, column c, aux variable l
 def mmterm(prefix, r, c, l, negate = False):
@@ -48,10 +46,10 @@ def generateBrent(ckt, p, indices, check):
     i1, i2, j1, j2, k1, k2 = indices
     kd = i2 == j1 and i1 == k1 and j2 == k2
     ckt.comment("Brent equation for i1 = %d, i2 = %d, j1 = %d, j2 = %d, k1 = %d, k2 = %d (kron delta = %d)" % (i1, i2, j1, j2, k1, k2, 1 if kd else 0))
-    av = ckt.addVec(circuit.Vec([alpha(i1, i2, l) for l in unitRange(p)]))
-    bv = ckt.addVec(circuit.Vec([beta(j1, j2, l) for l in unitRange(p)]))
-    gv = ckt.addVec(circuit.Vec([gamma(k1, k2, l) for l in unitRange(p)]))
-    pv = ckt.addVec(circuit.Vec([bterm('bp', i1, i2, j1, j2, k1, k2, l) for l in unitRange(p)]))
+    av = ckt.addVec(circuit.Vec([alpha(i1, i2, l) for l in brent.unitRange(p)]))
+    bv = ckt.addVec(circuit.Vec([beta(j1, j2, l) for l in brent.unitRange(p)]))
+    gv = ckt.addVec(circuit.Vec([gamma(k1, k2, l) for l in brent.unitRange(p)]))
+    pv = ckt.addVec(circuit.Vec([bterm('bp', i1, i2, j1, j2, k1, k2, l) for l in brent.unitRange(p)]))
     ckt.andV(pv, [av, bv, gv])
     rv = pv.concatenate(circuit.Vec([ckt.one])) if not kd else pv.dup()
     bn = brentName([i1, i2, j1, j2, k1, k2])
@@ -66,7 +64,7 @@ def iexpand(rlist, sofar = [[]]):
         return sofar
     n = rlist[-1]
     nsofar = []
-    for idx in unitRange(n):
+    for idx in brent.unitRange(n):
         for l in sofar:
             nsofar.append([idx] + l)
     return iexpand(rlist[:-1], nsofar)
@@ -90,14 +88,14 @@ def mencode(ckt, p, n1, n2, n3, check = False):
         ckt.comment("Find combined size of all Brent terms")
         ckt.information(names)
 
-    for level in unitRange(6):
+    for level in brent.unitRange(6):
         ckt.comment("Combining terms at level %d" % level)
         gcount = ranges[-1]
         ranges = ranges[:-1]
         indices = iexpand(ranges)
         first = True
         for i in indices:
-            args = ckt.addVec(circuit.Vec([brentName(i + [x]) for x in unitRange(gcount)]))
+            args = ckt.addVec(circuit.Vec([brentName(i + [x]) for x in brent.unitRange(gcount)]))
             bn = brentName(i)
             ckt.andN(bn, args)
             ckt.decRefs([args])
@@ -155,7 +153,7 @@ def brentCheck(ckt, n1, n2, n3, scheme):
     aval = [0] * p * n1 * n2
     bval = [0] * p * n2 * n3
     gval = [0] * p * n1 * n3
-    for l in unitRange(p):
+    for l in brent.unitRange(p):
         nrow = n1
         ncol = n2
         offset = nrow * ncol * (l-1)
@@ -181,13 +179,13 @@ def brentCheck(ckt, n1, n2, n3, scheme):
             idx = offset + (k1-1)*ncol + (k2-1)
             gval[idx] = 1
 
-    for l in unitRange(p):
+    for l in brent.unitRange(p):
         ckt.comment("Assign values for auxilliary term %d" % l)
         nrow = n1
         ncol = n2
         offset = nrow * ncol * (l-1)
-        for i1 in unitRange(nrow):
-            for i2 in unitRange(ncol):
+        for i1 in brent.unitRange(nrow):
+            for i2 in brent.unitRange(ncol):
                 idx = offset + (i1-1)*ncol + (i2-1)
                 node = circuit.Node(alpha(i1,i2,l))
                 ckt.assignConstant(node, aval[idx])
@@ -195,8 +193,8 @@ def brentCheck(ckt, n1, n2, n3, scheme):
         nrow = n2
         ncol = n3
         offset = nrow * ncol * (l-1)
-        for j1 in unitRange(nrow):
-            for j2 in unitRange(ncol):
+        for j1 in brent.unitRange(nrow):
+            for j2 in brent.unitRange(ncol):
                 idx = offset + (j1-1)*ncol + (j2-1)
                 node = circuit.Node(beta(j1,j2,l))
                 ckt.assignConstant(node, bval[idx])
@@ -204,14 +202,14 @@ def brentCheck(ckt, n1, n2, n3, scheme):
         nrow = n1
         ncol = n3
         offset = nrow * ncol * (l-1)
-        for k1 in unitRange(nrow):
-            for k2 in unitRange(ncol):
+        for k1 in brent.unitRange(nrow):
+            for k2 in brent.unitRange(ncol):
                 idx = offset + (k1-1)*ncol + (k2-1)
                 node = circuit.Node(gamma(k1,k2,l))
                 ckt.assignConstant(node, gval[idx])
 
 def brentVariables(ckt, p, n1, n2, n3):
-    for l in unitRange(p):
+    for l in brent.unitRange(p):
         # Declare variables for each auxilliary variable l
         ckt.comment("Variables for auxilliary term %d" % l)
         nrow = n1
