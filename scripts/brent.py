@@ -84,6 +84,15 @@ class BrentVariable:
     def __str__(self):
         return self.generateName()
 
+    def __hash__(self):
+        return str(self).__hash__()
+
+    def __eq__(self, other):
+        return str(self) == str(other)
+
+    def __cmp__(self, other):
+        return str(self).__cmp__(str(other))
+
 # Ways to refer to individual Brent equations
 # as well as aggregations of them
 # Indicate aggregation with character '*'    
