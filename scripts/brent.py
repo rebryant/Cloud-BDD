@@ -235,7 +235,7 @@ class MScheme(MProblem):
         self.alphaValues = [[]] * self.auxCount
         self.betaValues = [[]] * self.auxCount
         self.gammaValues = [[]] * self.auxCount
-        self.expressionSplitter = re.compile('[-+]')
+        self.expressionSplitter = re.compile('\s*[-+]\s*')
 
     # Get specified list
     def getList(self, category = 'alpha'):
