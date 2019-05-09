@@ -823,11 +823,11 @@ void shadow_satisfy(shadow_mgr mgr, ref_t r) {
     bool zdd = is_zdd(mgr, r);
     if (zdd) {
 	Cudd_zddPrintMinterm(mgr->bdd_manager, n);
-	Cudd_zddPrintDebug(mgr->bdd_manager, n, mgr->nzvars, 4);
+	//	Cudd_zddPrintDebug(mgr->bdd_manager, n, mgr->nzvars, 4);
     }
     else {
 	Cudd_PrintMinterm(mgr->bdd_manager, n);
-	Cudd_PrintDebug(mgr->bdd_manager, n, mgr->nvars, 4);
+	//	Cudd_PrintDebug(mgr->bdd_manager, n, mgr->nvars, 4);
     }
 }
 
