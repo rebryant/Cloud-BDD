@@ -36,7 +36,7 @@ class Node:
     refCnt = 0
 
     def __init__(self, name):
-        self.name = name
+        self.name = str(name)
         self.refCnt = 1
 
     def addRef(self):
@@ -60,7 +60,7 @@ class Vec:
     refCnt = 0
     
     def __init__(self, nodeList = []):
-        self.nodes = nodeList
+        self.nodes = [str(n) for n in nodeList]
         self.refCnt = 1
         
 
@@ -240,6 +240,9 @@ class Circuit:
 
     def count(self, fv):
         self.cmdLine("count", fv)
+
+    def satisfy(self, fv):
+        self.cmdLine("satisfy", fv)
 
     # Generate sequence of commands
     # argList should be list of vectors
