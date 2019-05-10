@@ -1,5 +1,6 @@
 # Encoding matrix multiplication problems
 import re
+import random
 import sys
 
 import circuit
@@ -33,6 +34,7 @@ class BrentVariable:
     fieldSplitter = None
     namer = {'a':'alpha', 'b':'beta', 'c':'gamma'}
     symbolizer = {'alpha':'a', 'beta':'b', 'gamma':'c'}
+    prefixOrder = {'gamma' : 0, 'alpha' : 1, 'beta' : 2 }
 
 
     def __init__(self, prefix = None, row = None, column = None, level = None):
@@ -91,7 +93,86 @@ class BrentVariable:
         return str(self) == str(other)
 
     def __cmp__(self, other):
-        return str(self).__cmp__(str(other))
+        c = cmp(self.level, other.level)
+        if c != 0:
+            return c
+        if self.prefix != other.prefix:
+            if self.prefix in self.prefixOrder and other.prefix in other.prefixOrder:
+                return cmp(self.prefixOrder[self.prefix], other.prefixOrder[other.prefix])
+            return cmp(self.prefix, other.prefix)
+        c = cmp(self.row, other.row)
+        if c != 0:
+            return c
+        c = cmp(self.column, other.column)
+        return c
+
+
+# A literal is either a variable (phase = 1) or its complement (phase = 0)
+class Literal:
+
+    variable = None
+    # Should be 0 or 1
+    phase = 1
+
+    def __init__(self, variable, phase):
+        self.variable = variable
+        self.phase = phase
+
+    def __str__(self):
+        prefix = '+' if self.phase == 1 else '-'
+        return prefix + str(self.variable)
+
+    def __cmp__(self, other):
+        c = cmp(self.variable, other.variable)
+        if c != 0:
+            return c
+        return cmp(self.phase, other.phase)
+
+    def assign(self, ckt):
+        node = circuit.Node(self.variable)
+        ckt.assignConstant(node, self.phase)
+
+
+
+# (Partial) assignment to a set of variables
+class Assignment:
+
+    # Dictionary mapping variables to phases
+    asst = None
+
+    def __init__(self, literals):
+        self.asst = {}
+        for lit in literals:
+            self.asst[lit.variable] = lit.phase
+        
+    def variables(self):
+        return sorted(self.asst.keys())
+
+    def literals(self):
+        vars = self.variables()
+        lits = [Literal(v, self.asst[v]) for v in vars]
+        return lits
+
+    def __str__(self):
+        slist = [str(lit) for lit in self.literals()]
+        return " ".join(slist)
+        
+    def __getitem__(self, key):
+        if key in self.asst:
+            return self.asst[key]
+        return None
+
+    def assign(self, ckt):
+        lits = self.literals()
+        for lit in lits:
+            lit.assign(ckt)
+
+    # Generate assignment consisting of randomly chosen subset
+    def randomSample(self, prob = 0.5):
+        tsize = int(prob * len(self.asst))
+        sample = random.sample(self.literals(), tsize)
+        return Assignment(sample)
+
 
 # Ways to refer to individual Brent equations
 # as well as aggregations of them
