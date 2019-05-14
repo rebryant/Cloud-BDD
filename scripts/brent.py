@@ -1,4 +1,5 @@
 # Encoding matrix multiplication problems
+import functools
 import re
 import random
 import sys
@@ -40,6 +41,7 @@ class BrentVariable:
     def __init__(self, prefix = None, row = None, column = None, level = None):
         if prefix is not None:
             self.prefix = prefix
+            self.symbol = self.symbolizer[prefix]
         if row is not None:
             self.row = row
         if column is not None:
@@ -122,6 +124,9 @@ class Literal:
         prefix = '+' if self.phase == 1 else '-'
         return prefix + str(self.variable)
 
+    def __eq__(self, other):
+        return self.variable == other.variable and self.phase == other.phase
+
     def __cmp__(self, other):
         c = cmp(self.variable, other.variable)
         if c != 0:
@@ -140,7 +145,7 @@ class Assignment:
     # Dictionary mapping variables to phases
     asst = None
 
-    def __init__(self, literals):
+    def __init__(self, literals = []):
         self.asst = {}
         for lit in literals:
             self.asst[lit.variable] = lit.phase
@@ -158,9 +163,13 @@ class Assignment:
         return " ".join(slist)
         
     def __getitem__(self, key):
-        if key in self.asst:
-            return self.asst[key]
-        return None
+        return self.asst[key]
+
+    def __setitem__(self, key, value):
+        self.asst[key] = value
+
+    def __len__(self):
+        return len(self.asst)
 
     def assign(self, ckt):
         lits = self.literals()
@@ -173,6 +182,14 @@ class Assignment:
         sample = random.sample(self.literals(), tsize)
         return Assignment(sample)
 
+    def subset(self, variableFilter):
+        nliterals = [lit for lit in self.literals() if variableFilter(lit.variable)]
+        return Assignment(nliterals)
+
+    # Update assignment with contents of another one
+    def overWrite(self, other):
+        for lit in other.literals():
+            self.asst[lit.variable] = lit.phase
 
 # Ways to refer to individual Brent equations
 # as well as aggregations of them
@@ -213,6 +230,7 @@ class MProblem:
             self.dim = dim
         self.auxCount = auxCount
         self.ckt = ckt
+            
 
     def nrow(self, category):
         return self.dim[1] if category == 'beta' else self.dim[0]
@@ -258,16 +276,21 @@ class MProblem:
         return self.iexpand(rlist[:-1], nsofar)
 
     # Declare (subset of) variables
-    def declareVariables(self, categories = ['alpha', 'beta', 'gamma']):
+    def declareVariables(self, fixedList = []):
         for level in unitRange(self.auxCount):
-            # Declare variables for each auxilliary variable level
-            self.ckt.comment("Variables for auxilliary term %d" % level)
-            for c in ['gamma', 'alpha', 'beta']:
-                if c in categories:
-                    nrow = self.nrow(c)
-                    ncol = self.ncol(c)
-                    v = circuit.Vec([BrentVariable(c, i/ncol+1, (i%ncol)+1, level) for i in range(nrow*ncol)])
-                    self.ckt.declare(v)
+            generatedComment = False
+            for cat in ['gamma', 'alpha', 'beta']:
+                nrow = self.nrow(cat)
+                ncol = self.ncol(cat)
+                allVars = [BrentVariable(cat, i/ncol+1, (i%ncol)+1, level) for i in range(nrow*ncol)]
+                vars = [v for v in allVars if v not in fixedList]
+                if len(vars) > 0:
+                    if not generatedComment:
+                        # Declare variables for auxilliary variable level
+                        self.ckt.comment("Variables for auxilliary term %d" % level)
+                        generatedComment = True
+                    vec = circuit.Vec(vars)
+                    self.ckt.declare(vec)
 
     # Generate Brent equations
     def generateBrentConstraints(self, check = False):
@@ -312,54 +335,52 @@ class MProblem:
 # Describe encoding of matrix multiplication
 class MScheme(MProblem):
 
-    # Encoding of alpha variables
-    alphaValues = []
-    # Encoding of beta variables
-    betaValues = []
-    # Encoding of gamma variables
-    gammaValues = []
+    # Assignment
+    assignment = None
+
     expressionSplitter = None
 
     def __init__(self, dim, auxCount, ckt):
         MProblem.__init__(self, dim, auxCount, ckt)
-        self.alphaValues = [[]] * self.auxCount
-        self.betaValues = [[]] * self.auxCount
-        self.gammaValues = [[]] * self.auxCount
         self.expressionSplitter = re.compile('\s*[-+]\s*')
+        self.generateZeroAssignment()
 
-    # Get specified list
-    def getList(self, category = 'alpha'):
-        if category == 'alpha' or category == 'a':
-            return self.alphaValues
-        if category == 'beta' or category == 'b':
-            return self.betaValues
-        if category == 'gamma' or category == 'c':
-            return self.gammaValues
-        raise MultException("No category '%s'" % category)
+    def generateZeroAssignment(self):
+        self.assignment = Assignment()
+        for level in unitRange(self.auxCount):
+            for cat in ['alpha', 'beta', 'gamma']:
+                for r in unitRange(self.nrow(cat)):
+                    for c in unitRange(self.ncol(cat)):
+                        v = BrentVariable(cat, r, c, level)
+                        self.assignment[v] = 0
 
-    # Get all lists
-    def getLists(self, category = 'alpha'):
-        return [self.alphaValues, self.betaValues, self.gammaValues]
 
     # Parse the output generated by a solver
     def parseFromSolver(self, supportNames, bitString):
+        if len(supportNames) != len(bitString):
+            raise MatrixException("Mismatch: %d variables in support, but only %d values in bit string" % (len(supportNames), len(bitString)))
         supportVars = [BrentVariable().fromName(s) for s in supportNames]
-        for level in unitRange(self.auxCount):
-            lists = {'a':[], 'b':[], 'c':[]}
-            for i in range(len(bitString)):
-                var = supportVars[i]
-                if bitString[i] == '1' and var.level == level:
-                    lists[var.symbol].append(var)
-            self.alphaValues[level-1] = sorted(lists['a'], key = str)
-            self.betaValues[level-1] = sorted(lists['b'], key = str)
-            self.gammaValues[level-1] = sorted(lists['c'], key = str)
+        for v, c in zip(supportVars, bitString):
+            if bitString[i] == '1':
+                self.assignment[v] = 1
+            elif bitString[i] == '0':
+                self.assignment[v] = 0
+            else:
+                raise MatrixException("Can't set variable %s to %s" % (str(v), c))
         return self
                 
     def showPolynomial(self, level):
-        aterms = [v.generateTerm() for v in  self.alphaValues[level-1]]
-        bterms = [v.generateTerm() for v in self.betaValues[level-1]]
-        gterms = [v.generateTerm(permuteC=True) for v in self.gammaValues[level-1]]
-        return "(%s)*(%s)*(%s)" % ("+".join(aterms), "+".join(bterms), "+".join(gterms))
+        slist = []
+        for cat in ['alpha', 'beta', 'gamma']:
+            cslist = []
+            for r in unitRange(self.nrow(cat)):
+                for c in unitRange(self.ncol(cat)):
+                    v = BrentVariable(cat, r, c, level)
+                    if self.assignment[v] == 1:
+                        cslist.append(v.generateTerm())
+            s = '(' + "+".join(cslist) + ')'
+            slist.append(s)
+        return '*'.join(slist)
             
     def printPolynomial(self, outfile = sys.stdout):
         for level in unitRange(self.auxCount):
@@ -370,10 +391,9 @@ class MScheme(MProblem):
         if level > self.auxCount:
             raise MatrixException('Out of range level: %d > %d' % (level, self.auxCount))
         parts = line.split('*')
-        lists = [self.alphaValues, self.betaValues, self.gammaValues]
         if len(parts) != 3:
             raise MatrixException("Incomplete polynomial.  Only has %d parts" % len(parts))
-        for p, l in zip(parts, lists):
+        for p in parts:
             # Strip parentheses
             p = p[1:-1]
             # Split with + and -:
@@ -381,8 +401,9 @@ class MScheme(MProblem):
             # Remove empty ones (due to unary -)
             terms = [t for t in terms if t != ""]
             # Create variables
-            vars = sorted([BrentVariable(level = level).fromTerm(t, permuteC = True) for t in terms], key = str)
-            l[level-1] = vars
+            vars = [BrentVariable(level = level).fromTerm(t, permuteC = True) for t in terms]
+            for v in vars:
+                self.assignment[v] = 1
         
     # Read polynomial from file
     def parseFromFile(self, fname):
@@ -401,70 +422,35 @@ class MScheme(MProblem):
             raise MatrixException("Expected %d equations in polynomial file, got %d" %  (self.auxCount, level))
         return self
 
-    # Generate formula encoding (partial) solution
-    def generateCategoryConstraints(self, category, level):
-        vars = self.getList(category)[level-1]
-        p = self.auxCount
-        nrow = self.nrow(category)
-        ncol = self.ncol(category)
-        valueList = [[0 for c in range(ncol)] for r in range(nrow)]
-        for v in vars:
-            valueList[v.row-1][v.column-1] = 1
-        self.ckt.comment("Assign values to %s terms for auxilliary term %d" % (category, level))
-        for row in unitRange(nrow):
-            for col in unitRange(ncol):
-                v = BrentVariable(prefix = category, row = row, column = col, level = level)
-                node = circuit.Node(v)
-                self.ckt.assignConstant(node, valueList[row-1][col-1])
-                    
-    def generateFixedConstraints(self, categories = ['alpha', 'beta', 'gamma']):
-        for l in unitRange(self.auxCount):
-            for c in categories:
-                self.generateCategoryConstraints(c, l)
 
-    def subList(self, vlistA, vlistB):
-        namesA = [str(v) for v in vlistA]
-        namesB = [str(v) for v in vlistB]
-        if len(namesB) > len(namesA):
-            return False
-        for n in namesA:
-            if n not in namesB:
-                return False
-        return True
+    def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}):
+        fixedAssignment = Assignment()
+        for cat in categoryProbabilities.keys():
+            prob = categoryProbabilities[cat]
+            ca = self.assignment.subset(lambda(v): v.prefix == cat).randomSample(prob)
+            fixedAssignment.overWrite(ca)
+        if len(fixedAssignment) > 0:
+            self.ckt.comment("Fixed assignments")
+            fixedAssignment.assign(self.ckt)
+        fixedVariables = [v for v in fixedAssignment.variables()]
+        self.declareVariables(fixedVariables)
 
-    def isSubScheme(self, other):
-        if self.auxCount != other.auxCount:
-            return False
-        myLists = self.getLists()
-        otherLists = other.getLists()
-
-        for myL, otherL in zip(myLists, otherLists):
-            for level in unitRange(self.auxCount):
-                ml = myL[level-1]
-                ol = otherL[level-1]
-                if not self.subList(ml, l):
-                    return False
-        return True
-
-    def generateProgram(self, fixedCategories = []):
-        symbolicCategories = [c for c in ['alpha', 'beta', 'gamma'] if c not in fixedCategories]
-        check = len(fixedCategories) == 3
-        self.ckt.cmdLine("option", ["echo", 1])
-        mode = "Checking" if check else "Solving"
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}):
+        plist = categoryProbabilities.values()
+        isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
+#        self.ckt.cmdLine("option", ["echo", 1])
+        mode = "Checking" if isFixed else "Solving"
         self.ckt.comment("%s Brent equations to derive matrix multiplication scheme" % mode)
         args = self.fullRanges() + (self.auxCount,)
         self.ckt.comment("Goal is to compute A (%d x %d) X B (%d x %d) = C (%d x %d) using %d multiplications" % args)
-        if len(fixedCategories) > 0:
-            self.ckt.comment("Variables %s hard coded" % ", ".join(fixedCategories))
-        if len(symbolicCategories) > 0:
-            self.ckt.comment("Variables %s symbolic" % ", ".join(symbolicCategories))
-        if len(fixedCategories) > 0:
-            self.generateFixedConstraints(fixedCategories)
-        if len(symbolicCategories) > 0:
-            self.declareVariables(symbolicCategories)
-        self.generateBrentConstraints(check)
+        for k in categoryProbabilities.keys():
+            prob = categoryProbabilities[k]
+            self.ckt.comment("Category %s has %.1f%% of its variables fixed" % (k, prob * 100.0))
+        self.generateMixedConstraints(categoryProbabilities)
+        self.generateBrentConstraints(isFixed)
         bv = circuit.Vec([BrentTerm()])
-        if not check:
+        if not isFixed:
+
             self.ckt.count(bv)
             self.ckt.status()
             self.ckt.satisfy(bv)

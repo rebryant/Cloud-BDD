@@ -2,19 +2,23 @@
 # Find or check solutions to Brent equations
 # expressing different ways to multiply matrices with < n^3 multiplications
 
+
+import functools
 import sys
 import getopt
+
 import circuit
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-c CAT] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
+    print "Usage %s [-h] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
     print " -h               Print this message"
-    print " -c CAT           Hard code categories in CAT (substring of 'abc')"
+    print " -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class"
     print " -s PFILE         Read hard-coded values from polynomial in PFILE"
     print " -p AUX           Number of auxiliary variables"
     print " -n N or N1:N2:N3 Matrix dimension(s)"
     print " -o OUTF          Output file"
+    sys.exit(0)
 
 def run(name, args):
     # Default is Strassens
@@ -22,7 +26,8 @@ def run(name, args):
     auxCount = 7
     check = False
     outf = sys.stdout
-    categories = []
+    categoryProbabilities = {'alpha':0.0, 'beta':0.0, 'gamma':0.0}
+    someFixed = False
     pname = None
     optlist, args = getopt.getopt(args, 'hc:s:p:n:o:')
     for (opt, val) in optlist:
@@ -30,6 +35,28 @@ def run(name, args):
             usage(name)
             return
         elif opt == '-c':
+            fields = val.split(":")
+            if len(fields) == 1:
+                # Single probability for all categories
+                try:
+                    pct = int(fields[0])
+                except:
+                    print "Cannot find percentage of fixed assignments from '%s'" % val
+                    usage(name)
+                prob = pct / 100.0
+                categoryProbabilities = {'alpha':prob, 'beta':prob, 'gamma':prob}
+                someFixed = prob > 0.0
+            elif len(fields) == 3:
+                try:
+                    plist = [int(f)/100.0 for f in fields]
+                except:
+                    print "Cannot find 3 percentages of fixed assignments from '%s'" % val
+                    usage(name)
+                categoryProbabilities = {'alpha':plist[0], 'beta':plist[1], 'gamma':plist[2]}
+                someFixed = functools.reduce(lambda x, y: x+y, plist) > 0.0
+            else:
+                print "Cannot find 3 percentages of fixed assignments from '%s'" % val
+                usage(name)
             if 'a' in val:
                 categories += ['alpha']
             if 'b' in val:
@@ -62,8 +89,8 @@ def run(name, args):
             return
     ckt = circuit.Circuit(outf)
     s = brent.MScheme((n1, n2, n3), auxCount, ckt)
-    if len(categories) > 0 and pname is None:
-        print "Need solution for categories %s" % (", ".join(categories))
+    if someFixed and pname is None:
+        print "Need solution in order to assign fixed values"
         return
     if pname is not None:
         try:
@@ -71,7 +98,7 @@ def run(name, args):
         except brent.MatrixException as ex:
             print "Parse of file '%s' failed: %s" % (pname, str(ex))
             return
-    s.generateProgram(categories)
+    s.generateProgram(categoryProbabilities)
     
     
             
