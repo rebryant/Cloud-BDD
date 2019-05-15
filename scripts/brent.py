@@ -438,7 +438,7 @@ class MScheme(MProblem):
     def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}):
         plist = categoryProbabilities.values()
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
-#        self.ckt.cmdLine("option", ["echo", 1])
+        self.ckt.cmdLine("option", ["echo", 1])
         mode = "Checking" if isFixed else "Solving"
         self.ckt.comment("%s Brent equations to derive matrix multiplication scheme" % mode)
         args = self.fullRanges() + (self.auxCount,)
