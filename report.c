@@ -119,6 +119,28 @@ void report_noreturn(int level, char *fmt, ...)
     }
 }
 
+void report_noreturn_nostdout(int level, char *fmt, ...)
+{
+    va_list ap;
+    if (!verbfile)
+	init_files(stdout, stdout);
+    if (level <= verblevel) {
+	if (verbfile != stdout) {
+	    va_start(ap, fmt);
+	    vfprintf(verbfile, fmt, ap);
+	    fflush(verbfile);
+	    va_end(ap);
+	}
+	if (logfile) {
+	    va_start(ap, fmt);
+	    vfprintf(logfile, fmt, ap);
+	    fflush(logfile);
+	    va_end(ap);
+	}
+    }
+}
+
+
 /* Functions denoting failures */
 
 /* General failure */

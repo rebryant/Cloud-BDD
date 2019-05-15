@@ -914,7 +914,7 @@ static unsigned unpack_index(word_t pval) {
 }
 
 static word_t unpack_val(word_t pval) {
-    return pval & ~((~0L) << 48);    
+    return pval & ~((~0UL) << 48);    
 }
 
 /* Unpack packed value and weight according to specified index */

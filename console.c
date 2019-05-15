@@ -310,12 +310,12 @@ bool do_help_cmd(int argc, char *argv[]) {
 
 bool do_comment_cmd(int argc, char *argv[]) {
     int i;
-    for (i = 0; i < argc-1; i++) {
-	report_noreturn(0, "%s ", argv[i]);
+    if (echo)
+	return true;
+    for (i = 0; i < argc; i++) {
+	report_noreturn_nostdout(0, "%s ", argv[i]);
     }
-    if (i < argc) {
-	report(0, "%s", argv[i]);
-    }
+    report_noreturn_nostdout(0, "\n");
     return true;
 }
 
@@ -478,7 +478,7 @@ static char *readline() {
 		    *lptr++ = '\n';
 		    *lptr++ = '\0';
 		    if (echo)
-			report_noreturn(0, linebuf);
+			report_noreturn(0, "%s", linebuf);
 		    return linebuf;
 		} else
 		    return NULL;
@@ -497,7 +497,7 @@ static char *readline() {
     }
     *lptr++ = '\0';
     if (echo)
-	report_noreturn(0, linebuf);
+	report_noreturn(0, "%s", linebuf);
     return linebuf;
 }
 

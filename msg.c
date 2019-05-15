@@ -358,7 +358,7 @@ bool new_server(unsigned port, int *fdp, unsigned *portp) {
 }
 
 /* Open connection to server.  Return socket file descriptor */
-int open_clientfd(char *hostname, unsigned port) {
+int open_clientfd(const char *hostname, unsigned port) {
     int clientfd;
     struct addrinfo hints, *listp, *p;
     char sport[10];
@@ -402,7 +402,7 @@ int open_clientfd_ip(unsigned ip, unsigned port) {
     struct in_addr ina;
     /* Convert ip to dotted decimal form */
     ina.s_addr = htonl(ip);
-    char *name = inet_ntop(AF_INET, &ina, sip, INET_ADDRSTRLEN);
+    const char *name = inet_ntop(AF_INET, &ina, sip, INET_ADDRSTRLEN);
     return open_clientfd(name, port);
 }
 

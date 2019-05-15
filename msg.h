@@ -189,7 +189,7 @@ bool new_server(unsigned port, int *fdp, unsigned *portp);
  *   Returns -1 and sets errno on Unix error. 
  *   Returns -2 and sets h_errno on DNS (gethostbyname) error.
  */
-int open_clientfd(char *hostname, unsigned port);
+int open_clientfd(const char *hostname, unsigned port);
 
 /* Open connection to server given IPv4 host address.
  *   Return socket file descriptor
