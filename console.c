@@ -478,7 +478,7 @@ static char *readline() {
 		    *lptr++ = '\n';
 		    *lptr++ = '\0';
 		    if (echo)
-			report_noreturn(0, "%s", linebuf);
+			report_noreturn(0, "%s%s", prompt, linebuf);
 		    return linebuf;
 		} else
 		    return NULL;
@@ -497,7 +497,7 @@ static char *readline() {
     }
     *lptr++ = '\0';
     if (echo)
-	report_noreturn(0, "%s", linebuf);
+	report_noreturn(0, "%s%s", prompt, linebuf);
     return linebuf;
 }
 
