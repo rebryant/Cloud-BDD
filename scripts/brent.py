@@ -121,7 +121,7 @@ class Literal:
         self.phase = phase
 
     def __str__(self):
-        prefix = '+' if self.phase == 1 else '-'
+        prefix = '' if self.phase == 1 else '!'
         return prefix + str(self.variable)
 
     def __eq__(self, other):
@@ -220,6 +220,69 @@ class BrentTerm:
     def __str__(self):
         return self.prefix + '-' + '.'.join(self.indices) + self.suffix
 
+# Representation of a triple a_i,j * b_j,k --> c_i,k
+class KroneckerTerm:
+
+    i = 1
+    j = 1
+    k = 1
+    level = 1
+
+    def __init__(self, i, j, k, level):
+        self.i = i
+        self.j = j
+        self.k = k
+        self.level = level
+
+    def alpha(self):
+        return BrentVariable('alpha', self.i, self.j, self.level)
+
+    def beta(self):
+        return BrentVariable('beta', self.j, self.k, self.level)
+
+    def gamma(self):
+        return BrentVariable('gamma', self.i, self.k, self.level)
+
+    def variables(self):
+        return [self.alpha(), self.beta(), self.gamma()]
+
+    def inAssignment(self, asst):
+        avar = self.alpha()
+        if avar not in asst or asst[avar] == 0:
+            return False
+        bvar = self.beta()
+        if bvar not in asst or asst[bvar] == 0:
+            return False
+        gvar = self.gamma()
+        if gvar not in asst or asst[gvar] == 0:
+            return False
+        return True
+
+# Representation of set of Kronecker terms
+class KroneckerSet:
+
+    kdlist = []
+
+    def __init__(self, kdlist = []):
+        self.kdlist = kdlist
+
+    def addTerm(self, kt):
+        self.kdlist.append(kt)
+    
+    def variables(self):
+        vlist = []
+        for kt in self.kdlist:
+            vlist += kt.variables()
+        return vlist
+
+    # See if there is a matching Kronecker term and return its level
+    # Return -1 if none found
+    def findLevel(self, i, j, k):
+        for kt in self.kdlist:
+            if kt.i == i and kt.j == j and kt.k == k:
+                return kt.level
+        return -1
+
 # Solve matrix multiplication
 class MProblem:
     # Matrix dimensions, given as (n1, n2, n3)
@@ -248,24 +311,37 @@ class MProblem:
         return (self.nrow('alpha'), self.ncol('alpha'), self.nrow('beta'), self.ncol('beta'), self.nrow('gamma'), self.ncol('gamma'))
 
     # Generate Brent equation
-    def generateBrent(self, indices, check = False):
+    def generateBrent(self, indices, kset = None, check = False):
         if len(indices) != 6:
             raise MatrixException("Cannot generate Brent equation for %d indices" % len(indices))
         i1, i2, j1, j2, k1, k2 = indices
         kd = i2 == j1 and i1 == k1 and j2 == k2
-        self.ckt.comment("Brent equation for i1 = %d, i2 = %d, j1 = %d, j2 = %d, k1 = %d, k2 = %d (kron delta = %d)" % (i1, i2, j1, j2, k1, k2, 1 if kd else 0))
-        av = self.ckt.addVec(circuit.Vec([BrentVariable('alpha', i1, i2, l) for l in unitRange(self.auxCount)]))
-        bv = self.ckt.addVec(circuit.Vec([BrentVariable('beta', j1, j2, l) for l in unitRange(self.auxCount)]))
-        gv = self.ckt.addVec(circuit.Vec([BrentVariable('gamma', k1, k2, l) for l in unitRange(self.auxCount)]))
+        fixLevel = -1
+        if kd and kset is not None:
+            fixLevel = kset.findLevel(i1, j1, k2)
+        av = circuit.Vec([BrentVariable('alpha', i1, i2, l) for l in unitRange(self.auxCount)])
+        bv = circuit.Vec([BrentVariable('beta', j1, j2, l) for l in unitRange(self.auxCount)])
+        gv = circuit.Vec([BrentVariable('gamma', k1, k2, l) for l in unitRange(self.auxCount)])
         pv = self.ckt.addVec(circuit.Vec([BrentTerm(indices, 'bp', l) for l in unitRange(self.auxCount)]))
-        self.ckt.andV(pv, [av, bv, gv])
-        rv = pv.concatenate(circuit.Vec([self.ckt.one])) if not kd else pv.dup()
         bn = circuit.Node(BrentTerm(indices))
-        self.ckt.xorN(bn, rv)
+        if fixLevel < 0:
+            self.ckt.comment("Brent equation for i1 = %d, i2 = %d, j1 = %d, j2 = %d, k1 = %d, k2 = %d (kron delta = %d)" % (i1, i2, j1, j2, k1, k2, 1 if kd else 0))
+            self.ckt.andV(pv, [av, bv, gv])
+            rv = pv.concatenate(circuit.Vec([self.ckt.one])) if not kd else pv.dup()
+            self.ckt.xorN(bn, rv)
+        else:
+            self.ckt.comment("Constrained Brent equation for i1 = %d, i2 = %d, j1 = %d, j2 = %d, k1 = %d, k2 = %d, level = %d" % (i1, i2, j1, j2, k1, k2, fixLevel))
+            self.ckt.andV(pv, [av, bv, gv])
+            lvec = [Literal(v, 0) for v in pv]
+            lvec[fixLevel-1].phase = 1
+            lv = circuit.Vec(lvec)
+            self.ckt.andN(bn, lv)
         self.ckt.decRefs([pv])
         if check:
             self.ckt.checkConstant(bn, 1)
         
+
+
     # Helper routines to build up formula encoding all Brent constraints
 
     # Given list of form [n1, n2, ..., nk],
@@ -299,13 +375,13 @@ class MProblem:
                     self.ckt.declare(vec)
 
     # Generate Brent equations
-    def generateBrentConstraints(self, check = False):
+    def generateBrentConstraints(self, kset = None, check = False):
         ranges = self.fullRanges()
         indices = self.iexpand(ranges)
         self.ckt.comment("Generate all Brent equations")
         first = True
         for idx in indices:
-            self.generateBrent(idx, check)
+            self.generateBrent(idx, kset, check)
             if first and not check:
                 first = False
                 name = circuit.Vec([BrentTerm(idx)])
@@ -343,7 +419,7 @@ class MScheme(MProblem):
 
     # Assignment
     assignment = None
-    kroneckerVariables = []
+    kroneckerTerms = None
 
     expressionSplitter = None
 
@@ -351,7 +427,7 @@ class MScheme(MProblem):
         MProblem.__init__(self, dim, auxCount, ckt)
         self.expressionSplitter = re.compile('\s*[-+]\s*')
         self.generateZeroAssignment()
-        self.kroneckerVariables = self.findKroneckerVariables()
+        self.kroneckerTerms = self.findKroneckers()
 
     def generateZeroAssignment(self):
         self.assignment = Assignment()
@@ -362,27 +438,25 @@ class MScheme(MProblem):
                         v = BrentVariable(cat, r, c, level)
                         self.assignment[v] = 0
 
-    def findKroneckerVariables(self):
-        vlist = []
+    def findKroneckers(self):
+        kset = KroneckerSet()
         for level in unitRange(self.auxCount):
-            for i1 in unitRange(self.dim[0]):
-                for j1 in unitRange(self.dim[1]):
-                    for k2 in unitRange(self.dim[2]):
-                        avar = BrentVariable('alpha', i1, j1, level)
-                        bvar = BrentVariable('beta',  j1, k2, level)
-                        gvar = BrentVariable('gamma', i1, k2, level)
-                        if (avar in self.assignment and self.assignment[avar] == 1 and
-                            bvar in self.assignment and self.assignment[bvar] == 1 and
-                            gvar in self.assignment and self.assignment[gvar] == 1):
-                            vlist += [avar, bvar, gvar]
-                            slist = [str(v) for v in vlist]
-        return vlist
+            for i in unitRange(self.dim[0]):
+                for j in unitRange(self.dim[1]):
+                    for k in unitRange(self.dim[2]):
+                        kt = KroneckerTerm(i, j, k, level)
+                        if kt.inAssignment(self.assignment):
+                            kset.addTerm(kt)
+        return kset
 
+    # How many additions would be required to do the multiplication?
+    def addCount(self):
+        return 0
 
     def duplicate(self):
         nscheme = MScheme(self.dim, self.auxCount, self.ckt)
         nscheme.assignment = self.assignment.subset()
-        nscheme.kroneckerVariables = nscheme.findKroneckerVariables()
+        nscheme.kroneckerTerms = nscheme.findKroneckers()
         return nscheme
 
     # Parse the output generated by a solver
@@ -397,7 +471,7 @@ class MScheme(MProblem):
                 self.assignment[v] = 0
             else:
                 raise MatrixException("Can't set variable %s to %s" % (str(v), c))
-        self.kroneckerVariables = self.findKroneckerVariables()
+        self.kroneckerTerms = self.findKroneckers()
         return self
                 
     def showPolynomial(self, level):
@@ -451,14 +525,15 @@ class MScheme(MProblem):
         f.close()
         if level != self.auxCount + 1:
             raise MatrixException("Expected %d equations in polynomial file, got %d" %  (self.auxCount, level))
-        self.kroneckerVariables = self.findKroneckerVariables()
+        self.kroneckerTerms = self.findKroneckers()
         return self
 
 
     def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, fixKV = False):
         fixedAssignment = Assignment()
-        vlist = self.kroneckerVariables if fixKV else []
+        vlist = []
         if fixKV:
+            vlist = self.kroneckerTerms.variables()
             ka = self.assignment.subset(lambda(v): v in vlist)
             fixedAssignment.overWrite(ka)
         for cat in categoryProbabilities.keys():
@@ -471,7 +546,7 @@ class MScheme(MProblem):
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, fixKV = False):
         plist = categoryProbabilities.values()
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
@@ -482,8 +557,9 @@ class MScheme(MProblem):
         for k in categoryProbabilities.keys():
             prob = categoryProbabilities[k]
             self.ckt.comment("Category %s has %.1f%% of its variables fixed" % (k, prob * 100.0))
-        self.generateMixedConstraints(categoryProbabilities)
-        self.generateBrentConstraints(isFixed)
+        self.generateMixedConstraints(categoryProbabilities, fixKV)
+        kset = self.kroneckerTerms if fixKV else None
+        self.generateBrentConstraints(kset, isFixed)
         bv = circuit.Vec([BrentTerm()])
         if not isFixed:
             self.ckt.count(bv)
