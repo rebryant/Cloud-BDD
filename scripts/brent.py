@@ -137,8 +137,6 @@ class Literal:
         node = circuit.Node(self.variable)
         ckt.assignConstant(node, self.phase)
 
-
-
 # (Partial) assignment to a set of variables
 class Assignment:
 
@@ -192,6 +190,16 @@ class Assignment:
             nliterals = [lit for lit in self.literals() if variableFilter(lit.variable)]
         return Assignment(nliterals)
 
+    # Generate assignment where levels are permutated according to permutation map
+    def permuteLevels(self, permuter):
+        nliterals = []
+        for lit in self.literals():
+            v = lit.variable
+            nlevel = permuter[v.level]
+            nv = BrentVariable(v.prefix, v.row, v.column, nlevel)
+            nliterals.append(Literal(nv, lit.phase))
+        return Assignment(nliterals)
+
     # Update assignment with contents of another one
     def overWrite(self, other):
         for lit in other.literals():
@@ -221,7 +229,7 @@ class BrentTerm:
         return self.prefix + '-' + '.'.join(self.indices) + self.suffix
 
 # Representation of a triple a_i,j * b_j,k --> c_i,k
-class KroneckerTerm:
+class KernelTerm:
 
     i = 1
     j = 1
@@ -258,13 +266,35 @@ class KroneckerTerm:
             return False
         return True
 
-# Representation of set of Kronecker terms
-class KroneckerSet:
+    def __cmp__(self, other):
+        c = cmp(self.level, other.level)
+        if c != 0:
+            return c
+        c = cmp(self.i, other.i)
+        if c != 0:
+            return c
+        c = cmp(self.i, other.j)
+        if c != 0:
+            return c
+        return cmp(self.k, other.k)
+
+    def generateString(self, showLevel = True):
+        astring = self.alpha().generateTerm()
+        bstring = self.beta().generateTerm()
+        cstring = self.gamma().generateTerm(True)
+        lstring = "[%d]" % self.level if showLevel else ""
+        return "%s*%s*%s%s" % (astring, bstring, cstring, lstring)
+
+    def __str__(self):
+        return self.generateString()
+
+# Representation of set of Kernel terms
+class KernelSet:
 
     kdlist = []
 
     def __init__(self, kdlist = []):
-        self.kdlist = kdlist
+        self.kdlist = sorted(kdlist)
 
     def addTerm(self, kt):
         self.kdlist.append(kt)
@@ -275,13 +305,61 @@ class KroneckerSet:
             vlist += kt.variables()
         return vlist
 
-    # See if there is a matching Kronecker term and return its level
+    def __str__(self):
+        tstrings = [str(kt) for kt in self.kdlist]
+        return "[%s]" % " ".join(tstrings)
+
+    def __len__(self):
+        return len(self.kdlist)
+
+    def canonize(self):
+        # Canonical form lists kernels ordered in levels, with the levels containing
+        # the most terms first.  Within level, order kernel lexicographically
+        # kdlist already sorted by terms
+        # Only problem is that the levels should be sorted inversely by length
+        # and secondarily by indices of first element
+
+        auxCount = max([kt.level for kt in self.kdlist])
+        levelList = [[] for l in range(auxCount)]
+        for kt in self.kdlist:
+            levelList[kt.level-1].append(kt)
+
+        levelList.sort(key = lambda(ls) : "%d+%s" % (999-len(ls), ls[0].generateString(False)))
+
+        nkdlist = []
+        # Map from old level to new level
+        permuter = {}
+        nlevel = 1
+        for llist in levelList:
+            for kt in llist:
+                olevel = kt.level
+                nkt = KernelTerm(kt.i, kt.j, kt.k, nlevel)
+                nkdlist.append(nkt)
+            permuter[olevel] = nlevel
+            nlevel += 1
+        return (KernelSet(nkdlist), permuter)
+
+
+    # See if there is a matching Kernel term and return its level
     # Return -1 if none found
     def findLevel(self, i, j, k):
         for kt in self.kdlist:
             if kt.i == i and kt.j == j and kt.k == k:
                 return kt.level
         return -1
+
+    # Find subset of kernels belonging to groups of specified size
+    def groupings(self, minCount = 1, maxCount = 1):
+        auxCount = max([kt.level for kt in self.kdlist])
+        levelList = [[] for l in range(auxCount)]
+        for kt in self.kdlist:
+            levelList[kt.level-1].append(kt)
+        nkdlist = []
+        for llist in levelList:
+            if len(llist) >= minCount and len(llist) <= maxCount:
+                nkdlist += llist
+        return KernelSet(nkdlist)
+
 
 # Solve matrix multiplication
 class MProblem:
@@ -300,7 +378,6 @@ class MProblem:
         self.auxCount = auxCount
         self.ckt = ckt
             
-
     def nrow(self, category):
         return self.dim[1] if category == 'beta' else self.dim[0]
 
@@ -419,15 +496,18 @@ class MScheme(MProblem):
 
     # Assignment
     assignment = None
-    kroneckerTerms = None
+    kernelTerms = None
 
     expressionSplitter = None
 
-    def __init__(self, dim, auxCount, ckt):
+    def __init__(self, dim, auxCount, ckt, assignment = None):
         MProblem.__init__(self, dim, auxCount, ckt)
         self.expressionSplitter = re.compile('\s*[-+]\s*')
-        self.generateZeroAssignment()
-        self.kroneckerTerms = self.findKroneckers()
+        if assignment is None:
+            self.generateZeroAssignment()
+        else:
+            self.assignment = assignment
+        self.kernelTerms = self.findKernels()
 
     def generateZeroAssignment(self):
         self.assignment = Assignment()
@@ -438,13 +518,13 @@ class MScheme(MProblem):
                         v = BrentVariable(cat, r, c, level)
                         self.assignment[v] = 0
 
-    def findKroneckers(self):
-        kset = KroneckerSet()
+    def findKernels(self):
+        kset = KernelSet()
         for level in unitRange(self.auxCount):
             for i in unitRange(self.dim[0]):
                 for j in unitRange(self.dim[1]):
                     for k in unitRange(self.dim[2]):
-                        kt = KroneckerTerm(i, j, k, level)
+                        kt = KernelTerm(i, j, k, level)
                         if kt.inAssignment(self.assignment):
                             kset.addTerm(kt)
         return kset
@@ -454,10 +534,59 @@ class MScheme(MProblem):
         return 0
 
     def duplicate(self):
-        nscheme = MScheme(self.dim, self.auxCount, self.ckt)
-        nscheme.assignment = self.assignment.subset()
-        nscheme.kroneckerTerms = nscheme.findKroneckers()
-        return nscheme
+        return  MScheme(self.dim, self.auxCount, self.ckt, self.assignment.subset())
+
+    # Check properties of scheme
+    def obeysUniqueUsage(self):
+        return len(self.kernelTerms) == self.dim[0] * self.dim[1] * self.dim[2]
+
+    def obeysMaxDouble(self):
+        k = self.kernelTerms.groupings(minCount = 3, maxCount = self.auxCount)
+        return len(k) == 0
+
+    def obeysSingletonExclusion(self):
+        allLiterals = self.assignment.literals()
+        sk = self.kernelTerms.groupings(minCount = 1, maxCount = 1)
+        for kt in sk.kdlist:
+            level = kt.level
+            foundSingle = False
+            for cat in ['alpha', 'beta', 'gamma']:
+                catLits = [lit for lit in allLiterals if lit.variable.prefix == cat and lit.variable.level == level]
+                count = functools.reduce(lambda x, y: x+y, [lit.phase for lit in catLits])
+                foundSingle = foundSingle or count <= 1
+            if not foundSingle:
+                return False
+        return True
+
+    def brentCheck(self, i1, i2, j1, j2, k1, k2):
+        val = 0
+        for level in unitRange(self.auxCount):
+            avar = BrentVariable('alpha', i1, i2, level)
+            aphase = self.assignment[avar] if avar in self.assignment else 0
+            bvar = BrentVariable('beta', j1, j2, level)
+            bphase = self.assignment[bvar] if bvar in self.assignment else 0
+            gvar = BrentVariable('gamma', k1, k2, level)
+            gphase = self.assignment[gvar] if gvar in self.assignment else 0
+            val = val + (aphase * bphase * gphase)
+        kd = i2 == j1 and i1 == k1 and j2 == k2
+        return (val % 2) == kd
+
+    def obeysBrent(self):
+        ok = True
+        for i1 in unitRange(self.dim[0]):
+            for i2 in unitRange(self.dim[1]):
+                for j1 in unitRange(self.dim[1]):
+                    for j2 in unitRange(self.dim[2]):
+                        for k1 in unitRange(self.dim[0]):
+                            for k2 in unitRange(self.dim[2]):
+                                ok = ok and self.brentCheck(i1, i2, j1, j2, k1, k2)
+        return ok
+
+    # Return scheme with levels reordered to canonize kernels
+    def canonize(self):
+        (k, permuter) = self.kernelTerms.canonize()
+        nassignment = self.assignment.permuteLevels(permuter)
+        return MScheme(self.dim, self.auxCount, self.ckt, nassignment)
 
     # Parse the output generated by a solver
     def parseFromSolver(self, supportNames, bitString):
@@ -471,7 +600,7 @@ class MScheme(MProblem):
                 self.assignment[v] = 0
             else:
                 raise MatrixException("Can't set variable %s to %s" % (str(v), c))
-        self.kroneckerTerms = self.findKroneckers()
+        self.kernelTerms = self.findKernels()
         return self
                 
     def showPolynomial(self, level):
@@ -525,7 +654,7 @@ class MScheme(MProblem):
         f.close()
         if level != self.auxCount + 1:
             raise MatrixException("Expected %d equations in polynomial file, got %d" %  (self.auxCount, level))
-        self.kroneckerTerms = self.findKroneckers()
+        self.kernelTerms = self.findKernels()
         return self
 
 
@@ -533,7 +662,7 @@ class MScheme(MProblem):
         fixedAssignment = Assignment()
         vlist = []
         if fixKV:
-            vlist = self.kroneckerTerms.variables()
+            vlist = self.kernelTerms.variables()
             ka = self.assignment.subset(lambda(v): v in vlist)
             fixedAssignment.overWrite(ka)
         for cat in categoryProbabilities.keys():
@@ -558,7 +687,7 @@ class MScheme(MProblem):
             prob = categoryProbabilities[k]
             self.ckt.comment("Category %s has %.1f%% of its variables fixed" % (k, prob * 100.0))
         self.generateMixedConstraints(categoryProbabilities, fixKV)
-        kset = self.kroneckerTerms if fixKV else None
+        kset = self.kernelTerms if fixKV else None
         self.generateBrentConstraints(kset, isFixed)
         bv = circuit.Vec([BrentTerm()])
         if not isFixed:
