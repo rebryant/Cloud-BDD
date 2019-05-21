@@ -5,12 +5,17 @@
 #  2) their other properties
 
 import sys
+import os
 import os.path
 import glob
 import getopt
 
 import circuit
 import brent
+
+def usage(name):
+    print "Usage %s [-h] [-c] [-d DIR]"
+    sys.exit(0)
 
 # validCount
 # uniqueUsageCount
@@ -61,6 +66,19 @@ def checkSolution(directory, fname):
             return
         afile.write(path + '\n')
         afile.close()
+
+def clearHistory():
+    if os.path.exists(reportPath):
+        try:
+            os.remove(reportPath)
+        except:
+            print "Couldn't remove '%s'" % reportPath
+    if os.path.exists(archivePath):
+        try:
+            os.remove(archivePath)
+        except:
+            print "Couldn't remove '%s'" % archivePath
+
 
 def reset(total = False):
     global counts, totalCounts
@@ -134,11 +152,7 @@ def runDirectory(directory):
     totalCounts = [tc+c for tc,c in zip(totalCounts, counts)]
     
 def runAll(mainDirectory):
-    global reportPath
-    global archivePath
     template = mainDirectory + "/*"
-    reportPath = mainDirectory + "/report.txt"
-    archivePath = mainDirectory + "/candidates.txt"
     load()
     directories = sorted(glob.glob(template))
     done = True
@@ -152,9 +166,29 @@ def runAll(mainDirectory):
             done = False
     slist = ["TOTAL"] + totalCounts
     show(slist, archive = not done)
+
+def run(name, args):
+    global reportPath
+    global archivePath
+    dir = 'mm-solutions'
+    clear = False
+    optlist, args = getopt.getopt(args, "hcd:")
+    for opt, val in optlist:
+        if opt == '-h':
+            usage(name)
+        elif opt == '-c':
+            clear = True
+        elif opt == '-d':
+            dir = val
+        else:
+            print "Unknown option '%s'" % opt
+            usage(name)
+    reportPath = dir + "/report.txt"
+    archivePath = dir + "/candidates.txt"
+    if clear:
+        clearHistory()
+    runAll(dir)
+
     
 if __name__ == "__main__":
-    dir = 'mm-solutions'
-    if len(sys.argv) >= 2:
-        dir = sys.argv[1]
-    runAll(dir)
+    run(sys.argv[0], sys.argv[1:])
