@@ -25,6 +25,30 @@ def trim(s):
         s = s[:-1]
     return s
 
+# Helper function
+def permutationBuilder(n):
+    if n == 1:
+        return [[1]]
+    plist = permutationBuilder(n-1)
+    nplist = []
+    for p in plist:
+        for pos in range(n):
+            np = p[:pos] + [n] + p[pos:]
+            nplist.append(np)
+    return nplist
+    
+# Generate set of all permutations of {1..n}
+def allPermutations(n):
+    listForm = permutationBuilder(n)
+    listForm.sort()
+    dictForm = []
+    for ls in listForm:
+        d = {}
+        for i in unitRange(n):
+            d[i] = ls[i-1]
+        dictForm.append(d)
+    return dictForm
+
 # Brent variables
 class BrentVariable:
     symbol = 'a'
@@ -73,7 +97,7 @@ class BrentVariable:
 
     # For use in formulas
     def generateName(self):
-        var = "%s-r-%d.c-%d.l-%d" % (self.prefix, self.row, self.column, self.level)
+        var = "%s-r-%d.c-%d.l-%.2d" % (self.prefix, self.row, self.column, self.level)
         return var
 
     # For use in displaying scheme
@@ -84,6 +108,17 @@ class BrentVariable:
         if permuteC:
             s1, s2, = s2, s1
         return sym + s1 + s2
+
+    def permute(self, indexPermuter = None, levelPermuter = None):
+        row = self.row
+        column = self.column
+        level = self.level
+        if indexPermuter is not None:
+            row = indexPermuter[row]
+            column = indexPermuter[column]
+        if levelPermuter is not None:
+            level = levelPermuter[level]
+        return BrentVariable(self.prefix, row, column, level)
 
     def __str__(self):
         return self.generateName()
@@ -190,14 +225,9 @@ class Assignment:
             nliterals = [lit for lit in self.literals() if variableFilter(lit.variable)]
         return Assignment(nliterals)
 
-    # Generate assignment where levels are permutated according to permutation map
-    def permuteLevels(self, permuter):
-        nliterals = []
-        for lit in self.literals():
-            v = lit.variable
-            nlevel = permuter[v.level]
-            nv = BrentVariable(v.prefix, v.row, v.column, nlevel)
-            nliterals.append(Literal(nv, lit.phase))
+    # Generate assignment where indices and levels are permuted according to permutation maps
+    def permute(self, indexPermuter = None, levelPermuter = None):
+        nliterals = [Literal(lit.variable.permute(indexPermuter, levelPermuter), lit.phase) for lit in self.literals()]
         return Assignment(nliterals)
 
     # Update assignment with contents of another one
@@ -266,6 +296,19 @@ class KernelTerm:
             return False
         return True
 
+    def permute(self, indexPermuter = None, levelPermuter = None):
+        i = self.i
+        j = self.j
+        k = self.k
+        level = self.level
+        if indexPermuter is not None:
+            i = indexPermuter[i]
+            j = indexPermuter[j]
+            k = indexPermuter[k]
+        if levelPermuter is not None:
+            level = levelPermuter[level]
+        return KernelTerm(i, j, k, level)
+
     def __cmp__(self, other):
         c = cmp(self.level, other.level)
         if c != 0:
@@ -282,7 +325,7 @@ class KernelTerm:
         astring = self.alpha().generateTerm()
         bstring = self.beta().generateTerm()
         cstring = self.gamma().generateTerm(True)
-        lstring = "[%d]" % self.level if showLevel else ""
+        lstring = "[%.2d]" % self.level if showLevel else ""
         return "%s*%s*%s%s" % (astring, bstring, cstring, lstring)
 
     def __str__(self):
@@ -291,9 +334,13 @@ class KernelTerm:
 # Representation of set of Kernel terms
 class KernelSet:
 
+    dim = (2, 2, 2)
+    auxCount = 7
     kdlist = []
 
-    def __init__(self, kdlist = []):
+    def __init__(self, dim, auxCount, kdlist = []):
+        self.dim = dim
+        self.auxCount = auxCount
         self.kdlist = sorted(kdlist)
 
     def addTerm(self, kt):
@@ -312,33 +359,46 @@ class KernelSet:
     def __len__(self):
         return len(self.kdlist)
 
-    def canonize(self):
+    def levelCanonize(self):
         # Canonical form lists kernels ordered in levels, with the levels containing
         # the most terms first.  Within level, order kernel lexicographically
         # kdlist already sorted by terms
         # Only problem is that the levels should be sorted inversely by length
         # and secondarily by indices of first element
 
-        auxCount = max([kt.level for kt in self.kdlist])
-        levelList = [[] for l in range(auxCount)]
+        levelList = [[] for l in range(self.auxCount)]
         for kt in self.kdlist:
             levelList[kt.level-1].append(kt)
 
         levelList.sort(key = lambda(ls) : "%d+%s" % (999-len(ls), ls[0].generateString(False)))
 
-        nkdlist = []
         # Map from old level to new level
-        permuter = {}
+        levelPermuter = {}
         nlevel = 1
         for llist in levelList:
-            for kt in llist:
-                olevel = kt.level
-                nkt = KernelTerm(kt.i, kt.j, kt.k, nlevel)
-                nkdlist.append(nkt)
-            permuter[olevel] = nlevel
+            olevel = llist[0].level
+            levelPermuter[olevel] = nlevel
             nlevel += 1
-        return (KernelSet(nkdlist), permuter)
+        return (self.permute(levelPermuter = levelPermuter), levelPermuter)
 
+    def canonize(self):
+        if dim[0] != dim[1] or dim[1] != dim[2]:
+            return self.levelCanonize()
+        permList = allPermutations(self.dim[0])
+        bestSet = None
+        bestIndexPermuter = None
+        bestLevelPermuter = None
+        bestSignature = None
+        for indexPermuter in permList:
+            kset = self.permute(indexPermuter = indexPermuter)
+            nkset, levelPermuter = kset.levelCanonize()
+            signature = str(nkset)
+            if bestSignature is None or signature < bestSignature:
+                bestSet = nkset
+                bestIndexPermuter = indexPermuter
+                bestLevelPermuter = levelPermuter
+                bestSignature = signature
+        return (bestSet, bestIndexPermuter, bestLevelPermuter)
 
     # See if there is a matching Kernel term and return its level
     # Return -1 if none found
@@ -358,8 +418,12 @@ class KernelSet:
         for llist in levelList:
             if len(llist) >= minCount and len(llist) <= maxCount:
                 nkdlist += llist
-        return KernelSet(nkdlist)
+        return KernelSet(self.dim, self.auxCount, nkdlist)
 
+    # Permute indices
+    def permuteIndices(self, indexPermuter = None, levelPermuter = None):
+        nkdlist = [kt.permute(indexPermuter, levelPermuter) for kt in self.kdlist]
+        return KernelSet(self.dim, self.auxCount, nkdlist)
 
 # Solve matrix multiplication
 class MProblem:
@@ -519,7 +583,7 @@ class MScheme(MProblem):
                         self.assignment[v] = 0
 
     def findKernels(self):
-        kset = KernelSet()
+        kset = KernelSet(self.dim, self.auxCount)
         for level in unitRange(self.auxCount):
             for i in unitRange(self.dim[0]):
                 for j in unitRange(self.dim[1]):
@@ -584,8 +648,8 @@ class MScheme(MProblem):
 
     # Return scheme with levels reordered to canonize kernels
     def canonize(self):
-        (k, permuter) = self.kernelTerms.canonize()
-        nassignment = self.assignment.permuteLevels(permuter)
+        (k, indexPermuter, levelPermuter) = self.kernelTerms.canonize()
+        nassignment = self.assignment.permuteLevels(indexPermuter, levelPermuter)
         return MScheme(self.dim, self.auxCount, self.ckt, nassignment)
 
     # Parse the output generated by a solver
