@@ -28,26 +28,29 @@ def trim(s):
 # Helper function
 def permutationBuilder(n):
     if n == 1:
-        return [[1]]
+        return [[0]]
     plist = permutationBuilder(n-1)
     nplist = []
     for p in plist:
         for pos in range(n):
-            np = p[:pos] + [n] + p[pos:]
+            np = p[:pos] + [n-1] + p[pos:]
             nplist.append(np)
     return nplist
     
-# Generate set of all permutations of {1..n}
-def allPermutations(n):
-    listForm = permutationBuilder(n)
+# A permuter is a dictionary mapping a set of elements to itself
+# Generate set of all permuters of ls
+def allPermuters(vals):
+    listForm = permutationBuilder(len(vals))
     listForm.sort()
     dictForm = []
-    for ls in listForm:
-        d = {}
-        for i in unitRange(n):
-            d[i] = ls[i-1]
+    for nls in listForm:
+        d = { v : vals[i] for v, i in zip(vals, nls) }
         dictForm.append(d)
     return dictForm
+
+# Replace permuter elements
+def convertPermuter(p, rvals):
+    return { rvals[k] : rvals[p[k]] for k in p.keys()}
 
 # Brent variables
 class BrentVariable:
@@ -109,16 +112,24 @@ class BrentVariable:
             s1, s2, = s2, s1
         return sym + s1 + s2
 
-    def permute(self, indexPermuter = None, levelPermuter = None):
+    def permute(self, variablePermuter = None, indexPermuter = None, levelPermuter = None):
+        prefix = self.prefix
         row = self.row
         column = self.column
         level = self.level
+        if variablePermuter is not None:
+            wasGamma = prefix == 'gamma'
+            prefix = variablePermuter[prefix]
+            isGamma = prefix == 'gamma'
+            if wasGamma != isGamma:
+                # Must exchange indices
+                row, column = column, row
         if indexPermuter is not None:
             row = indexPermuter[row]
             column = indexPermuter[column]
         if levelPermuter is not None:
             level = levelPermuter[level]
-        return BrentVariable(self.prefix, row, column, level)
+        return BrentVariable(prefix, row, column, level)
 
     def __str__(self):
         return self.generateName()
@@ -226,8 +237,8 @@ class Assignment:
         return Assignment(nliterals)
 
     # Generate assignment where indices and levels are permuted according to permutation maps
-    def permute(self, indexPermuter = None, levelPermuter = None):
-        nliterals = [Literal(lit.variable.permute(indexPermuter, levelPermuter), lit.phase) for lit in self.literals()]
+    def permute(self, variablePermuter = None, indexPermuter = None, levelPermuter = None):
+        nliterals = [Literal(lit.variable.permute(variablePermuter, indexPermuter, levelPermuter), lit.phase) for lit in self.literals()]
         return Assignment(nliterals)
 
     # Update assignment with contents of another one
@@ -296,11 +307,14 @@ class KernelTerm:
             return False
         return True
 
-    def permute(self, indexPermuter = None, levelPermuter = None):
+    def permute(self, ijkPermuter = None, indexPermuter = None, levelPermuter = None):
         i = self.i
         j = self.j
         k = self.k
         level = self.level
+        if ijkPermuter is not None:
+            vals = [i, j, k]
+            i, j, k = [vals[ijkPermuter[idx]] for idx in range(3)]
         if indexPermuter is not None:
             i = indexPermuter[i]
             j = indexPermuter[j]
@@ -352,9 +366,12 @@ class KernelSet:
             vlist += kt.variables()
         return vlist
 
+    def generateString(self, showLevel = True):
+        tstrings = [kt.generateString(showLevel) for kt in self.kdlist]
+        return " ".join(tstrings)
+
     def __str__(self):
-        tstrings = [str(kt) for kt in self.kdlist]
-        return "[%s]" % " ".join(tstrings)
+        return self.generateString()
 
     def __len__(self):
         return len(self.kdlist)
@@ -381,24 +398,33 @@ class KernelSet:
             nlevel += 1
         return (self.permute(levelPermuter = levelPermuter), levelPermuter)
 
+    # Find form that is unique among following transformations:
+    #  Permutation of matrices A, B, and C
+    #  Permutations of row and column indices
+    #  Permutation of product terms (levels)
     def canonize(self):
-        if dim[0] != dim[1] or dim[1] != dim[2]:
+        if self.dim[0] != self.dim[1] or self.dim[1] != self.dim[2]:
             return self.levelCanonize()
-        permList = allPermutations(self.dim[0])
+        indexPermuterList = allPermuters(unitRange(self.dim[0]))
+        ijkPermuterList = allPermuters(range(3))
         bestSet = None
+        bestIjkPermuter = None
         bestIndexPermuter = None
         bestLevelPermuter = None
         bestSignature = None
-        for indexPermuter in permList:
-            kset = self.permute(indexPermuter = indexPermuter)
-            nkset, levelPermuter = kset.levelCanonize()
-            signature = str(nkset)
-            if bestSignature is None or signature < bestSignature:
-                bestSet = nkset
-                bestIndexPermuter = indexPermuter
-                bestLevelPermuter = levelPermuter
-                bestSignature = signature
-        return (bestSet, bestIndexPermuter, bestLevelPermuter)
+        for ijkPermuter in ijkPermuterList:
+            for indexPermuter in indexPermuterList:
+                kset = self.permute(ijkPermuter = ijkPermuter, indexPermuter = indexPermuter)
+                nkset, levelPermuter = kset.levelCanonize()
+                signature = nkset.generateString(False)
+                if bestSignature is None or signature < bestSignature:
+                    bestSet = nkset
+                    bestIjkPermuter = ijkPermuter
+                    bestIndexPermuter = indexPermuter
+                    bestLevelPermuter = levelPermuter
+                    bestSignature = signature
+        variablePermuter = convertPermuter(bestIjkPermuter, {0:'alpha', 1:'beta', 2:'gamma'})
+        return (bestSet, variablePermuter, bestIndexPermuter, bestLevelPermuter)
 
     # See if there is a matching Kernel term and return its level
     # Return -1 if none found
@@ -420,9 +446,9 @@ class KernelSet:
                 nkdlist += llist
         return KernelSet(self.dim, self.auxCount, nkdlist)
 
-    # Permute indices
-    def permuteIndices(self, indexPermuter = None, levelPermuter = None):
-        nkdlist = [kt.permute(indexPermuter, levelPermuter) for kt in self.kdlist]
+    # Permutation
+    def permute(self, ijkPermuter = None, indexPermuter = None, levelPermuter = None):
+        nkdlist = [kt.permute(ijkPermuter, indexPermuter, levelPermuter) for kt in self.kdlist]
         return KernelSet(self.dim, self.auxCount, nkdlist)
 
 # Solve matrix multiplication
@@ -598,7 +624,7 @@ class MScheme(MProblem):
         return 0
 
     def duplicate(self):
-        return  MScheme(self.dim, self.auxCount, self.ckt, self.assignment.subset())
+        return MScheme(self.dim, self.auxCount, self.ckt, self.assignment.subset())
 
     # Check properties of scheme
     def obeysUniqueUsage(self):
@@ -648,8 +674,12 @@ class MScheme(MProblem):
 
     # Return scheme with levels reordered to canonize kernels
     def canonize(self):
-        (k, indexPermuter, levelPermuter) = self.kernelTerms.canonize()
-        nassignment = self.assignment.permuteLevels(indexPermuter, levelPermuter)
+        (k, variablePermuter, indexPermuter, levelPermuter) = self.kernelTerms.canonize()
+        return self.permute(variablePermuter, indexPermuter, levelPermuter)
+
+    # Apply permutations
+    def permute(self, variablePermuter = None, indexPermuter = None, levelPermuter = None):
+        nassignment = self.assignment.permute(variablePermuter, indexPermuter, levelPermuter)
         return MScheme(self.dim, self.auxCount, self.ckt, nassignment)
 
     # Parse the output generated by a solver
