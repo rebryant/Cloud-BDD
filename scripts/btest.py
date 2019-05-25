@@ -22,8 +22,8 @@ def tester(ijkPermuter, indexPermuter):
     permsig = permkset.generateString(False)
 
     print "Testing with permutations:"
-    print "  ijk: %s" % (str(ijkPermuter))
-    print "  index: %s" % (str(indexPermuter))
+    print "  ijk: %s" % (brent.showPerm(ijkPermuter))
+    print "  index: %s" % (brent.showPerm(indexPermuter))
 
     # Make sure this thing works
     if not permScheme.obeysBrent():
@@ -36,6 +36,22 @@ def tester(ijkPermuter, indexPermuter):
 
     return permScheme
     
+def findMatches():
+    kset = mainScheme.kernelTerms
+    variablePermuterList = brent.allPermuters(['alpha', 'beta', 'gamma'])
+    ijkPermuterList = brent.allPermuters(range(3))
+    for variablePermuter in variablePermuterList:
+        permScheme = mainScheme.permute(variablePermuter = variablePermuter)
+        permkset = permScheme.kernelTerms
+        permsig = permkset.generateString(False)
+        for ijkPermuter in ijkPermuterList:
+            pkset = kset.permute(ijkPermuter = ijkPermuter)
+            psig = pkset.generateString(False)
+            if permsig == psig:
+                print "Match: [%s] [%s]" % (brent.showPerm(variablePermuter), brent.showPerm(ijkPermuter))
+    
+    
+
 def sweep():
     indexPermuterList = brent.allPermuters(brent.unitRange(3))
     ijkPermuterList = brent.allPermuters(range(3))

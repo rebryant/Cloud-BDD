@@ -56,6 +56,11 @@ def convertPermuter(p, rvals):
 def invertPermuter(p):
     return { p[k] : k for k in p.keys()}
 
+# Create string representation of permutation
+def showPerm(p):
+    slist = ["%s --> %s" % (k, p[k]) for k in sorted(p.keys())]
+    return ", ".join(slist)
+
 # Brent variables
 class BrentVariable:
     symbol = 'a'
