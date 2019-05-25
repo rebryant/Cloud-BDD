@@ -291,6 +291,7 @@ class BrentTerm:
     def __str__(self):
         return self.prefix + '-' + '.'.join(self.indices) + self.suffix
 
+
 # Representation of a triple a_i,j * b_j,k --> c_i,k
 class KernelTerm:
 
@@ -366,6 +367,26 @@ class KernelTerm:
 
     def __str__(self):
         return self.generateString()
+
+# Converting between different permutation types
+# Given a permuter for ijk indices
+# Generate equivalent permuter for variables    
+def ijk2variablePermuter(ijkp):
+    # Data generated empircally
+    sigDict = {
+        '012' : 'abc',
+        '102' : 'acb',
+        '210' : 'bac',
+        '201' : 'bca',
+        '120' : 'cab',
+        '021' : 'cba',
+        }
+    ijkSig = "".join([str(ijkp[k]) for k in sorted(ijkp.keys())])
+    varSig = sigDict[ijkSig]
+    varList = ['alpha', 'beta', 'gamma']
+    matchList = [BrentVariable.namer[c] for c in varSig]
+    return { varList[i] : matchList[i] for i in range(3) }
+    
 
 # Representation of set of Kernel terms
 class KernelSet:
@@ -445,7 +466,7 @@ class KernelSet:
                     bestIndexPermuter = indexPermuter
                     bestLevelPermuter = levelPermuter
                     bestSignature = signature
-        variablePermuter = convertPermuter(bestIjkPermuter, {0:'alpha', 1:'beta', 2:'gamma'})
+        variablePermuter = ijk2variablePermuter(bestIjkPermuter)
         return (bestSet, variablePermuter, bestIndexPermuter, bestLevelPermuter)
 
     # See if there is a matching Kernel term and return its level

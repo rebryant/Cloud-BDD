@@ -36,10 +36,19 @@ def tester(ijkPermuter, indexPermuter):
 
     return permScheme
     
+def ijkSig(p):
+    slist = [str(p[k]) for k in sorted(p.keys())]
+    return "".join(slist)
+
+def variableSig(p):
+    slist = [brent.BrentVariable.symbolizer[p[k]] for k in sorted(p.keys())]
+    return "".join(slist)
+
 def findMatches():
     kset = mainScheme.kernelTerms
     variablePermuterList = brent.allPermuters(['alpha', 'beta', 'gamma'])
     ijkPermuterList = brent.allPermuters(range(3))
+    print "{"
     for variablePermuter in variablePermuterList:
         permScheme = mainScheme.permute(variablePermuter = variablePermuter)
         permkset = permScheme.kernelTerms
@@ -48,7 +57,8 @@ def findMatches():
             pkset = kset.permute(ijkPermuter = ijkPermuter)
             psig = pkset.generateString(False)
             if permsig == psig:
-                print "Match: [%s] [%s]" % (brent.showPerm(variablePermuter), brent.showPerm(ijkPermuter))
+                print "  '%s' : '%s'," % (ijkSig(ijkPermuter), variableSig(variablePermuter))
+    print "}"
     
     
 
