@@ -52,6 +52,10 @@ def allPermuters(vals):
 def convertPermuter(p, rvals):
     return { rvals[k] : rvals[p[k]] for k in p.keys()}
 
+# Invert permuter
+def invertPermuter(p):
+    return { p[k] : k for k in p.keys()}
+
 # Brent variables
 class BrentVariable:
     symbol = 'a'
@@ -63,6 +67,8 @@ class BrentVariable:
     namer = {'a':'alpha', 'b':'beta', 'c':'gamma'}
     symbolizer = {'alpha':'a', 'beta':'b', 'gamma':'c'}
     prefixOrder = {'gamma' : 0, 'alpha' : 1, 'beta' : 2 }
+    # Which reorderings require a subscript swap 
+    flip = { 'abc' : False, 'bca' : False, 'cab' : False, 'cba': True, 'bac': True, 'acb' : True }
 
 
     def __init__(self, prefix = None, row = None, column = None, level = None):
@@ -112,18 +118,29 @@ class BrentVariable:
             s1, s2, = s2, s1
         return sym + s1 + s2
 
+    def shouldFlip(self, variablePermuter):
+        klist = [self.symbolizer[variablePermuter[p]] for p in ['alpha', 'beta', 'gamma']]
+        key = "".join(klist)
+        return self.flip[key]
+                       
+
     def permute(self, variablePermuter = None, indexPermuter = None, levelPermuter = None):
         prefix = self.prefix
         row = self.row
         column = self.column
         level = self.level
         if variablePermuter is not None:
-            wasGamma = prefix == 'gamma'
+            if prefix == 'gamma':
+                left, right = column, row
+            else:
+                left, right = row, column
+            if self.shouldFlip(variablePermuter):
+                left, right = right, left
             prefix = variablePermuter[prefix]
-            isGamma = prefix == 'gamma'
-            if wasGamma != isGamma:
-                # Must exchange indices
-                row, column = column, row
+            if prefix == 'gamma':
+                row, column = right, left
+            else:
+                row, column = left, right
         if indexPermuter is not None:
             row = indexPermuter[row]
             column = indexPermuter[column]
