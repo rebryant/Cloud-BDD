@@ -25,7 +25,7 @@ def trim(s):
         s = s[:-1]
     return s
 
-# Helper function
+# Helper function for permuation generation
 def permutationBuilder(n):
     if n == 1:
         return [[0]]
@@ -61,6 +61,11 @@ def showPerm(p):
     slist = ["%s --> %s" % (k, p[k]) for k in sorted(p.keys())]
     return ", ".join(slist)
 
+# Create a compressed representation of a permutation
+def signPerm(p):
+    slist = [str(p[k]) for k in sorted(p.keys())]
+    return "".join(slist)
+
 # Brent variables
 class BrentVariable:
     symbol = 'a'
@@ -68,13 +73,13 @@ class BrentVariable:
     row = 1
     column = 1
     level = 1
-    fieldSplitter = None
+    fieldSplitter = re.compile('[-\.]')
     namer = {'a':'alpha', 'b':'beta', 'c':'gamma'}
     symbolizer = {'alpha':'a', 'beta':'b', 'gamma':'c'}
     prefixOrder = {'gamma' : 0, 'alpha' : 1, 'beta' : 2 }
-    # Which reorderings require a subscript swap 
+    # Which reorderings require a subscript swap
+    # Those that require odd number of swaps to generate
     flip = { 'abc' : False, 'bca' : False, 'cab' : False, 'cba': True, 'bac': True, 'acb' : True }
-
 
     def __init__(self, prefix = None, row = None, column = None, level = None):
         if prefix is not None:
@@ -86,7 +91,6 @@ class BrentVariable:
             self.column = column
         if level is not None:
             self.level = level
-        self.fieldSplitter = re.compile('[-\.]')
 
     def fromName(self, name):
         fields = self.fieldSplitter.split(name)
@@ -352,7 +356,7 @@ class KernelTerm:
         c = cmp(self.i, other.i)
         if c != 0:
             return c
-        c = cmp(self.i, other.j)
+        c = cmp(self.j, other.j)
         if c != 0:
             return c
         return cmp(self.k, other.k)
@@ -367,6 +371,15 @@ class KernelTerm:
     def __str__(self):
         return self.generateString()
 
+# Function to translate from permutation of ijk elements in kernel term to variables in Brent term
+def ijk2var(ijkp):
+    matchDict = { '012' : 'abc', '021' : 'cba', '102' : 'acb', '120' : 'cab', '201' : 'bca', '210' : 'bac' }
+    key = signPerm(ijkp)
+    sig = matchDict[key]
+    vals = [BrentVariable.namer[c] for c in sig]
+    vp = { v1 : v2 for v1, v2 in zip(['alpha', 'beta', 'gamma'], vals) }
+    return vp
+
 # Representation of set of Kernel terms
 class KernelSet:
 
@@ -377,7 +390,7 @@ class KernelSet:
     def __init__(self, dim, auxCount, kdlist = []):
         self.dim = dim
         self.auxCount = auxCount
-        self.kdlist = sorted(kdlist)
+        self.kdlist = kdlist
 
     def addTerm(self, kt):
         self.kdlist.append(kt)
@@ -401,7 +414,8 @@ class KernelSet:
     def levelCanonize(self):
         # Canonical form lists kernels ordered in levels, with the levels containing
         # the most terms first.  Within level, order kernel lexicographically
-        # kdlist already sorted by terms
+        self.kdlist.sort()
+        # kdlist sorted by terms
         # Only problem is that the levels should be sorted inversely by length
         # and secondarily by indices of first element
 
@@ -445,7 +459,7 @@ class KernelSet:
                     bestIndexPermuter = indexPermuter
                     bestLevelPermuter = levelPermuter
                     bestSignature = signature
-        variablePermuter = convertPermuter(bestIjkPermuter, {0:'alpha', 1:'beta', 2:'gamma'})
+        variablePermuter = ijk2var(bestIjkPermuter)
         return (bestSet, variablePermuter, bestIndexPermuter, bestLevelPermuter)
 
     # See if there is a matching Kernel term and return its level
@@ -481,6 +495,12 @@ class MProblem:
     auxCount = 0
     # Circuit generator
     ckt = None
+
+    #### Performance parameters
+
+    # At what level should streamline constraints be introduced?
+    streamlineLevel = 2
+
 
     def __init__(self, dim, auxCount, ckt = None):
         if type(dim) == type(2):
@@ -564,7 +584,7 @@ class MProblem:
                     self.ckt.declare(vec)
 
     # Generate Brent equations
-    def generateBrentConstraints(self, kset = None, check = False):
+    def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False):
         ranges = self.fullRanges()
         indices = self.iexpand(ranges)
         self.ckt.comment("Generate all Brent equations")
@@ -587,10 +607,15 @@ class MProblem:
             indices = self.iexpand(ranges)
             first = True
             for idx in indices:
-                args = self.ckt.addVec(circuit.Vec([BrentTerm(idx + [x]) for x in unitRange(gcount)]))
+                tlist = [BrentTerm(idx + [x]) for x in unitRange(gcount)]
+                terms = self.ckt.addVec(circuit.Vec(tlist))
+                args = terms
+                if level == self.streamlineLevel and streamlineNode is not None:
+                    tlist = [streamlineNode] + tlist
+                    args = circuit.Vec(tlist)
                 bn = BrentTerm(idx)
                 self.ckt.andN(bn, args)
-                self.ckt.decRefs([args])
+                self.ckt.decRefs([terms])
                 if check:
                     self.ckt.checkConstant(bn, 1)
                 if first and not check:
@@ -598,6 +623,8 @@ class MProblem:
                     name = circuit.Vec([BrentTerm(idx)])
                     self.ckt.comment("Find size of typical function at level %d" % level)
                     self.ckt.information(name)
+            if streamlineNode is not None and level == self.streamlineLevel:
+                self.ckt.decRefs([streamlineNode])
             if not check:
                 names = circuit.Vec([BrentTerm(idx) for idx in indices])
                 self.ckt.comment("Find combined size for terms at level %d" % level)
@@ -610,11 +637,10 @@ class MScheme(MProblem):
     assignment = None
     kernelTerms = None
 
-    expressionSplitter = None
+    expressionSplitter = re.compile('\s*[-+]\s*')
 
     def __init__(self, dim, auxCount, ckt, assignment = None):
         MProblem.__init__(self, dim, auxCount, ckt)
-        self.expressionSplitter = re.compile('\s*[-+]\s*')
         if assignment is None:
             self.generateZeroAssignment()
         else:
@@ -631,7 +657,7 @@ class MScheme(MProblem):
                         self.assignment[v] = 0
 
     def findKernels(self):
-        kset = KernelSet(self.dim, self.auxCount)
+        kset = KernelSet(self.dim, self.auxCount, kdlist = [])
         for level in unitRange(self.auxCount):
             for i in unitRange(self.dim[0]):
                 for j in unitRange(self.dim[1]):
@@ -643,7 +669,9 @@ class MScheme(MProblem):
 
     # How many additions would be required to do the multiplication?
     def addCount(self):
-        return 0
+        tcount = functools.reduce(lambda x, y: x+y, [lit.phase for lit in self.assignment.literals()])
+        # Additions only needed to reduce to single terms
+        return tcount - (self.auxCount * 3)
 
     def duplicate(self):
         return MScheme(self.dim, self.auxCount, self.ckt, self.assignment.subset())
@@ -698,6 +726,11 @@ class MScheme(MProblem):
     def canonize(self):
         (k, variablePermuter, indexPermuter, levelPermuter) = self.kernelTerms.canonize()
         return self.permute(variablePermuter, indexPermuter, levelPermuter)
+
+    def levelCanonize(self):
+        (k, levelPermuter) = self.kernelTerms.levelCanonize()
+        return self.permute(levelPermuter = levelPermuter)
+
 
     # Apply permutations
     def permute(self, variablePermuter = None, indexPermuter = None, levelPermuter = None):
@@ -774,6 +807,38 @@ class MScheme(MProblem):
         return self
 
 
+    # Generate streamline constraints based on singleton exclusion
+    def generateStreamline(self):
+        self.ckt.comment("Generate streamline conditions based on singleton exclusion property")
+        snode = self.ckt.addNode(circuit.Node("streamline"))
+        allLiterals = self.assignment.literals()
+        sk = self.kernelTerms.groupings(minCount = 1, maxCount = 1)
+        scount = len(sk)
+        av = self.ckt.nameVec("single_alpha", scount)
+        bv = self.ckt.nameVec("single_beta", scount)
+        gv = self.ckt.nameVec("single_gamma", scount)
+        tv = {'alpha': av , 'beta' : bv, 'gamma' : gv }
+        pv = self.ckt.nameVec("exclude", scount)
+        for j in range(scount):
+            kt = sk.kdlist[j]
+            level = kt.level
+            ktAlpha = kt.alpha()
+            ktBeta = kt.beta()
+            ktGamma = kt.gamma()
+            ktVars = { 'alpha' : ktAlpha, 'beta' : ktBeta, 'gamma' : ktGamma }
+            for cat in ['gamma', 'alpha', 'beta']:
+                nrow = self.nrow(cat)
+                ncol = self.ncol(cat)
+                allVars = [BrentVariable(cat, i/ncol+1, (i%ncol)+1, level) for i in range(nrow*ncol)]
+                lits = [Literal(v, 1 if v == ktVars[cat] else 0) for v in allVars]
+                lvec = circuit.Vec(lits)
+                self.ckt.andN(tv[cat][j], lvec)
+            ev = circuit.Vec([av[j], bv[j], gv[j]])
+            self.ckt.orN(pv[j], ev)
+        self.ckt.andN(snode, pv)
+        self.ckt.decRefs([av, bv, gv, pv])
+        return snode
+
     def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, fixKV = False):
         fixedAssignment = Assignment()
         vlist = []
@@ -791,7 +856,7 @@ class MScheme(MProblem):
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, fixKV = False):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, fixKV = False, excludeSingleton = False):
         plist = categoryProbabilities.values()
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
@@ -803,8 +868,11 @@ class MScheme(MProblem):
             prob = categoryProbabilities[k]
             self.ckt.comment("Category %s has %.1f%% of its variables fixed" % (k, prob * 100.0))
         self.generateMixedConstraints(categoryProbabilities, fixKV)
+        streamlineNode = None
+        if excludeSingleton:
+            streamlineNode = self.generateStreamline()
         kset = self.kernelTerms if fixKV else None
-        self.generateBrentConstraints(kset, isFixed)
+        self.generateBrentConstraints(kset, streamlineNode = streamlineNode, check=isFixed)
         bv = circuit.Vec([BrentTerm()])
         if not isFixed:
             self.ckt.count(bv)

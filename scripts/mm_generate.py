@@ -11,9 +11,10 @@ import circuit
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
+    print "Usage %s [-h] [-k] [-e] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
+    print " -e               Generate streamline constraints based on singleton exclusion property"
     print " -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class"
     print " -s PFILE         Read hard-coded values from polynomial in PFILE"
     print " -p AUX           Number of auxiliary variables"
@@ -31,13 +32,16 @@ def run(name, args):
     someFixed = False
     pname = None
     fixKV = False
-    optlist, args = getopt.getopt(args, 'hkc:s:p:n:o:')
+    excludeSingleton = False
+    optlist, args = getopt.getopt(args, 'hkec:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         elif opt == '-k':
             fixKV = True
+        elif opt == '-e':
+            excludeSingleton = True
         elif opt == '-c':
             fields = val.split(":")
             if len(fields) == 1:
@@ -102,7 +106,7 @@ def run(name, args):
         except brent.MatrixException as ex:
             print "Parse of file '%s' failed: %s" % (pname, str(ex))
             return
-    s.generateProgram(categoryProbabilities, fixKV)
+    s.generateProgram(categoryProbabilities, fixKV = fixKV, excludeSingleton = excludeSingleton)
     
     
             
