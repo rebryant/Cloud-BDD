@@ -250,7 +250,9 @@ class Assignment:
             lit.assign(ckt)
 
     # Generate assignment consisting of randomly chosen subset
-    def randomSample(self, prob = 0.5):
+    def randomSample(self, prob = 0.5, seed = None):
+        if seed is not None:
+            random.seed(seed)
         tsize = int(prob * len(self.asst))
         sample = random.sample(self.literals(), tsize)
         return Assignment(sample)
@@ -855,7 +857,7 @@ class MScheme(MProblem):
         self.ckt.decRefs([av, bv, gv, pv])
         return snode
 
-    def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, fixKV = False):
+    def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, fixKV = False):
         fixedAssignment = Assignment()
         vlist = []
         if fixKV:
@@ -864,7 +866,7 @@ class MScheme(MProblem):
             fixedAssignment.overWrite(ka)
         for cat in categoryProbabilities.keys():
             prob = categoryProbabilities[cat]
-            ca = self.assignment.subset(lambda(v): v.prefix == cat and v not in vlist).randomSample(prob)
+            ca = self.assignment.subset(lambda(v): v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
             fixedAssignment.overWrite(ca)
         if len(fixedAssignment) > 0:
             self.ckt.comment("Fixed assignments")
@@ -872,7 +874,7 @@ class MScheme(MProblem):
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, fixKV = False, excludeSingleton = False):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, fixKV = False, excludeSingleton = False):
         plist = categoryProbabilities.values()
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
@@ -883,7 +885,7 @@ class MScheme(MProblem):
         for k in categoryProbabilities.keys():
             prob = categoryProbabilities[k]
             self.ckt.comment("Category %s has %.1f%% of its variables fixed" % (k, prob * 100.0))
-        self.generateMixedConstraints(categoryProbabilities, fixKV)
+        self.generateMixedConstraints(categoryProbabilities, seed, fixKV)
         streamlineNode = None
         if excludeSingleton:
             streamlineNode = self.generateStreamline()
