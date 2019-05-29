@@ -13,13 +13,13 @@ def tester(scheme, ijkPermuter, indexPermuter):
     kset = scheme.kernelTerms
     
     pkset = kset.permute(ijkPermuter = ijkPermuter, indexPermuter = indexPermuter)
-    psig = pkset.generateString(False)
+    psig = pkset.signature()
 
     variablePermuter = brent.convertPermuter(ijkPermuter, {0:'alpha', 1:'beta', 2:'gamma'})
 
     permScheme = mainScheme.permute(variablePermuter = variablePermuter, indexPermuter = indexPermuter)
     permkset = permScheme.kernelTerms
-    permsig = permkset.generateString(False)
+    permsig = permkset.signature()
 
     print "Testing with permutations:"
     print "  ijk: %s" % (brent.showPerm(ijkPermuter))
@@ -32,8 +32,12 @@ def tester(scheme, ijkPermuter, indexPermuter):
     if psig != permsig:
         print "Uh oh.  Permuted scheme.  Predicted signature does not match actual"
         print "  predicted signature: %s" % psig
-        print "  actual signature: %s" % permsig
+        print "  actual signature:    %s" % permsig
 
+        mstring = ""
+        for idx in range(len(psig)):
+            mstring += ("^" if psig[idx] != permsig[idx] else " ")
+        print "   MISMATCH          : %s" % mstring
     return permScheme
     
 def signPerm(p):
@@ -60,13 +64,13 @@ def findMatches(scheme = None):
         print "Variable permuter [%s]" % brent.showPerm(variablePermuter)
         permScheme = scheme.permute(variablePermuter = variablePermuter)
         permkset = permScheme.kernelTerms
-        permsig = permkset.generateString(False)
+        permsig = permkset.signature()
         if not permScheme.obeysBrent():
             print "  Oops.  Does not obey Brent equations"
         found = False
         for ijkPermuter in ijkPermuterList:
             pkset = kset.permute(ijkPermuter = ijkPermuter)
-            psig = pkset.generateString(False)
+            psig = pkset.signature()
             print "   ijk permuter: [%s]" % (brent.showPerm(ijkPermuter))
             print "   Tgt Signature: %s" % permsig
             print "       Signature: %s" % psig
@@ -87,11 +91,11 @@ def checkMatches(scheme = None):
     matchList = []
     for ijkPermuter in ijkPermuterList:
         pkset = kset.permute(ijkPermuter = ijkPermuter).levelCanonize()[0]
-        psig = pkset.generateString(False)
+        psig = pkset.signature()
         variablePermuter = ijk2var(ijkPermuter)
         permScheme = scheme.permute(variablePermuter = variablePermuter)
         permkset = permScheme.kernelTerms.levelCanonize()[0]
-        permsig = permkset.generateString(False)
+        permsig = permkset.signature()
         print "Comparing ijk permuter [%s] to variable permuter [%s]" % (brent.showPerm(ijkPermuter), brent.showPerm(variablePermuter))
         print "   ijk Signature: %s" % psig
         print "   var Signature: %s" % permsig

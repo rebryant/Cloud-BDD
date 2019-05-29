@@ -405,6 +405,23 @@ class KernelSet:
         tstrings = [kt.generateString(showLevel) for kt in self.kdlist]
         return " ".join(tstrings)
 
+    # Convert into lists, ordered by level
+    def levelize(self):
+        levelList = [[] for l in range(self.auxCount)]
+        for kt in self.kdlist:
+            levelList[kt.level-1].append(kt)
+        return levelList
+
+    # Create string that characterizes set in compressed form
+    def signature(self):
+        levelList = self.levelize()
+        terms = []
+        for llist in levelList:
+            if len(llist) > 1:
+                terms += llist
+        terms.sort()
+        return " ".join([str(t) for t in terms])
+
     def __str__(self):
         return self.generateString()
 
@@ -418,11 +435,7 @@ class KernelSet:
         # kdlist sorted by terms
         # Only problem is that the levels should be sorted inversely by length
         # and secondarily by indices of first element
-
-        levelList = [[] for l in range(self.auxCount)]
-        for kt in self.kdlist:
-            levelList[kt.level-1].append(kt)
-
+        levelList = self.levelize()
         levelList.sort(key = lambda(ls) : "%d+%s" % (999-len(ls), ls[0].generateString(False)))
 
         # Map from old level to new level
@@ -452,7 +465,7 @@ class KernelSet:
             for indexPermuter in indexPermuterList:
                 kset = self.permute(ijkPermuter = ijkPermuter, indexPermuter = indexPermuter)
                 nkset, levelPermuter = kset.levelCanonize()
-                signature = nkset.generateString(False)
+                signature = nkset.signature()
                 if bestSignature is None or signature < bestSignature:
                     bestSet = nkset
                     bestIjkPermuter = ijkPermuter
@@ -473,9 +486,7 @@ class KernelSet:
     # Find subset of kernels belonging to groups of specified size
     def groupings(self, minCount = 1, maxCount = 1):
         auxCount = max([kt.level for kt in self.kdlist])
-        levelList = [[] for l in range(auxCount)]
-        for kt in self.kdlist:
-            levelList[kt.level-1].append(kt)
+        levelList = self.levelize()
         nkdlist = []
         for llist in levelList:
             if len(llist) >= minCount and len(llist) <= maxCount:
