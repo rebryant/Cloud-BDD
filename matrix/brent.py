@@ -776,9 +776,14 @@ class MScheme(MProblem):
             slist.append(s)
         return '*'.join(slist)
             
+    def generatePolynomial(self):
+        lines = [self.showPolynomial(level) for level in unitRange(self.auxCount)]
+        return lines
+        
+
     def printPolynomial(self, outfile = sys.stdout):
-        for level in unitRange(self.auxCount):
-            outfile.write(self.showPolynomial(level) + '\n')
+        for line in self.generatePolynomial():
+            outfile.write(line + '\n')
 
     # Parse from polynomial representation
     def parsePolynomialLine(self, line, level):
