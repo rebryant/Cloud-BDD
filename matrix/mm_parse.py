@@ -9,11 +9,14 @@ import getopt
 
 import circuit
 import brent
+import glob
+
 
 def usage(name):
-    print "Usage: %s -h [-u] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
+    print "Usage: %s -h [-u] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
     print " -h               Print this message"
     print " -u               Print number of nodes at each level, rather than solutions"
+    print " -I IDIR          Run for all files with extension '.log' in directory IDIR"
     print " -i IFILE         Specify input file"
     print " -s PFILE         Read hard-coded values from polynomial in PFILE"
     print " -p AUX           Number of auxiliary variables"
@@ -22,11 +25,8 @@ def usage(name):
 
 cmdPrefix = "cmd>"
 
-
-def trim(s):
-    while len(s) > 0 and s[-1] in "\r\n":
-        s = s[:-1]
-    return s
+# Mapping from canonized polynomial to solution name
+solutionDict = {}
 
 # Extract the support information from file:
 def getSupport(fname):
@@ -39,7 +39,7 @@ def getSupport(fname):
     rline = "%sinfo %s" % (cmdPrefix, str(brent.BrentTerm()))
     ready = False
     for line in inf:
-        line = trim(line)
+        line = brent.trim(line)
         if line == rline:
             ready = True
         if not ready or matcher.match(line) is None:
@@ -82,7 +82,7 @@ def getSizes(fname):
     ready = False
     gotFinal = False
     for line in inf:
-        line = trim(line)
+        line = brent.trim(line)
         im = infoMatcher.match(line)
         if im:
             if line == finalLine and not gotFinal:
@@ -106,6 +106,7 @@ def getSizes(fname):
     return slist
 
 def generateSolutions(iname, fileScheme):
+    global solutionDict
     supportNames = getSupport(iname)
     slist = getSolutions(iname)
     index = 1
@@ -115,8 +116,16 @@ def generateSolutions(iname, fileScheme):
         except Exception as ex:
             print "Couldn't process solution: %s" % str(ex)
             continue
-        if len(slist) > 1:
-            print "Solution #%d" % index
+        sname = "%s #%d" % (iname, index)
+        sigList = ss.canonize().generatePolynomial()
+        signature = "\n".join(sigList)
+        found = signature in solutionDict
+        if found:
+            osname = solutionDict[signature]
+            print "Solution %s.  Isomorphic to solution %s" % (sname, osname)
+        else:
+            print "Solution %s.  %d additions" % (sname, ss.addCount())
+            solutionDict[signature] = sname
         index += 1
         ss.printPolynomial()
 
@@ -126,16 +135,21 @@ def run(name, args):
     auxCount = 7
     solve = True
     pname = None
-    iname = None
-    optlist, args = getopt.getopt(args, 'hui:s:p:n:o:')
+    inameList = []
+    optlist, args = getopt.getopt(args, 'huI:i:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         elif opt == '-u':
             solve = False
+        elif opt == '-I':
+            idir = val
+            template = "%s/*.log" % idir
+            inameList = sorted(glob.glob(template))
+            print "Template '%s'.  Using files %s" % (template, str(inameList))
         elif opt == '-i':
-            iname = val
+            inameList = [val]
         elif opt == '-s':
             pname = val
         elif opt == '-p':
@@ -160,14 +174,15 @@ def run(name, args):
             print "Unknown option '%s'" % opt
             usage(name)
             return
-    if iname is None:
+    if len(inameList) == 0:
         print "Error. Require input file name"
         return
     if not solve:
-        szlist = getSizes(iname)
-        if len(szlist) > 0:
-            slist = [str(n) for n in szlist]
-            print iname + ":\t" + "\t".join(slist)
+        for iname in inameList:
+            szlist = getSizes(iname)
+            if len(szlist) > 0:
+                slist = [str(n) for n in szlist]
+                print iname + ":\t" + "\t".join(slist)
         return
     if pname is None:
         print "Error. Require solution file name"
@@ -178,7 +193,8 @@ def run(name, args):
     except brent.MatrixException as ex:
         print "Parse of file '%s' failed: %s" % (pname, str(ex))
         return
-    generateSolutions(iname, fileScheme)
+    for iname in inameList:
+        generateSolutions(iname, fileScheme)
             
     
 if __name__ == "__main__":
