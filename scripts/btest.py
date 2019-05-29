@@ -15,7 +15,7 @@ def tester(scheme, ijkPermuter, indexPermuter):
     pkset = kset.permute(ijkPermuter = ijkPermuter, indexPermuter = indexPermuter)
     psig = pkset.signature()
 
-    variablePermuter = brent.convertPermuter(ijkPermuter, {0:'alpha', 1:'beta', 2:'gamma'})
+    variablePermuter = brent.ijk2var(ijkPermuter)
 
     permScheme = mainScheme.permute(variablePermuter = variablePermuter, indexPermuter = indexPermuter)
     permkset = permScheme.kernelTerms
