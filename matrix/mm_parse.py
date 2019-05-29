@@ -105,6 +105,12 @@ def getSizes(fname):
     inf.close()
     return slist
 
+def generateSignature(scheme):
+    sigList = scheme.canonize().generatePolynomial()
+    signature = "\n".join(sigList)
+    return signature
+    
+
 def generateSolutions(iname, fileScheme):
     global solutionDict
     supportNames = getSupport(iname)
@@ -117,8 +123,7 @@ def generateSolutions(iname, fileScheme):
             print "Couldn't process solution: %s" % str(ex)
             continue
         sname = "%s #%d" % (iname, index)
-        sigList = ss.canonize().generatePolynomial()
-        signature = "\n".join(sigList)
+        signature = generateSignature(ss)
         found = signature in solutionDict
         if found:
             osname = solutionDict[signature]
@@ -130,9 +135,9 @@ def generateSolutions(iname, fileScheme):
         ss.printPolynomial()
 
 def run(name, args):
-    # Default is Strassens
-    n1, n2, n3 = 2, 2, 2
-    auxCount = 7
+    global solutionDict
+    n1, n2, n3 = 3, 3, 3
+    auxCount = 23
     solve = True
     pname = None
     inameList = []
@@ -193,6 +198,9 @@ def run(name, args):
     except brent.MatrixException as ex:
         print "Parse of file '%s' failed: %s" % (pname, str(ex))
         return
+    sname = "%s" % (pname)
+    signature = generateSignature(fileScheme)
+    solutionDict[signature] = sname
     for iname in inameList:
         generateSolutions(iname, fileScheme)
             

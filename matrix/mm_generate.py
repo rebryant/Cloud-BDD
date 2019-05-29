@@ -23,9 +23,8 @@ def usage(name):
     sys.exit(0)
 
 def run(name, args):
-    # Default is Strassens
-    n1, n2, n3 = 2, 2, 2
-    auxCount = 7
+    n1, n2, n3 = 3, 3, 3
+    auxCount = 23
     check = False
     outf = sys.stdout
     categoryProbabilities = {'alpha':0.0, 'beta':0.0, 'gamma':0.0}
