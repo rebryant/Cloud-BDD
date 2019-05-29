@@ -127,7 +127,7 @@ def generateSolutions(iname, fileScheme):
         found = signature in solutionDict
         if found:
             osname = solutionDict[signature]
-            print "Solution %s.  Isomorphic to solution %s" % (sname, osname)
+            print "Solution %s.  %d additions.  Isomorphic to solution %s" % (sname, ss.addCount(), osname)
         else:
             print "Solution %s.  %d additions" % (sname, ss.addCount())
             solutionDict[signature] = sname
