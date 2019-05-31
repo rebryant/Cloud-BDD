@@ -3,6 +3,7 @@
 # and solutions found at:
 # http://www.algebra.uni-linz.ac.at/research/matrix-multiplication/
 
+import os.path
 import sys
 import re
 import getopt
@@ -28,8 +29,12 @@ databaseConverters = [str, int, str, str]
 # Mapping from hash to list of fields
 databaseDict = {}
 
+
+# Set to home directory for program, split into tokens
+homePathFields = ['.']
+
 databaseDirectory = "mm-solutions"
-databasePaths = [databaseDirectory + "/heule-database.txt"]
+databasePathFields = [[databaseDirectory, "heule-database.txt"]]
 
 
 cmdPrefix = "cmd>"
@@ -39,7 +44,8 @@ solutionDict = {}
 
 def loadDatabase():
     global databaseDict
-    for dbname in databasePaths:
+    for dbfields in databasePathFields:
+        dbname = '/'.join(homePathFields + dbfields)
         try:
             dbfile = open(dbname, 'r')
         except Exception as ex:
@@ -172,7 +178,7 @@ def generateSolutions(iname, fileScheme):
         if not found:
             hash = sc.sign()
             if hash in databaseDict:
-                print "Matches solution in '%s'" % databaseDict[hash][fieldIndex['path']]
+                print "Probably isomorphic to solution in '%s'" % databaseDict[hash][fieldIndex['path']]
             else:
                 print "Solution not yet in database"
         index += 1
@@ -251,4 +257,6 @@ def run(name, args):
             
     
 if __name__ == "__main__":
+    current = os.path.realpath(__file__)
+    homePathFields = current.split('/')[:-1]
     run(sys.argv[0], sys.argv[1:])

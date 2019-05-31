@@ -11,10 +11,11 @@ import circuit
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-k] [-e] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
+    print "Usage %s [-h] [-k] [-e] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
     print " -e               Generate streamline constraints based on singleton exclusion property"
+    print " -t SECS          Set runtime limit (in seconds)"
     print " -S SEED          Set random seed"
     print " -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class"
     print " -s PFILE         Read hard-coded values from polynomial in PFILE"
@@ -33,8 +34,10 @@ def run(name, args):
     pname = None
     fixKV = False
     excludeSingleton = False
+    timeLimit = None
     seed = 0
-    optlist, args = getopt.getopt(args, 'hkeS:c:s:p:n:o:')
+    
+    optlist, args = getopt.getopt(args, 'hkeS:t:c:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -45,6 +48,8 @@ def run(name, args):
             excludeSingleton = True
         elif opt == '-S':
             seed = int(val)
+        elif opt == '-t':
+            timeLimit = int(val)
         elif opt == '-c':
             fields = val.split(":")
             if len(fields) == 1:
@@ -109,7 +114,7 @@ def run(name, args):
         except brent.MatrixException as ex:
             print "Parse of file '%s' failed: %s" % (pname, str(ex))
             return
-    s.generateProgram(categoryProbabilities, seed = seed, fixKV = fixKV, excludeSingleton = excludeSingleton)
+    s.generateProgram(categoryProbabilities, seed = seed, timeLimit = timeLimit, fixKV = fixKV, excludeSingleton = excludeSingleton)
     
     
             

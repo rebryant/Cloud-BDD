@@ -901,10 +901,12 @@ class MScheme(MProblem):
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, fixKV = False, excludeSingleton = False):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False):
         plist = categoryProbabilities.values()
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
+        if timeLimit is not None:
+            self.ckt.cmdLine("option", ["seconds", timeLimit])
         mode = "Checking" if isFixed else "Solving"
         self.ckt.comment("%s Brent equations to derive matrix multiplication scheme" % mode)
         args = self.fullRanges() + (self.auxCount,)
