@@ -26,10 +26,11 @@ subDirectory = "mm-solutions"
 candidatePath = subDirectory + "/heule-candidates.txt"
 reportPath = subDirectory + "/heule-addcounts.txt"
 minimumPath = subDirectory + "/heule-minadditions.txt"
+sourceDirectory = subDirectory + "/heule-online"
 
 def checkSolution(subPath):
     global addcountDict, solutionCount
-    path = subDirectory + '/' + subPath
+    path = sourceDirectory + '/' + subPath
     try:
         s = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
     except Exception as ex:
@@ -40,7 +41,7 @@ def checkSolution(subPath):
     list = addcountDict[count] if count in addcountDict else []
     if len(list) == 0:
         print "File %s has new addition count '%d'" % (subPath, count)
-    list.append(path)
+    list.append(subPath)
     addcountDict[count] = list
 
 def process():

@@ -15,6 +15,8 @@ import brent
 
 # Map from signature to list of file paths
 signatureDict = {}
+# Map from signature to its hash 
+hashDict = {}
 solutionCount = 0
 signatureCount = 0
 
@@ -29,10 +31,11 @@ candidatePath = subDirectory + "/heule-candidates.txt"
 reportPath = subDirectory + "/heule-signatures.txt"
 signatureDirectory = subDirectory + "/heule-signatures"
 solutionDirectory =  subDirectory + "/heule-unique-signatures"
+sourceDirectory = subDirectory + "/heule-online"
 
 def checkSolution(subPath):
     global signatureDict, solutionCount, signatureCount
-    path = subDirectory + '/' + subPath
+    path = sourceDirectory + '/' + subPath
     try:
         s = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
     except Exception as ex:
@@ -45,6 +48,7 @@ def checkSolution(subPath):
     if len(list) == 0:
         print "File %s has new signature '%s'" % (subPath, sig)
         signatureCount += 1
+        hashDict[sig] = sc.kernelTerms.sign()
         sname = solutionDirectory + '/solution-%.2d.exp' % signatureCount
         skip = False
         try:
@@ -79,13 +83,13 @@ def process():
     cfile.close()
 
     print "%d solutions, %d unique signatures" % (solutionCount, signatureCount)
-    fields = ["Sig #", "Signature", "Count"]
+    fields = ["Sig #", "Hash", "Count", "Signature"]
     ofile.write("\t".join(fields) + '\n')
 
     keys = sorted(signatureDict.keys())
     for idx in range(signatureCount):
         k = keys[idx]
-        fields = ["%.2d" % (idx+1), k, str(len(signatureDict[k]))]
+        fields = ["%.2d" % (idx+1), hashDict[k], str(len(signatureDict[k])), k]
         ofile.write("\t".join(fields) + '\n')
 
         sname = signatureDirectory + ('/sig-%.2d.txt' % (idx + 1))

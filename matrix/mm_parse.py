@@ -22,11 +22,48 @@ def usage(name):
     print " -p AUX           Number of auxiliary variables"
     print " -n N or N1:N2:N3 Matrix dimension(s)"
 
+# Fields in solution database
+fieldIndex = {'hash' : 0, 'additions' : 1, 'kernel hash' : 2, 'path' : 3}
+databaseConverters = [str, int, str, str]
+# Mapping from hash to list of fields
+databaseDict = {}
+
+databaseDirectory = "mm-solutions"
+databasePaths = [databaseDirectory + "/heule-database.txt"]
+
 
 cmdPrefix = "cmd>"
 
 # Mapping from canonized polynomial to solution name
 solutionDict = {}
+
+def loadDatabase():
+    global databaseDict
+    for dbname in databasePaths:
+        try:
+            dbfile = open(dbname, 'r')
+        except Exception as ex:
+            print "Couldn't open database file '%s' (%s)" % (dbname, str(ex))
+            continue
+        first = True
+        for line in dbfile:
+            if first:
+                first = False
+                continue
+            line = brent.trim(line)
+            fields = line.split('\t')
+            if len(fields) != len(databaseConverters):
+                print "Bad database format.  Expected %d fields, but found %d" % (len(databaseConverters), len(fields))
+                break
+            try:
+                entry = [convert(field) for convert, field in zip(databaseConverters, fields)]
+            except Exception as ex:
+                print "Bad database format.  Couldn't convert entry (%s)" % str(ex)
+                break
+            databaseDict[entry[0]] = entry
+        dbfile.close()
+    print "Database contains %d entries" % len(databaseDirectory)
+        
 
 # Extract the support information from file:
 def getSupport(fname):
@@ -123,7 +160,8 @@ def generateSolutions(iname, fileScheme):
             print "Couldn't process solution: %s" % str(ex)
             continue
         sname = "%s #%d" % (iname, index)
-        signature = generateSignature(ss)
+        sc = ss.canonize()
+        signature = sc.signature()
         found = signature in solutionDict
         if found:
             osname = solutionDict[signature]
@@ -131,6 +169,12 @@ def generateSolutions(iname, fileScheme):
         else:
             print "Solution %s.  %d additions" % (sname, ss.addCount())
             solutionDict[signature] = sname
+        if not found:
+            hash = sc.sign()
+            if hash in databaseDict:
+                print "Matches solution in '%s'" % databaseDict[hash][fieldIndex['path']]
+            else:
+                print "Solution not yet in database"
         index += 1
         ss.printPolynomial()
 
@@ -152,7 +196,6 @@ def run(name, args):
             idir = val
             template = "%s/*.log" % idir
             inameList = sorted(glob.glob(template))
-            print "Template '%s'.  Using files %s" % (template, str(inameList))
         elif opt == '-i':
             inameList = [val]
         elif opt == '-s':
@@ -198,6 +241,8 @@ def run(name, args):
     except brent.MatrixException as ex:
         print "Parse of file '%s' failed: %s" % (pname, str(ex))
         return
+    loadDatabase()
+
     sname = "%s" % (pname)
     signature = generateSignature(fileScheme)
     solutionDict[signature] = sname

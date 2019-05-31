@@ -3,8 +3,12 @@ import functools
 import re
 import random
 import sys
+import hashlib
 
 import circuit
+
+# How many hex digits should be in a hash signature?
+hashLength = 10
 
 class MatrixException(Exception):
 
@@ -424,6 +428,10 @@ class KernelSet:
         terms.sort()
         return " ".join([str(t) for t in terms])
 
+    def sign(self):
+        sig = self.signature()
+        return "K" + hashlib.sha1(sig).hexdigest()[:hashLength]
+
     def __str__(self):
         return self.generateString()
 
@@ -649,6 +657,7 @@ class MScheme(MProblem):
     # Assignment
     assignment = None
     kernelTerms = None
+    isCanonical = False
 
     expressionSplitter = re.compile('\s*[-+]\s*')
 
@@ -659,6 +668,7 @@ class MScheme(MProblem):
         else:
             self.assignment = assignment
         self.kernelTerms = self.findKernels()
+        self.isCanonical = False
 
     def generateZeroAssignment(self):
         self.assignment = Assignment()
@@ -738,7 +748,9 @@ class MScheme(MProblem):
     # Return scheme with levels reordered to canonize kernels
     def canonize(self):
         (k, variablePermuter, indexPermuter, levelPermuter) = self.kernelTerms.canonize()
-        return self.permute(variablePermuter, indexPermuter, levelPermuter)
+        result = self.permute(variablePermuter, indexPermuter, levelPermuter)
+        result.isCanonical = True
+        return result
 
     def levelCanonize(self):
         (k, levelPermuter) = self.kernelTerms.levelCanonize()
@@ -784,8 +796,23 @@ class MScheme(MProblem):
         
 
     def printPolynomial(self, outfile = sys.stdout):
+        outfile.write("# Compute A (%d x %d) X B (%d x %d) = C (%d x %d)\n" % self.fullRanges())
+        outfile.write("# Requires %d multiplications and %d additions\n" % (self.auxCount, self.addCount()))
+        outfile.write("# Kernel signature %s\n" % self.kernelTerms.sign())
+        if self.isCanonical:
+            outfile.write("# This representation has been put into canonical form\n")
+
         for line in self.generatePolynomial():
             outfile.write(line + '\n')
+
+    def signature(self):
+        lines = self.generatePolynomial()
+        return "|".join(lines)
+
+    def sign(self):
+        sig = self.signature()
+        return "M" + hashlib.sha1(sig).hexdigest()[:hashLength]
+        
 
     # Parse from polynomial representation
     def parsePolynomialLine(self, line, level):
@@ -815,7 +842,7 @@ class MScheme(MProblem):
         level = 1
         for line in f:
             line = trim(line)
-            if (len(line) > 0):
+            if len(line) > 0 and line[0] != '#':
                 self.parsePolynomialLine(line, level)
                 level += 1
         f.close()
