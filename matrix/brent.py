@@ -924,4 +924,5 @@ class MScheme(MProblem):
             self.ckt.status()
             self.ckt.satisfy(bv)
         self.ckt.write("time")
+        self.ckt.write("quit")
 

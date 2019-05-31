@@ -33,7 +33,7 @@ def run(name, args):
     pname = None
     fixKV = False
     excludeSingleton = False
-    seed = None
+    seed = 0
     optlist, args = getopt.getopt(args, 'hkeS:c:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
