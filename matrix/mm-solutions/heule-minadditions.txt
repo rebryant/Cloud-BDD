@@ -1,0 +1,3 @@
+20x2+49x+4y6+8y4+11y3+2z30+z29/i41w163c235e-000.exp
+20x2+49x+4y6+8y4+11y3+2z30+z29/i41w163c367g-000.exp
+classic/smirnov.exp
