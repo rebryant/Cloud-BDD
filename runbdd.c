@@ -194,6 +194,7 @@ static void usage(char *cmd) {
     printf("\t-P PORT    Use PORT as controller port\n");
     printf("\t-r         Try to use local router\n");
     printf("\t-L FILE    Echo results to FILE\n");
+    printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
     exit(0);
 }
@@ -218,7 +219,7 @@ int main(int argc, char *argv[]) {
     do_dist = 0;
     chaining_type = CHAIN_ALL;
 
-    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:C:")) != -1) {
+    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -252,6 +253,10 @@ int main(int argc, char *argv[]) {
 	case 'L':
 	    logfile_name = strncpy(lbuf, optarg, BUFSIZE-1);
 	    lbuf[BUFSIZE-1] = '\0';
+	    break;
+	case 't':
+	    timelimit = atoi(optarg);
+	    change_timeout(0);
 	    break;
 	case 'C':
 	    switch (optarg[0]) {

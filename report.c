@@ -52,6 +52,11 @@ bool set_logfile(char *file_name)
     return logfile != NULL;
 }
 
+FILE *get_logfile()
+{
+    return logfile;
+}
+
 void err(bool fatal, char *fmt, ...)
 {
     va_list ap;

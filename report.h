@@ -11,6 +11,7 @@
 void init_files(FILE *errfile, FILE *verbfile);
 
 bool set_logfile(char *file_name);
+FILE *get_logfile();
 
 extern int verblevel;
 void set_verblevel(int level);

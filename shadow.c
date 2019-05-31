@@ -821,13 +821,24 @@ void shadow_satisfy(shadow_mgr mgr, ref_t r) {
 	return;
     DdNode *n = get_ddnode(mgr, r);
     bool zdd = is_zdd(mgr, r);
+    FILE *logfile = get_logfile();
     if (zdd) {
 	Cudd_zddPrintMinterm(mgr->bdd_manager, n);
-	//	Cudd_zddPrintDebug(mgr->bdd_manager, n, mgr->nzvars, 4);
+	if (logfile) {
+	    FILE *savefile = Cudd_ReadStdout(mgr->bdd_manager);
+	    Cudd_SetStdout(mgr->bdd_manager, logfile);
+	    Cudd_zddPrintMinterm(mgr->bdd_manager, n);
+	    Cudd_SetStdout(mgr->bdd_manager, savefile);
+	}
     }
     else {
 	Cudd_PrintMinterm(mgr->bdd_manager, n);
-	//	Cudd_PrintDebug(mgr->bdd_manager, n, mgr->nvars, 4);
+	if (logfile) {
+	    FILE *savefile = Cudd_ReadStdout(mgr->bdd_manager);
+	    Cudd_SetStdout(mgr->bdd_manager, logfile);
+	    Cudd_PrintMinterm(mgr->bdd_manager, n);
+	    Cudd_SetStdout(mgr->bdd_manager, savefile);
+	}
     }
 }
 
