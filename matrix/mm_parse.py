@@ -14,14 +14,18 @@ import glob
 
 
 def usage(name):
-    print "Usage: %s -h [-u] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
+    print "Usage: %s [-h] [-u] [-q] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
     print " -h               Print this message"
     print " -u               Print number of nodes at each level, rather than solutions"
+    print " -q               Quiet mode.  Only summarize results"
     print " -I IDIR          Run for all files with extension '.log' in directory IDIR"
     print " -i IFILE         Specify input file"
     print " -s PFILE         Read hard-coded values from polynomial in PFILE"
     print " -p AUX           Number of auxiliary variables"
     print " -n N or N1:N2:N3 Matrix dimension(s)"
+
+# Quiet mode
+quietMode = False
 
 # Fields in solution database
 fieldIndex = {'hash' : 0, 'additions' : 1, 'kernel hash' : 2, 'path' : 3}
@@ -41,6 +45,9 @@ cmdPrefix = "cmd>"
 
 # Mapping from canonized polynomial to solution name
 solutionDict = {}
+# How many of the solutions are not in main database?
+uniqueCount = 0
+
 
 def loadDatabase():
     global databaseDict
@@ -68,7 +75,8 @@ def loadDatabase():
                 break
             databaseDict[entry[0]] = entry
         dbfile.close()
-    print "Database contains %d entries" % len(databaseDirectory)
+    if not quietMode:
+        print "Database contains %d entries" % len(databaseDict)
         
 
 # Extract the support information from file:
@@ -155,10 +163,12 @@ def generateSignature(scheme):
     
 
 def generateSolutions(iname, fileScheme):
-    global solutionDict
+    global solutionDict, uniqueCount
     supportNames = getSupport(iname)
     slist = getSolutions(iname)
     index = 1
+    newCount = 0
+    newUniqueCount = 0
     for s in slist:
         try:
             ss = fileScheme.duplicate().parseFromSolver(supportNames, s)
@@ -171,33 +181,47 @@ def generateSolutions(iname, fileScheme):
         found = signature in solutionDict
         if found:
             osname = solutionDict[signature]
-            print "Solution %s.  %d additions.  Isomorphic to solution %s" % (sname, ss.addCount(), osname)
+            if not quietMode:
+                print "Solution %s.  %d additions.  Isomorphic to solution %s" % (sname, ss.addCount(), osname)
         else:
-            print "Solution %s.  %d additions" % (sname, ss.addCount())
+            newCount += 1
+            if not quietMode:
+                print "Solution %s.  %d additions" % (sname, ss.addCount())
             solutionDict[signature] = sname
         if not found:
             hash = sc.sign()
             if hash in databaseDict:
-                print "Probably isomorphic to solution in '%s'" % databaseDict[hash][fieldIndex['path']]
+                if not quietMode:
+                    print "Probably isomorphic to solution in '%s'" % databaseDict[hash][fieldIndex['path']]
             else:
-                print "Solution not yet in database"
+                newUniqueCount += 1
+                uniqueCount += 1
+                if not quietMode:
+                    print "Solution not yet in database"
         index += 1
-        ss.printPolynomial()
+        if not quietMode:
+            ss.printPolynomial()
+        if quietMode:
+            fields = [iname, str(len(slist)), str(newCount), str(newUniqueCount)]
+            print "\t".join(fields)
+        
 
 def run(name, args):
-    global solutionDict
+    global solutionDict, quietMode
     n1, n2, n3 = 3, 3, 3
     auxCount = 23
     solve = True
     pname = None
     inameList = []
-    optlist, args = getopt.getopt(args, 'huI:i:s:p:n:o:')
+    optlist, args = getopt.getopt(args, 'huqI:i:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         elif opt == '-u':
             solve = False
+        elif opt == '-q':
+            quietMode = True
         elif opt == '-I':
             idir = val
             template = "%s/*.log" % idir
@@ -232,6 +256,10 @@ def run(name, args):
         print "Error. Require input file name"
         return
     if not solve:
+        fields = ['File', 'Brent']
+        fields += ["Level %d" % l for l in brent.unitRange(6)]
+        print "\t".join(fields)
+
         for iname in inameList:
             szlist = getSizes(iname)
             if len(szlist) > 0:
@@ -240,6 +268,11 @@ def run(name, args):
         return
     if pname is None:
         print "Error. Require solution file name"
+
+    if quietMode:
+        fields = ['File', 'Solutions', 'Local New', 'DB New']
+        print "\t".join(fields)
+
     ckt = circuit.Circuit()
     fileScheme = brent.MScheme((n1, n2, n3), auxCount, ckt)
     try:
