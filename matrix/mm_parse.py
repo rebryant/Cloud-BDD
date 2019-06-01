@@ -201,9 +201,9 @@ def generateSolutions(iname, fileScheme):
         index += 1
         if not quietMode:
             ss.printPolynomial()
-        if quietMode:
-            fields = [iname, str(len(slist)), str(newCount), str(newUniqueCount)]
-            print "\t".join(fields)
+    if quietMode:
+        fields = [iname, str(len(slist)), str(newCount), str(newUniqueCount)]
+        print "\t".join(fields)
         
 
 def run(name, args):
