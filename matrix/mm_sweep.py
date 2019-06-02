@@ -8,12 +8,12 @@ import getopt
 import subprocess
 
 def usage(name):
-    print "Usage %s [-h] [-k] [-e] [-t SECS] [-S SCOUNT] [-l LTHRESH] [-u UTHRESH] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
+    print "Usage %s [-h] [-k] [-e] [-t SECS] [-S SEED] [-l LTHRESH] [-u UTHRESH] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
     print " -e               Generate streamline constraints based on singleton exclusion property"
     print " -t SECS          Set runtime limit (in seconds)"
-    print " -S SCOUNT        Set number of different seeds"
+    print " -S SEED          Set seed"
     print " -l LTHRESH       Set lower threshold of fix_ab + fix_c (100 = all)"
     print " -u UTHRESH       Set upper threshold of fix_ab + fix_c (100 = all)"
     print " -s PFILE         Read hard-coded values from polynomial in PFILE"
@@ -67,20 +67,19 @@ def generate(seed, abprob, cprob):
         return False
     return True
     
-def sweeper(abcLimit, seedCount):
+def sweeper(abcLimit, seed):
     startAB = max(0, abcLimit - 100)
     finishC = abcLimit - startAB
     startC = max(0, abcLimit - 100)
     for c in range(startC, finishC + deltaC, deltaC):
         ab = abcLimit - c
-        for seed in range(1, seedCount + 1):
-            generate(seed, ab, c)
+        generate(seed, ab, c)
 
 def run(name, args):
     global fixKV, excludeSingleton, dim, auxCount, solutionPath, timeLimit
     lowThresh = 0
     highThresh = 200
-    seedCount = 1
+    seed = 1
     optlist, args = getopt.getopt(args, 'hkeS:t:l:u:s:p:n:')
     for (opt, val) in optlist:
         if opt == '-h':
@@ -91,7 +90,7 @@ def run(name, args):
         elif opt == '-e':
             excludeSingleton = True
         elif opt == '-S':
-            seedCount = int(val)
+            seed = int(val)
         elif opt == '-t':
             timeLimit = int(val)
         elif opt == '-l':
@@ -114,7 +113,7 @@ def run(name, args):
                 usage(name)
                 return
     for limit in range(lowThresh, highThresh+deltaC, deltaC):
-        sweeper(limit, seedCount)
+        sweeper(limit, seed)
 
     
 
