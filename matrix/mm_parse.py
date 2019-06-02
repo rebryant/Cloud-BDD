@@ -101,6 +101,28 @@ def getSupport(fname):
     inf.close()
     return []
             
+def getPeakNodes(fname):
+    matcher = re.compile("Peak number of live nodes: ([0-9]+)")
+    try:
+        inf = open(fname, 'r')
+    except:
+        print "Couldn't open input file '%s'" % fname
+        return []
+    value = None
+    for line in inf:
+        line = brent.trim(line)
+        sm = matcher.match(line)
+        if sm:
+            try:
+                snum = sm.group(1)
+                value = int(snum)
+            except:
+                print "Couldn't extract peak nodes from line '%s' % line"
+                continue
+    inf.close()
+    return value
+    
+
 # Extract solutions from file:
 def getSolutions(fname):
     slist = []
@@ -256,15 +278,18 @@ def run(name, args):
         print "Error. Require input file name"
         return
     if not solve:
-        fields = ['File', 'Brent']
+        fields = ['File', 'Peak', 'Brent']
         fields += ["Level %d" % l for l in brent.unitRange(6)]
         print "\t".join(fields)
 
         for iname in inameList:
+            peak = getPeakNodes(iname)
+            speak = '' if peak is None else str(peak)
+            fields = [iname, speak]
             szlist = getSizes(iname)
             if len(szlist) > 0:
-                slist = [str(n) for n in szlist]
-                print iname + ":\t" + "\t".join(slist)
+                fields += [str(n) for n in szlist]
+                print "\t".join(fields)
         return
     if pname is None:
         print "Error. Require solution file name"
