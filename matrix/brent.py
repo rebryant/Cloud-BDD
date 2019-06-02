@@ -604,23 +604,8 @@ class MProblem:
                     vec = circuit.Vec(vars)
                     self.ckt.declare(vec)
 
-    # Generate Brent equations
-    def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False):
+    def bfGenerator(self, streamlineNode = None, check = False):
         ranges = self.fullRanges()
-        indices = self.iexpand(ranges)
-        self.ckt.comment("Generate all Brent equations")
-        first = True
-        for idx in indices:
-            self.generateBrent(idx, kset, check)
-            if first and not check:
-                first = False
-                name = circuit.Vec([BrentTerm(idx)])
-                self.ckt.comment("Find size of typical Brent term")
-                self.ckt.information(name)
-        if not check:
-            names = circuit.Vec([BrentTerm(idx) for idx in indices])
-            self.ckt.comment("Find combined size of all Brent terms")
-            self.ckt.information(names)
         for level in unitRange(6):
             self.ckt.comment("Combining terms at level %d" % level)
             gcount = ranges[-1]
@@ -650,6 +635,30 @@ class MProblem:
                 names = circuit.Vec([BrentTerm(idx) for idx in indices])
                 self.ckt.comment("Find combined size for terms at level %d" % level)
                 self.ckt.information(names)
+
+
+
+    # Generate Brent equations
+    def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False):
+        ranges = self.fullRanges()
+        indices = self.iexpand(ranges)
+        self.ckt.comment("Generate all Brent equations")
+        first = True
+        for idx in indices:
+            self.generateBrent(idx, kset, check)
+            if first and not check:
+                first = False
+                name = circuit.Vec([BrentTerm(idx)])
+                self.ckt.comment("Find size of typical Brent term")
+                self.ckt.information(name)
+        if not check:
+            names = circuit.Vec([BrentTerm(idx) for idx in indices])
+            self.ckt.comment("Find combined size of all Brent terms")
+            self.ckt.information(names)
+
+        self.bfGenerator(streamlineNode, check)
+
+
 
 # Describe encoding of matrix multiplication
 class MScheme(MProblem):
