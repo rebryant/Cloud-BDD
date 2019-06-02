@@ -21,6 +21,7 @@
 #include "bdd.h"
 #include "cudd.h"
 #include "shadow.h"
+#include "report.h"
 
 /* Keep, but do not compile, old versions of reduction */
 #define OLD_REDUCE 0
@@ -1223,6 +1224,9 @@ bool do_status(int argc, char *argv[]) {
 	ref_show_stat(smgr->ref_mgr);
     if (smgr->do_cudd) {
 	Cudd_PrintInfo(smgr->bdd_manager, stdout);
+	FILE *logfile = get_logfile();
+	if (logfile)
+	    Cudd_PrintInfo(smgr->bdd_manager, logfile);
     }
     return true;
 }
