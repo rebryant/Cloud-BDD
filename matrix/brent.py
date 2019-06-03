@@ -604,6 +604,39 @@ class MProblem:
                     vec = circuit.Vec(vars)
                     self.ckt.declare(vec)
 
+
+    def dfGenerator(self, streamlineNode = None, check = False, prefix = []):
+        level = 6 - len(prefix)
+        if level == 0:
+            # We're done.  Reached the Brent term
+            return
+        ranges = self.fullRanges()
+        gcount = ranges[len(prefix)]
+        tlist = []
+        for x in unitRange(gcount):
+            nprefix = prefix + [x]
+            # Recursively generate next level term
+            self.dfGenerator(streamlineNode, check, prefix = nprefix)
+            tlist.append(BrentTerm(nprefix))
+        terms = self.ckt.addVec(circuit.Vec(tlist))
+        args = terms
+        if level == self.streamlineLevel and streamlineNode is not None:
+            tlist = [streamlineNode] + tlist
+            args = circuit.Vec(tlist)
+        bn = BrentTerm(prefix)
+        self.ckt.andN(bn, args)
+        self.ckt.decRefs([terms])
+        if check:
+            self.ckt.checkConstant(bn, 1)
+        if level == 6:
+            # Top level cleanup
+            if streamlineNode is not None:
+                self.ckt.decRefs([streamlineNode])
+            if not check:
+                names = circuit.Vec([bn])
+                self.ckt.comment("Find combined size for terms at level %d" % level)
+                self.ckt.information(names)
+
     def bfGenerator(self, streamlineNode = None, check = False):
         ranges = self.fullRanges()
         for level in unitRange(6):
@@ -656,7 +689,7 @@ class MProblem:
             self.ckt.comment("Find combined size of all Brent terms")
             self.ckt.information(names)
 
-        self.bfGenerator(streamlineNode, check)
+        self.dfGenerator(streamlineNode, check)
 
 
 

@@ -14,10 +14,11 @@ import glob
 
 
 def usage(name):
-    print "Usage: %s [-h] [-u] [-q] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
+    print "Usage: %s [-h] [-u] [-b] [-q] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
     print " -h               Print this message"
     print " -u               Print number of nodes at each level, rather than solutions"
     print " -q               Quiet mode.  Only summarize results"
+    print " -b               Commands generated via breadth-first traversal"
     print " -I IDIR          Run for all files with extension '.log' in directory IDIR"
     print " -i IFILE         Specify input file"
     print " -s PFILE         Read hard-coded values from polynomial in PFILE"
@@ -235,7 +236,8 @@ def run(name, args):
     solve = True
     pname = None
     inameList = []
-    optlist, args = getopt.getopt(args, 'huqI:i:s:p:n:o:')
+    breadthFirst = False
+    optlist, args = getopt.getopt(args, 'huqbI:i:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -244,6 +246,8 @@ def run(name, args):
             solve = False
         elif opt == '-q':
             quietMode = True
+        elif opt == '-b':
+            breadthFirst = True
         elif opt == '-I':
             idir = val
             template = "%s/*.log" % idir
@@ -279,7 +283,10 @@ def run(name, args):
         return
     if not solve:
         fields = ['File', 'Peak', 'Brent']
-        fields += ["Level %d" % l for l in brent.unitRange(6)]
+        if breadthFirst:
+            fields += ["Level %d" % l for l in brent.unitRange(6)]
+        else:
+            fields += ["Level 6"]
         print "\t".join(fields)
 
         for iname in inameList:
