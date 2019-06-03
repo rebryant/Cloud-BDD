@@ -32,52 +32,56 @@ quietMode = False
 fieldIndex = {'hash' : 0, 'additions' : 1, 'kernel hash' : 2, 'path' : 3}
 databaseConverters = [str, int, str, str]
 # Mapping from hash to list of fields
-databaseDict = {}
+heuleDatabaseDict = {}
+generatedDatabaseDict = {}
 
 
 # Set to home directory for program, split into tokens
 homePathFields = ['.']
 
 databaseDirectory = "mm-solutions"
-databasePathFields = [[databaseDirectory, "heule-database.txt"]]
 
+heuleDatabasePathFields = [databaseDirectory, "heule-database.txt"]
+generatedDatabasePathFields = [databaseDirectory, "generated-database.txt"]
+
+generatedPathFields = [databaseDirectory, "generated"]
 
 cmdPrefix = "cmd>"
 
 # Mapping from canonized polynomial to solution name
 solutionDict = {}
-# How many of the solutions are not in main database?
-uniqueCount = 0
+# How many of the solutions are not in Heule database?
+nonHeuleCount = 0
+# How many of the solutions have never been encountered?
+freshCount = 0
 
 
-def loadDatabase():
-    global databaseDict
-    for dbfields in databasePathFields:
-        dbname = '/'.join(homePathFields + dbfields)
-        try:
-            dbfile = open(dbname, 'r')
-        except Exception as ex:
-            print "Couldn't open database file '%s' (%s)" % (dbname, str(ex))
+def loadDatabase(databaseDict, databasePathFields):
+    dbname = '/'.join(homePathFields + databasePathFields)
+    try:
+        dbfile = open(dbname, 'r')
+    except Exception as ex:
+        print "Couldn't open database file '%s' (%s)" % (dbname, str(ex))
+        return
+    first = True
+    for line in dbfile:
+        if first:
+            first = False
             continue
-        first = True
-        for line in dbfile:
-            if first:
-                first = False
-                continue
-            line = brent.trim(line)
-            fields = line.split('\t')
-            if len(fields) != len(databaseConverters):
-                print "Bad database format.  Expected %d fields, but found %d" % (len(databaseConverters), len(fields))
-                break
-            try:
-                entry = [convert(field) for convert, field in zip(databaseConverters, fields)]
-            except Exception as ex:
-                print "Bad database format.  Couldn't convert entry (%s)" % str(ex)
-                break
-            databaseDict[entry[0]] = entry
-        dbfile.close()
+        line = brent.trim(line)
+        fields = line.split('\t')
+        if len(fields) != len(databaseConverters):
+            print "Bad database format.  Expected %d fields, but found %d" % (len(databaseConverters), len(fields))
+            break
+        try:
+            entry = [convert(field) for convert, field in zip(databaseConverters, fields)]
+        except Exception as ex:
+            print "Bad database format.  Couldn't convert entry (%s)" % str(ex)
+            break
+        databaseDict[entry[0]] = entry
+    dbfile.close()
     if not quietMode:
-        print "Database contains %d entries" % len(databaseDict)
+        print "Database %s contains %d entries" % (databasePathFields[-1], len(databaseDict))
         
 
 # Extract the support information from file:
@@ -184,14 +188,36 @@ def generateSignature(scheme):
     signature = "\n".join(sigList)
     return signature
     
+def recordSolution(scheme):
+    fname = scheme.sign() + '.exp'
+    pathFields = generatedPathFields + [fname]
+    path = "/".join(pathFields)
+    fpath = "/".join(homePathFields + pathFields)
+    try:
+        outf = open(fpath, 'w')
+    except Exception as ex:
+        print "Can't open output file '%s' (%s)" % (fpath, str(ex))
+        return
+    scheme.printPolynomial(outf)
+    outf.close()
+    dbEntryFields = [scheme.sign(), str(scheme.addCount()), scheme.kernelTerms.sign(), path]
+    dbpath = "/".join(homePathFields + generatedDatabasePathFields)
+    try:
+        dbfile = open(dbpath, 'a')
+    except Exception as ex:
+        print "Can't open database file '%s' (%s)" % (dbpath, str(ex))
+        return
+    dbfile.write("\t".join(dbEntryFields) + '\n')
+    dbfile.close()
 
 def generateSolutions(iname, fileScheme):
-    global solutionDict, uniqueCount
+    global solutionDict, nonHeuleCount, freshCount
     supportNames = getSupport(iname)
     slist = getSolutions(iname)
     index = 1
     newCount = 0
-    newUniqueCount = 0
+    nonHeuleCount = 0
+    freshCount = 0
     for s in slist:
         try:
             ss = fileScheme.duplicate().parseFromSolver(supportNames, s)
@@ -213,19 +239,24 @@ def generateSolutions(iname, fileScheme):
             solutionDict[signature] = sname
         if not found:
             hash = sc.sign()
-            if hash in databaseDict:
+            if hash in heuleDatabaseDict:
                 if not quietMode:
-                    print "Probably isomorphic to solution in '%s'" % databaseDict[hash][fieldIndex['path']]
+                    print "Probably isomorphic to solution in '%s'" % heuleDatabaseDict[hash][fieldIndex['path']]
             else:
-                newUniqueCount += 1
-                uniqueCount += 1
-                if not quietMode:
-                    print "Solution not yet in database"
+                nonHeuleCount += 1
+                if hash in generatedDatabaseDict:
+                    if not quietMode:
+                        print "Probably isomorphic to solution in '%s'" % generatedDatabaseDict[hash][fieldIndex['path']]
+                else:
+                    freshCount += 1
+                    if not quietMode:
+                        print "Completely new Solution"
+                    recordSolution(sc)
         index += 1
         if not quietMode:
             ss.printPolynomial()
     if quietMode:
-        fields = [iname, str(len(slist)), str(newCount), str(newUniqueCount)]
+        fields = [iname, str(len(slist)), str(newCount), str(nonHeuleCount), str(freshCount)]
         print "\t".join(fields)
         
 
@@ -302,7 +333,7 @@ def run(name, args):
         print "Error. Require solution file name"
 
     if quietMode:
-        fields = ['File', 'Solutions', 'Local New', 'DB New']
+        fields = ['File', 'Solutions', 'Local New', 'Non Heule', 'DB New']
         print "\t".join(fields)
 
     ckt = circuit.Circuit()
@@ -312,7 +343,9 @@ def run(name, args):
     except brent.MatrixException as ex:
         print "Parse of file '%s' failed: %s" % (pname, str(ex))
         return
-    loadDatabase()
+    loadDatabase(heuleDatabaseDict, heuleDatabasePathFields)
+    loadDatabase(generatedDatabaseDict, generatedDatabasePathFields)
+
 
     sname = "%s" % (pname)
     signature = generateSignature(fileScheme)
