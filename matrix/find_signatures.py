@@ -8,6 +8,7 @@
 import sys
 import os
 import os.path
+import glob
 
 import circuit
 import brent
@@ -17,6 +18,7 @@ import brent
 signatureDict = {}
 # Map from signature to its hash 
 hashDict = {}
+schemeDict = {}
 solutionCount = 0
 signatureCount = 0
 
@@ -28,13 +30,18 @@ ckt = circuit.Circuit()
 subDirectory = "mm-solutions"
 
 candidatePath = subDirectory + "/heule-candidates.txt"
-reportPath = subDirectory + "/heule-signatures.txt"
-signatureDirectory = subDirectory + "/heule-signatures"
-solutionDirectory =  subDirectory + "/heule-unique-signatures"
+reportPath = subDirectory + "/signatures.txt"
+signatureDirectory = subDirectory + "/signatures"
+solutionDirectory =  subDirectory + "/unique-signatures"
 sourceDirectory = subDirectory + "/heule-online"
 
+generatedSourceDirectory = subDirectory + "/generated"
+generatedSolutionCount = 0
+generatedSignatureCount = 0
+generatedSignatureDict = {}
+
 def checkSolution(subPath):
-    global signatureDict, solutionCount, signatureCount
+    global signatureDict, solutionCount, signatureCount, schemeDict, hashDict
     path = sourceDirectory + '/' + subPath
     try:
         s = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
@@ -49,31 +56,47 @@ def checkSolution(subPath):
         print "File %s has new signature '%s'" % (subPath, sig)
         signatureCount += 1
         hashDict[sig] = sc.kernelTerms.sign()
-        sname = solutionDirectory + '/solution-%.2d.exp' % signatureCount
-        skip = False
-        try:
-            sfile = open(sname, 'w')
-        except:
-            print "Couldn't open file '%s'" % sname
-            skip = True
-        if not skip:
-            sc.printPolynomial(sfile)
-            sfile.close()
+        schemeDict[sig] = sc
     else:
-        print "File %s has same signature as %d other files" % (subPath, len(list))        
+        print "File %s has same signature as %d other downloaded files" % (subPath, len(list))        
     list.append(path)
     signatureDict[sig] = list
 
-def process():
+def checkGeneratedSolution(subPath):
+    global signatureDict, solutionCount, signatureCount, hashDict, schemeDict
+    global generatedSignatureDict, generatedSolutionCount, generatedSignatureCount
+
+    path = generatedSourceDirectory + '/' + subPath
+    try:
+        s = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
+    except Exception as ex:
+        print "ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex))
+        return
+    generatedSolutionCount += 1
+    sc = s.canonize()
+    sig = sc.kernelTerms.signature()
+    list = generatedSignatureDict[sig] if sig in generatedSignatureDict else []
+    if len(list) == 0:
+        generatedSignatureCount += 1
+        if sig in signatureDict:
+            print "File %s has new signature among generated solutions '%s'" % (subPath, sig)
+        else:
+            print "File %s has new signature '%s'" % (subPath, sig)
+            signatureCount += 1
+            hashDict[sig] = sc.kernelTerms.sign()
+            signatureDict[sig] = [path]
+            schemeDict[sig] = sc
+    else:
+        print "File %s has same signature as %d other generated files" % (subPath, len(list))        
+    list.append(path)
+    generatedSignatureDict[sig] = list
+
+
+def processHeule():
     try:
         cfile = open(candidatePath, 'r')
     except:
         print "Cannot open file '%s'" % candidatePath
-        return
-    try:
-        ofile = open(reportPath, 'w')
-    except:
-        print "Cannot open file '%s'" % reportPath
         return
 
     for line in cfile:
@@ -82,16 +105,55 @@ def process():
 
     cfile.close()
 
-    print "%d solutions, %d unique signatures" % (solutionCount, signatureCount)
-    fields = ["Sig #", "Hash", "Count", "Signature"]
+def processGenerated():
+    template = generatedSourceDirectory + "/*.exp"
+    fpaths = glob.glob(template)
+    for fpath in fpaths:
+        path = fpath[len(generatedSourceDirectory) + 1:]
+        checkGeneratedSolution(path)
+
+
+def saveScheme(id, scheme):
+    sname = solutionDirectory + '/solution-%.2d.exp' % id
+    try:
+        sfile = open(sname, 'w')
+    except:
+        print "Couldn't open file '%s'" % sname
+        return
+    scheme.printPolynomial(sfile)
+    sfile.close()
+
+
+def process():
+
+    processHeule()
+    
+    heuleCountDict = { k : len(signatureDict[k]) for k in signatureDict.keys() }
+
+    processGenerated()
+
+    try:
+        ofile = open(reportPath, 'w')
+    except:
+        print "Cannot open file '%s'" % reportPath
+        return
+
+    
+    totalCount = solutionCount + generatedSolutionCount
+    print "%d solutions (%d downloaded, %d generated), %d unique signatures" % (totalCount, solutionCount, generatedSolutionCount, signatureCount)
+
+
+    fields = ["Sig #", "Hash", "Downloaded", "Generated", "Signature"]
     ofile.write("\t".join(fields) + '\n')
 
     keys = sorted(signatureDict.keys())
     for idx in range(signatureCount):
         k = keys[idx]
-        fields = ["%.2d" % (idx+1), hashDict[k], str(len(signatureDict[k])), k]
+        hcount = heuleCountDict[k] if k in heuleCountDict else 0
+        gcount = len(generatedSignatureDict[k]) if k in generatedSignatureDict else 0
+        fields = ["%.2d" % (idx+1), hashDict[k], str(hcount), str(gcount), k]
         ofile.write("\t".join(fields) + '\n')
-
+        saveScheme(idx+1, schemeDict[k])
         sname = signatureDirectory + ('/sig-%.2d.txt' % (idx + 1))
         try:
             sfile = open(sname, 'w')

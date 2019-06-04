@@ -1,6 +1,6 @@
 # Compute A (3 x 3) X B (3 x 3) = C (3 x 3)
 # Requires 23 multiplications and 89 additions
-# Kernel signature 45911591b5
+# Kernel signature K45911591b5
 # This representation has been put into canonical form
 (a11+a22)*(b11+b21+b22+b23)*(c11+c31+c32)
 (a13+a32)*(b21+b23+b31)*(c11+c31+c33)
