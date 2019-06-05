@@ -518,7 +518,7 @@ static ref_t tree_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int a
 }
 
 
-/* Use linear reduction.  Enable GC after each operation */
+/* Use tree reduction.  Enable GC after each operation */
 static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
     char buf[24];
     ref_t rval = unit_ref;
