@@ -16,6 +16,7 @@ def usage(name):
     print " -S SEED          Set seed"
     print " -l LTHRESH       Set lower threshold of fix_ab + fix_c (100 = all)"
     print " -u UTHRESH       Set upper threshold of fix_ab + fix_c (100 = all)"
+    print " -c CMIN          Set lower bound on fix_c (0-100)"
     print " -s PFILE         Read hard-coded values from polynomial in PFILE"
     print " -p AUX           Number of auxiliary variables"
     print " -n N or N1:N2:N3 Matrix dimension(s)"
@@ -67,10 +68,10 @@ def generate(seed, abprob, cprob):
         return False
     return True
     
-def sweeper(abcLimit, seed):
+def sweeper(abcLimit, cmin, seed):
     startAB = max(0, abcLimit - 100)
     finishC = abcLimit - startAB
-    startC = max(0, abcLimit - 100)
+    startC = max(0, cmin, abcLimit - 100)
     for c in range(startC, finishC + deltaC, deltaC):
         ab = abcLimit - c
         generate(seed, ab, c)
@@ -80,7 +81,8 @@ def run(name, args):
     lowThresh = 0
     highThresh = 200
     seed = 1
-    optlist, args = getopt.getopt(args, 'hkeS:t:l:u:s:p:n:')
+    cmin = 0
+    optlist, args = getopt.getopt(args, 'hkeS:t:l:u:c:s:p:n:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -97,6 +99,8 @@ def run(name, args):
             lowThresh = int(val)
         elif opt == '-u':
             highThresh = int(val)
+        elif opt == '-c':
+            cmin = int(val)
         elif opt == '-s':
             solutionPath = val
         elif opt == '-p':
@@ -113,7 +117,7 @@ def run(name, args):
                 usage(name)
                 return
     for limit in range(lowThresh, highThresh+deltaC, deltaC):
-        sweeper(limit, seed)
+        sweeper(limit, cmin, seed)
 
     
 
