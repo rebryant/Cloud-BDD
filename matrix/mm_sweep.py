@@ -8,10 +8,11 @@ import getopt
 import subprocess
 
 def usage(name):
-    print "Usage %s [-h] [-k] [-e] [-t SECS] [-S SEED] [-l LTHRESH] [-u UTHRESH] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
+    print "Usage %s [-h] [-k] [-e] [-b] [-t SECS] [-S SEED] [-l LTHRESH] [-u UTHRESH] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
     print " -e               Generate streamline constraints based on singleton exclusion property"
+    print " -b               Combine products in breadth-first order"
     print " -t SECS          Set runtime limit (in seconds)"
     print " -S SEED          Set seed"
     print " -l LTHRESH       Set lower threshold of fix_ab + fix_c (100 = all)"
@@ -36,7 +37,7 @@ deltaC = 5
 homePathFields = ['.']
 generatorFields = ['mm_generate.py']
 
-def generate(seed, abprob, cprob):
+def generate(seed, abprob, cprob, breadthFirst):
     outName = "run"
     argList = []
     if fixKV:
@@ -45,6 +46,8 @@ def generate(seed, abprob, cprob):
     if excludeSingleton:
         outName += "-e"
         argList += ['-e']
+    if breadthFirst:
+        argList += ['-b']
     if timeLimit is not None:
         argList += ['-t', str(timeLimit)]
     outName += "-ab%.3d-c%.3d" % (abprob, cprob)
@@ -68,13 +71,13 @@ def generate(seed, abprob, cprob):
         return False
     return True
     
-def sweeper(abcLimit, cmin, seed):
+def sweeper(abcLimit, cmin, seed, breadthFirst):
     startAB = max(0, abcLimit - 100)
     finishC = abcLimit - startAB
     startC = max(0, cmin, abcLimit - 100)
     for c in range(startC, finishC + deltaC, deltaC):
         ab = abcLimit - c
-        generate(seed, ab, c)
+        generate(seed, ab, c, breadthFirst)
 
 def run(name, args):
     global fixKV, excludeSingleton, dim, auxCount, solutionPath, timeLimit
@@ -82,7 +85,8 @@ def run(name, args):
     highThresh = 200
     seed = 1
     cmin = 0
-    optlist, args = getopt.getopt(args, 'hkeS:t:l:u:c:s:p:n:')
+    breadthFirst = False
+    optlist, args = getopt.getopt(args, 'hkebS:t:l:u:c:s:p:n:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -91,6 +95,8 @@ def run(name, args):
             fixKV = True
         elif opt == '-e':
             excludeSingleton = True
+        elif opt == '-b':
+            breadthFirst = True
         elif opt == '-S':
             seed = int(val)
         elif opt == '-t':
@@ -117,7 +123,7 @@ def run(name, args):
                 usage(name)
                 return
     for limit in range(lowThresh, highThresh+deltaC, deltaC):
-        sweeper(limit, cmin, seed)
+        sweeper(limit, cmin, seed, breadthFirst)
 
     
 

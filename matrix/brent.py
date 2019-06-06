@@ -672,7 +672,7 @@ class MProblem:
 
 
     # Generate Brent equations
-    def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False):
+    def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False, breadthFirst = False):
         ranges = self.fullRanges()
         indices = self.iexpand(ranges)
         self.ckt.comment("Generate all Brent equations")
@@ -689,7 +689,10 @@ class MProblem:
             self.ckt.comment("Find combined size of all Brent terms")
             self.ckt.information(names)
 
-        self.dfGenerator(streamlineNode, check)
+        if breadthFirst:
+            self.bfGenerator(streamlineNode, check)
+        else:
+            self.dfGenerator(streamlineNode, check)
 
 
 
@@ -943,7 +946,7 @@ class MScheme(MProblem):
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False, breadthFirst = False):
         plist = categoryProbabilities.values()
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
@@ -961,7 +964,7 @@ class MScheme(MProblem):
         if excludeSingleton:
             streamlineNode = self.generateStreamline()
         kset = self.kernelTerms if fixKV else None
-        self.generateBrentConstraints(kset, streamlineNode = streamlineNode, check=isFixed)
+        self.generateBrentConstraints(kset, streamlineNode = streamlineNode, check=isFixed, breadthFirst = breadthFirst)
         bv = circuit.Vec([BrentTerm()])
         if not isFixed:
             self.ckt.count(bv)
