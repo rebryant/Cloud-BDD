@@ -99,6 +99,8 @@ def run(name, args):
             fixKV = True
         elif opt == '-e':
             excludeSingleton = True
+        elif opt == '-b':
+            breadthFirst = True
         elif opt == '-z':
             useZdd = True
         elif opt == '-S':
