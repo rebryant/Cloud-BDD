@@ -11,10 +11,11 @@ import subprocess
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-r] [-R] [-I]"
+    print "Usage %s [-h] [-r] [-R] [-C] [-I]"
     print " -h               Print this message"
     print " -r               Redo runs that didn't complete"
     print " -R               Redo all runs"
+    print " -C               Disable chaining"
     print " -I IDIR          Directory containing command files"
     sys.exit(0)
 
@@ -25,6 +26,8 @@ runbddFields = ["..", "runbdd"]
 
 softRedo = False
 hardRedo = False
+
+chain = True
 
 cmdPrefix = "cmd>"
 
@@ -65,6 +68,8 @@ def process(cmdPath):
         print "Skipping %s" % cmdPath
     else:
         cmd = ["/".join(homePathFields + runbddFields), '-c']
+        if not chain:
+            cmd += ['-c', 'n']
         cmd += ['-f', cmdPath]
         cmd += ['-L', logPath]
         cmdLine = " ".join(cmd)
@@ -76,9 +81,9 @@ def process(cmdPath):
 
 
 def run(name, args):
-    global softRedo, hardRedo
+    global softRedo, hardRedo, chain
     nameList = []
-    optlist, args = getopt.getopt(args, 'hrRI:')
+    optlist, args = getopt.getopt(args, 'hrRCI:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -87,6 +92,8 @@ def run(name, args):
             softRedo = True
         elif opt == '-R':
             hardRedo = True
+        elif opt == '-C':
+            chain = False
         elif opt == '-I':
             template = "%s/*.cmd" % val
             nameList = sorted(glob.glob(template))
