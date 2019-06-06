@@ -541,7 +541,7 @@ class MProblem:
         return (self.nrow('alpha'), self.ncol('alpha'), self.nrow('beta'), self.ncol('beta'), self.nrow('gamma'), self.ncol('gamma'))
 
     # Generate Brent equation
-    def generateBrent(self, indices, kset = None, check = False):
+    def generateBrent(self, indices, kset = None, check = False, useZdd = False):
         if len(indices) != 6:
             raise MatrixException("Cannot generate Brent equation for %d indices" % len(indices))
         i1, i2, j1, j2, k1, k2 = indices
@@ -567,6 +567,9 @@ class MProblem:
             lv = circuit.Vec(lvec)
             self.ckt.andN(bn, lv)
         self.ckt.decRefs([pv])
+        if useZdd:
+            self.ckt.comment("Convert to ZDD")
+            self.ckt.cmdLine("zconvert", circuit.Vec([bn, bn]))
         if check:
             self.ckt.checkConstant(bn, 1)
         
@@ -672,13 +675,13 @@ class MProblem:
 
 
     # Generate Brent equations
-    def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False, breadthFirst = False):
+    def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False, breadthFirst = False, useZdd = False):
         ranges = self.fullRanges()
         indices = self.iexpand(ranges)
         self.ckt.comment("Generate all Brent equations")
         first = True
         for idx in indices:
-            self.generateBrent(idx, kset, check)
+            self.generateBrent(idx, kset = kset, check = check, useZdd = useZdd)
             if first and not check:
                 first = False
                 name = circuit.Vec([BrentTerm(idx)])
@@ -946,7 +949,7 @@ class MScheme(MProblem):
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False, breadthFirst = False):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False, breadthFirst = False, useZdd = False):
         plist = categoryProbabilities.values()
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
@@ -964,7 +967,7 @@ class MScheme(MProblem):
         if excludeSingleton:
             streamlineNode = self.generateStreamline()
         kset = self.kernelTerms if fixKV else None
-        self.generateBrentConstraints(kset, streamlineNode = streamlineNode, check=isFixed, breadthFirst = breadthFirst)
+        self.generateBrentConstraints(kset, streamlineNode = streamlineNode, check=isFixed, breadthFirst = breadthFirst, useZdd = useZdd)
         bv = circuit.Vec([BrentTerm()])
         if not isFixed:
             self.ckt.count(bv)
