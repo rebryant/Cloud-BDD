@@ -69,7 +69,7 @@ def process(cmdPath):
     else:
         cmd = ["/".join(homePathFields + runbddFields), '-c']
         if not chain:
-            cmd += ['-c', 'n']
+            cmd += ['-C', 'n']
         cmd += ['-f', cmdPath]
         cmd += ['-L', logPath]
         cmdLine = " ".join(cmd)
