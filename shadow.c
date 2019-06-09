@@ -417,6 +417,44 @@ ref_t shadow_get_variable(shadow_mgr mgr, size_t index) {
     return r;
 }
 
+
+ref_t shadow_cm_restrict(shadow_mgr mgr, ref_t fref, ref_t cref) {
+    DdNode *fn = get_ddnode(mgr, fref);
+    DdNode *cn = get_ddnode(mgr, cref);
+    DdNode *n = NULL;
+    ref_t r = REF_INVALID;
+    dd_type_t dtype = IS_BDD;
+
+    if (mgr->do_cudd) {
+	if (is_zdd(mgr, fref) || is_zdd(mgr, cref)) {
+	    err(false, "Can't perform Coudert/Madre restriction on ZDDs");
+	    return r;
+	}
+	bool af = is_add(mgr, fref);
+	bool ac = is_add(mgr, cref);
+	if (af || ac) {
+	    dtype = IS_ADD;
+	    if (!af)
+		fn = aconvert(mgr, fn);
+	    if (!ac)
+		cn = aconvert(mgr, cn);
+	    n = Cudd_addRestrict(mgr->bdd_manager, fn, cn);
+	    reference_dd(mgr, n);
+	    if (!af)
+		unreference_dd(mgr, fn, IS_ADD);
+	    if (!ac)
+		unreference_dd(mgr, cn, IS_ADD);
+	}
+	if (dtype == IS_BDD) {
+	    n = Cudd_bddRestrict(mgr->bdd_manager, fn, cn);
+	    reference_dd(mgr, n);
+	}
+	r = dd2ref(n, dtype);
+    }
+    add_ref(mgr, r, n);
+    return r;
+}
+
 ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref) {
     DdNode *in = get_ddnode(mgr, iref);
     DdNode *tn = get_ddnode(mgr, tref);

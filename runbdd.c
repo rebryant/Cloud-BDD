@@ -69,11 +69,13 @@ bool do_equant(int argc, char *argv[]);
 bool do_local_flush(int argc, char *argv[]);
 bool do_information(int argc, char *argv[]);
 bool do_ite(int argc, char *argv[]);
-bool do_nothing(int argc, char *argv[]);
 bool do_or(int argc, char *argv[]);
+bool do_nothing(int argc, char *argv[]);
 bool do_not(int argc, char *argv[]);
+bool do_restrict(int argc, char *argv[]);
 bool do_satisfy(int argc, char *argv[]);
 bool do_shift(int argc, char *argv[]);
+bool do_simplify(int argc, char *argv[]);
 bool do_size(int argc, char *argv[]);
 bool do_status(int argc, char *argv[]);
 bool do_uquant(int argc, char *argv[]);
@@ -106,14 +108,14 @@ static void bdd_init() {
 
 static void console_init(bool do_dist) {
     add_cmd("aconvert", do_aconvert,
-	    " af f ...      | Convert f to ADD and name af");
+	    " af f ...       | Convert f to ADD and name af");
     add_cmd("and", do_and,
 	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
     add_cmd("cofactor", do_cofactor,
 	    " fd f l1 ...    | fd <- cofactor(f, l1, ...");
     if (do_local || do_cudd)
 	add_cmd("collect", do_collect,
-		"                | Perform garbage collection (local & cudd only)");
+		"            | Perform garbage collection (local & cudd only)");
     add_cmd("count", do_count,
 	    " f1 f2 ...      | Display function counts");
     add_cmd("delete", do_delete,
@@ -124,7 +126,7 @@ static void console_init(bool do_dist) {
 	    " fd f v1 ...    | Existential quantification");
     if (!do_dist)
 	add_cmd("flush", do_local_flush,
-		"                | Flush local state");
+            "                | Flush local state");
     add_cmd("ite", do_ite,
 	    " fd fi ft fe    | fd <- ITE(fi, ft, fe)");
     add_cmd("or", do_or,
@@ -147,8 +149,12 @@ static void console_init(bool do_dist) {
 	    " v1 v2 ...      | Create variables");
     add_cmd("xor", do_xor,
 	    " fd f1 f2 ...   | fd <- f1 ^ f2 ^ ...");
+    add_cmd("restrict", do_restrict,
+	    " fd f c ...     | fd <- Restrict(f,c) [Coudert/Madre's restriction operation]");
+    add_cmd("simplify", do_simplify,
+	    " f1 f2 ...      | Simplify set of functions while maintaining conjunction");
     add_cmd("zconvert", do_zconvert,
-	    " zf f ...      | Convert f to ZDD and name zf");
+	    " zf f ...       | Convert f to ZDD and name zf");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
     add_param("allvars", &all_vars, "Count all variables in support", NULL);
 }
@@ -791,6 +797,39 @@ bool do_delete(int argc, char *argv[]) {
 	}
     }
     return true;
+}
+
+bool do_restrict(int argc, char *argv[]) {
+    char buf[24];
+    if (argc != 4) {
+	report(0, "Restrict requires 2 arguments");
+	return false;
+    }
+    ref_t rf = get_ref(argv[2]);
+    if (do_ref(smgr) && REF_IS_INVALID(rf))
+	return false;
+    ref_t rc = get_ref(argv[3]);
+    if (do_ref(smgr) && REF_IS_INVALID(rc))
+	return false;
+    ref_t rval = shadow_cm_restrict(smgr, rf, rc);
+    if (do_ref(smgr) && REF_IS_INVALID(rval))
+	return false;
+    assign_ref(argv[1], rval, false);
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
+#if RPT >= 2
+    shadow_show(smgr, rval, buf);
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
+    return true;
+}
+
+bool do_simplify(int argc, char *argv[]) {
+    return false;
 }
 
 bool do_zconvert(int argc, char *argv[]) {
