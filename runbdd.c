@@ -859,7 +859,7 @@ static ref_t simplify_forward(int argc, char *argv[], int idx) {
 
 bool do_simplify(int argc, char *argv[]) {
     int idx;
-    size_t ocnt, ncnt;
+    size_t ocnt = 0, ncnt = 0;
     set_ptr roots = get_refs(argc-1, argv+1);
 
     // Correctness checking
