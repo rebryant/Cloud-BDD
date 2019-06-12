@@ -545,6 +545,7 @@ static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun
     return true;
 }
 
+
 #if OLD_REDUCE
 /* Linear reduction.  Returns result with incremented reference count */
 static ref_t linear_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int arglo, int arghi) {
@@ -828,8 +829,76 @@ bool do_restrict(int argc, char *argv[]) {
     return true;
 }
 
+static ref_t simplify_forward(int argc, char *argv[], int idx) {
+    ref_t rval = get_ref(argv[idx]);
+    if (REF_IS_INVALID(rval))
+	return rval;
+    root_addref(rval, false);
+    int i;
+    for (i = idx+1; i < argc; i++) {
+	ref_t arg = get_ref(argv[i]);
+	if (REF_IS_INVALID(arg))
+	    return arg;
+	ref_t nval = shadow_cm_restrict(smgr, rval, arg);
+	if (REF_IS_INVALID(nval)) {
+	    root_deref(rval);
+	    return nval;
+	}
+	root_addref(nval, false);
+	root_deref(rval);
+	rval = nval;
+	/* Check for local garbage collection */
+	if (shadow_gc_check(smgr))
+	    do_collect(0, NULL);
+	/* Initiate any deferred garbage collection */
+	if (do_dist)
+	    undefer();
+    }
+    return rval;
+}
+
 bool do_simplify(int argc, char *argv[]) {
-    return false;
+    int idx;
+    size_t ocnt, ncnt;
+    set_ptr roots = get_refs(argc-1, argv+1);
+
+    // Correctness checking
+    ref_t prod_init = tree_reduce(argv, shadow_one(smgr), shadow_and, 1, argc-1);
+
+    if (!roots)
+	return false;
+    if (smgr->do_cudd) {
+	ocnt = cudd_size(smgr, roots);
+	report(0, "Simplify.  Before simplification Cudd size = %lu nodes", ocnt);
+    }
+
+    for (idx = 1; idx < argc-1; idx++) {
+	ref_t rval = simplify_forward(argc, argv, idx);
+	if (REF_IS_INVALID(rval)) {
+	    return false;
+	}
+	assign_ref(argv[idx], rval, false);
+    }
+
+    // Correctness checking
+    ref_t prod_final = tree_reduce(argv, shadow_one(smgr), shadow_and, 1, argc-1);
+    if (prod_init != prod_final) {
+	char init_buf[24], final_buf[24];
+	shadow_show(smgr, prod_init, init_buf);
+	shadow_show(smgr, prod_final, final_buf);
+	report(0, "WARNING: Simplification did not preserve product %s --> %s", init_buf, final_buf);
+    }
+
+    roots = get_refs(argc-1, argv+1);
+    if (!roots)
+	return false;
+    if (smgr->do_cudd) {
+	ncnt = cudd_size(smgr, roots);
+	double ratio = (double) ocnt/ncnt;
+	report(0, "Simplify.  After simplification Cudd size = %lu nodes (%.2fX reduction)", ncnt, ratio);
+    }
+
+    return true;
 }
 
 bool do_zconvert(int argc, char *argv[]) {
@@ -1001,6 +1070,10 @@ chunk_ptr run_flush() {
 
 bool do_cofactor(int argc, char *argv[]) {
     char buf[24];
+    if (argc < 3) {
+	report(0, "Require at least two arguments to cofactor");
+	return false;
+    }
     ref_t rold = get_ref(argv[2]);
     if (do_ref(smgr) && REF_IS_INVALID(rold))
 	return false;
@@ -1034,6 +1107,10 @@ bool do_cofactor(int argc, char *argv[]) {
 
 bool do_equant(int argc, char *argv[]) {
     char buf[24];
+    if (argc < 3) {
+	report(0, "Require at least two arguments to equant");
+	return false;
+    }
     ref_t rold = get_ref(argv[2]);
     if (do_ref(smgr) && REF_IS_INVALID(rold))
 	return false;
@@ -1067,6 +1144,10 @@ bool do_equant(int argc, char *argv[]) {
 
 bool do_uquant(int argc, char *argv[]) {
     char buf[24];
+    if (argc < 3) {
+	report(0, "Require at least two arguments to uquant");
+	return false;
+    }
     ref_t rold = get_ref(argv[2]);
     /* Get universal through negation */
     rold = REF_NEGATE(rold);
