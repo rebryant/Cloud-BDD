@@ -61,6 +61,7 @@ keyvalue_table_ptr reftable;
 bool do_aconvert(int argc, char *argv[]);
 bool do_and(int argc, char *argv[]);
 bool do_collect(int argc, char *argv[]);
+bool do_conjoin(int argc, char *argv[]);
 bool do_delete(int argc, char *argv[]);
 bool do_cofactor(int argc, char *argv[]);
 bool do_count(int argc, char *argv[]);
@@ -110,6 +111,8 @@ static void console_init(bool do_dist) {
     add_cmd("aconvert", do_aconvert,
 	    " af f ...       | Convert f to ADD and name af");
     add_cmd("and", do_and,
+	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
+    add_cmd("conjoin", do_conjoin,
 	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
     add_cmd("cofactor", do_cofactor,
 	    " fd f l1 ...    | fd <- cofactor(f, l1, ...");
@@ -829,6 +832,8 @@ bool do_restrict(int argc, char *argv[]) {
     return true;
 }
 
+/* Simplify function at idx, based of functions beyond it. */
+/* Result has reference count set */
 static ref_t simplify_forward(int argc, char *argv[], int idx) {
     ref_t rval = get_ref(argv[idx]);
     if (REF_IS_INVALID(rval))
@@ -913,6 +918,81 @@ bool do_simplify(int argc, char *argv[]) {
     }
     set_free(roots);
 
+    return true;
+}
+
+static ref_t simplify_reduce(int argc, char *argv[]) {
+    ref_t rval = shadow_one(smgr);
+    int i;
+    size_t ocnt = 1, ncnt = 1;
+    root_addref(rval, false);
+    for (i = 2; i < argc; i++) {
+	if (smgr->do_cudd) {
+	    set_ptr roots = get_refs(1, argv+i);
+	    if (roots) {
+		ocnt = cudd_size(smgr, roots);
+		set_free(roots);
+	    }
+	}
+
+	ref_t rarg = simplify_forward(argc, argv, i);
+	if (REF_IS_INVALID(rarg)) {
+	    root_deref(rval);
+	    return rarg;
+	}
+
+	if (smgr->do_cudd) {
+	    set_ptr roots = word_set_new();
+	    if (roots) {
+		set_insert(roots, (word_t) rarg);
+		ncnt = cudd_size(smgr, roots);
+		set_free(roots);
+	    }
+	    double ratio = (double) ocnt/ncnt;
+	    if (i < argc-1)
+		report(0, "After simplification argument %s %lu --> %lu nodes (%.2fX reduction)", argv[i], ocnt, ncnt, ratio);
+	}
+
+	ref_t nval = shadow_and(smgr, rval, rarg);
+	root_addref(nval, false);
+	root_deref(rval);
+	root_deref(rarg);
+	rval = nval;
+	/* Check for local garbage collection */
+	if (shadow_gc_check(smgr))
+	    do_collect(0, NULL);
+	/* Initiate any deferred garbage collection */
+	if (do_dist)
+	    undefer();
+    }
+    return rval;
+}
+
+
+bool do_conjoin(int argc, char *argv[]) {
+    if (argc < 2) {
+	report(0, "Need destination name");
+	return false;
+    }
+
+    // Correctness checking 
+    ref_t rprod = tree_reduce(argv, shadow_one(smgr), shadow_and, 2, argc-1);
+
+    ref_t rval = simplify_reduce(argc, argv);
+    if (REF_IS_INVALID(rval)) {
+	return false;
+    }
+    assign_ref(argv[1], rval, false);
+
+    if (rprod != rval) {
+	char prod_buf[24], conj_buf[24];
+	shadow_show(smgr, rprod, prod_buf);
+	shadow_show(smgr, rval, conj_buf);
+	report(0, "WARNING: Conjoining (%s) != Product (%s)", conj_buf, prod_buf);
+    }
+    root_deref(rprod);
+
+    root_deref(rval);
     return true;
 }
 
