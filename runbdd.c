@@ -152,7 +152,7 @@ static void console_init(bool do_dist) {
     add_cmd("restrict", do_restrict,
 	    " fd f c ...     | fd <- Restrict(f,c) [Coudert/Madre's restriction operation]");
     add_cmd("simplify", do_simplify,
-	    " f1 f2 ...      | Simplify set of functions while maintaining conjunction");
+	    " fnew fold  f1 f2 ... | Simplify fold with respect to f1 f2 ... while maintaining conjunction");
     add_cmd("zconvert", do_zconvert,
 	    " zf f ...       | Convert f to ZDD and name zf");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
@@ -643,10 +643,6 @@ static bool do_reduce_old(int argc, char *argv[], ref_t unit_ref, combine_fun_t 
 #endif /* OLD_REDUCE */
 
 bool do_and(int argc, char *argv[]) {
-    if (argc > 2) {
-	if (!do_simplify(argc-1, argv+1))
-	    return false;
-    }
     return do_reduce(argc, argv, shadow_one(smgr), shadow_and);
 }
 
@@ -862,45 +858,60 @@ static ref_t simplify_forward(int argc, char *argv[], int idx) {
 }
 
 bool do_simplify(int argc, char *argv[]) {
-    int idx;
     size_t ocnt = 0, ncnt = 0;
-    set_ptr roots = get_refs(argc-1, argv+1);
+    // Minimum is simplify fnew fold
+    if (argc < 3) {
+	report(0, "simplify needs at least 2 arguments");
+	return false;
+    }
 
     // Correctness checking
-    ref_t prod_init = tree_reduce(argv, shadow_one(smgr), shadow_and, 1, argc-1);
+    // And of fold f1 f2 ...
+    ref_t prod_init = tree_reduce(argv, shadow_one(smgr), shadow_and, 2, argc-1);
 
+    // Set = { fold }
+    set_ptr roots = get_refs(1, argv+2);
     if (!roots)
 	return false;
     if (smgr->do_cudd) {
 	ocnt = cudd_size(smgr, roots);
-	report(0, "Simplify.  Before simplification Cudd size = %lu nodes", ocnt);
+	report(0, "Simplify.  Before simplification %s cudd size = %lu nodes", argv[2], ocnt);
     }
+    set_free(roots);
 
-    for (idx = 1; idx < argc-1; idx++) {
-	ref_t rval = simplify_forward(argc, argv, idx);
-	if (REF_IS_INVALID(rval)) {
-	    return false;
-	}
-	assign_ref(argv[idx], rval, false);
-    }
+    ref_t rval = simplify_forward(argc, argv, 2);
+    if (REF_IS_INVALID(rval))
+	return false;
+    // Assign to fnew
+    assign_ref(argv[1], rval, false);
 
     // Correctness checking
-    ref_t prod_final = tree_reduce(argv, shadow_one(smgr), shadow_and, 1, argc-1);
+    // And of f1 f2 ...
+    ref_t partial_prod_final = tree_reduce(argv, shadow_one(smgr), shadow_and, 3, argc-1);
+    // Combine with fnew
+    ref_t prod_final = shadow_and(smgr, partial_prod_final, rval);
+    root_deref(partial_prod_final);
+    root_deref(rval);
+
     if (prod_init != prod_final) {
 	char init_buf[24], final_buf[24];
 	shadow_show(smgr, prod_init, init_buf);
 	shadow_show(smgr, prod_final, final_buf);
 	report(0, "WARNING: Simplification did not preserve product %s --> %s", init_buf, final_buf);
     }
+    root_deref(prod_init);
+    root_deref(prod_final);
 
-    roots = get_refs(argc-1, argv+1);
+    // Set = { fnew }
+    roots = get_refs(1, argv+1);
     if (!roots)
 	return false;
     if (smgr->do_cudd) {
 	ncnt = cudd_size(smgr, roots);
 	double ratio = (double) ocnt/ncnt;
-	report(0, "Simplify.  After simplification Cudd size = %lu nodes (%.2fX reduction)", ncnt, ratio);
+	report(0, "Simplify.  After simplification %s cudd size = %lu nodes (%.2fX reduction)", argv[1], ncnt, ratio);
     }
+    set_free(roots);
 
     return true;
 }
