@@ -643,6 +643,10 @@ static bool do_reduce_old(int argc, char *argv[], ref_t unit_ref, combine_fun_t 
 #endif /* OLD_REDUCE */
 
 bool do_and(int argc, char *argv[]) {
+    if (argc > 2) {
+	if (!do_simplify(argc-1, argv+1))
+	    return false;
+    }
     return do_reduce(argc, argv, shadow_one(smgr), shadow_and);
 }
 
