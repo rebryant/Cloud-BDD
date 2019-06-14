@@ -29,6 +29,10 @@
 /* Global parameters */
 /* Should I perform garbage collection? */
 int enable_collect = 1;
+
+/* Should I check results of conjoin (and possibly other) operations? */
+int check_results = 0;
+
 bool do_cudd = false;
 bool do_local = false;
 bool do_dist = false;
@@ -157,9 +161,10 @@ static void console_init(bool do_dist) {
     add_cmd("simplify", do_simplify,
 	    " fnew fold  f1 f2 ... | Simplify fold with respect to f1 f2 ... while maintaining conjunction");
     add_cmd("zconvert", do_zconvert,
-	    " zf f ...       | Convert f to ZDD and name zf");
+	    " zf f           | Convert f to ZDD and name zf");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
     add_param("allvars", &all_vars, "Count all variables in support", NULL);
+    add_param("check", &check_results, "Check results of conjoin (and other?) operations", NULL);
 }
 
 static bool bdd_quit(int argc, char *argv[]) {
@@ -975,8 +980,10 @@ bool do_conjoin(int argc, char *argv[]) {
 	return false;
     }
 
-    // Correctness checking 
-    ref_t rprod = tree_reduce(argv, shadow_one(smgr), shadow_and, 2, argc-1);
+    ref_t rprod = REF_INVALID;
+    // Correctness checking
+    if (check_results)
+	rprod = tree_reduce(argv, shadow_one(smgr), shadow_and, 2, argc-1);
 
     ref_t rval = simplify_reduce(argc, argv);
     if (REF_IS_INVALID(rval)) {
@@ -984,14 +991,15 @@ bool do_conjoin(int argc, char *argv[]) {
     }
     assign_ref(argv[1], rval, false);
 
-    if (rprod != rval) {
-	char prod_buf[24], conj_buf[24];
-	shadow_show(smgr, rprod, prod_buf);
-	shadow_show(smgr, rval, conj_buf);
-	report(0, "WARNING: Conjoining (%s) != Product (%s)", conj_buf, prod_buf);
+    if (check_results) {
+	if (rprod != rval) {
+	    char prod_buf[24], conj_buf[24];
+	    shadow_show(smgr, rprod, prod_buf);
+	    shadow_show(smgr, rval, conj_buf);
+	    report(0, "WARNING: Conjoining (%s) != Product (%s)", conj_buf, prod_buf);
+	}
+	root_deref(rprod);
     }
-    root_deref(rprod);
-
     root_deref(rval);
     return true;
 }
