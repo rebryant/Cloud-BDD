@@ -259,6 +259,11 @@ class Circuit:
         ls.extend(argList)
         self.cmdLine("and", ls)
 
+    def conjoinN(self, dest, argList):
+        ls = [dest]
+        ls.extend(argList)
+        self.cmdLine("conjoin", ls)
+
     def orN(self, dest, argList):
         ls = [dest]
         ls.extend(argList)

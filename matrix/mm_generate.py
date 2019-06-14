@@ -11,11 +11,12 @@ import circuit
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-k] [-e] [-b] [-z] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
+    print "Usage %s [-h] [-k] [-e] [(-b|-B LLIST)] [-z] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
     print " -e               Generate streamline constraints based on singleton exclusion property"
     print " -b               Combine products in breadth-first order"
+    print " -B LLIST         Use breadth-first order, combining at levels specified as comma-separated list"
     print " -z               Use a ZDD representation"
     print " -t SECS          Set runtime limit (in seconds)"
     print " -S SEED          Set random seed"
@@ -37,12 +38,13 @@ def run(name, args):
     fixKV = False
     excludeSingleton = False
     breadthFirst = False
+    levelList = brent.unitRange(6)
     useZdd = False
     timeLimit = None
     seed = 0
 
     
-    optlist, args = getopt.getopt(args, 'hkebzS:t:c:s:p:n:o:')
+    optlist, args = getopt.getopt(args, 'hkebB:zS:t:c:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -52,6 +54,19 @@ def run(name, args):
         elif opt == '-e':
             excludeSingleton = True
         elif opt == '-b':
+            breadthFirst = True
+        elif opt == '-B':
+            fields = val.split(':')
+            levelList = tuple([int(f) for f in fields])
+            if len(levelList) < 1 or len(levelList) > 6:
+                print "Levels must be in range 1 .. 6"
+                return
+            if levelList[0] < 1:
+                print "Levels must be in range 1 .. 6"
+                return
+            if levelList[-1] != 6:
+                print "Final level must = 6"
+                return
             breadthFirst = True
         elif opt == '-z':
             useZdd = True
@@ -123,7 +138,7 @@ def run(name, args):
         except brent.MatrixException as ex:
             print "Parse of file '%s' failed: %s" % (pname, str(ex))
             return
-    s.generateProgram(categoryProbabilities, seed = seed, timeLimit = timeLimit, fixKV = fixKV, excludeSingleton = excludeSingleton, breadthFirst = breadthFirst, useZdd = useZdd)
+    s.generateProgram(categoryProbabilities, seed = seed, timeLimit = timeLimit, fixKV = fixKV, excludeSingleton = excludeSingleton, breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd)
     
     
             

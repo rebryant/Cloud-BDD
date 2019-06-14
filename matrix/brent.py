@@ -521,7 +521,8 @@ class MProblem:
 
     # At what level should streamline constraints be introduced?
     streamlineLevel = 2
-
+    # At what levels should we conjoin, rather than and
+    conjoinLevels = range(3,7)
 
     def __init__(self, dim, auxCount, ckt = None):
         if type(dim) == type(2):
@@ -640,7 +641,7 @@ class MProblem:
                 self.ckt.comment("Find combined size for terms at level %d" % level)
                 self.ckt.information(names)
 
-    def bfGenerator(self, streamlineNode = None, check = False):
+    def oldBfGenerator(self, streamlineNode = None, check = False):
         ranges = self.fullRanges()
         for level in unitRange(6):
             self.ckt.comment("Combining terms at level %d" % level)
@@ -672,10 +673,41 @@ class MProblem:
                 self.ckt.comment("Find combined size for terms at level %d" % level)
                 self.ckt.information(names)
 
-
+    def bfGenerator(self, streamlineNode = None, check = False, levelList = None):
+        if levelList is None:
+            levelList = unitRange(6)
+        ranges = self.fullRanges()
+        lastLevel = 0
+        for level in levelList:
+            self.ckt.comment("Combining terms at level %d" % level)
+            gcounts = ranges[6-level:6-lastLevel]
+            ranges = ranges[:6-level]
+            indices = self.iexpand(ranges)
+            for idx in indices:
+                tlist = [BrentTerm(idx + ls) for ls in self.iexpand(gcounts)]
+                terms = self.ckt.addVec(circuit.Vec(tlist))
+                args = terms
+                if level >= self.streamlineLevel and lastLevel < self.streamlineLevel and streamlineNode is not None:
+                    tlist = [streamlineNode] + tlist
+                    args = circuit.Vec(tlist)
+                bn = BrentTerm(idx)
+                if level in self.conjoinLevels:
+                    self.ckt.conjoinN(bn, args)
+                else:
+                    self.ckt.andN(bn, args)
+                self.ckt.decRefs([terms])
+                if check:
+                    self.ckt.checkConstant(bn, 1)
+            if streamlineNode is not None and level == self.streamlineLevel:
+                self.ckt.decRefs([streamlineNode])
+            if not check:
+                names = circuit.Vec([BrentTerm(idx) for idx in indices])
+                self.ckt.comment("Find combined size for terms at level %d" % level)
+                self.ckt.information(names)
+            lastLevel = level
 
     # Generate Brent equations
-    def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False, breadthFirst = False, useZdd = False):
+    def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False, breadthFirst = False, levelList = None, useZdd = False):
         ranges = self.fullRanges()
         indices = self.iexpand(ranges)
         self.ckt.comment("Generate all Brent equations")
@@ -693,7 +725,7 @@ class MProblem:
             self.ckt.information(names)
 
         if breadthFirst:
-            self.bfGenerator(streamlineNode, check)
+            self.bfGenerator(streamlineNode, check, levelList)
         else:
             self.dfGenerator(streamlineNode, check)
 
@@ -949,7 +981,7 @@ class MScheme(MProblem):
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False, breadthFirst = False, useZdd = False):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False, breadthFirst = False, levelList = None, useZdd = False):
         plist = categoryProbabilities.values()
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
@@ -967,7 +999,7 @@ class MScheme(MProblem):
         if excludeSingleton:
             streamlineNode = self.generateStreamline()
         kset = self.kernelTerms if fixKV else None
-        self.generateBrentConstraints(kset, streamlineNode = streamlineNode, check=isFixed, breadthFirst = breadthFirst, useZdd = useZdd)
+        self.generateBrentConstraints(kset, streamlineNode = streamlineNode, check=isFixed, breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd)
         bv = circuit.Vec([BrentTerm()])
         if not isFixed:
             self.ckt.count(bv)
