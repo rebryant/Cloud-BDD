@@ -1177,11 +1177,20 @@ set_ptr shadow_support(shadow_mgr mgr, set_ptr roots) {
 }
 
 /* Use CUDD to compute number of BDD nodes to represent set of functions */
-size_t cudd_size(shadow_mgr mgr, set_ptr roots) {
+
+size_t cudd_single_size(shadow_mgr mgr, ref_t r) {
+    if (!mgr->do_cudd)
+	return 0;
+    DdNode *n = get_ddnode(mgr, r);
+    int cnt = Cudd_DagSize(n);
+    return (size_t) cnt;
+}
+
+size_t cudd_set_size(shadow_mgr mgr, set_ptr roots) {
     if (!mgr->do_cudd)
 	return 0;
     size_t nele = roots->nelements;
-    DdNode **croots = calloc_or_fail(nele, sizeof(DdNode *), "cudd_size");
+    DdNode **croots = calloc_or_fail(nele, sizeof(DdNode *), "cudd_set_size");
     word_t wr;
     int i = 0;
     set_iterstart(roots);

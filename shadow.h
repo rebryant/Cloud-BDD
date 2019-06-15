@@ -89,8 +89,10 @@ keyvalue_table_ptr shadow_count(shadow_mgr mgr, set_ptr roots);
 /* Compute set of variables (given by refs) in support of set of roots */
 set_ptr shadow_support(shadow_mgr mgr, set_ptr roots);
 
-/* Use CUDD to compute number of BDD nodes to represent set of functions */
-size_t cudd_size(shadow_mgr mgr, set_ptr roots);
+/* Use CUDD to compute number of BDD nodes to represent function or set of functions */
+size_t cudd_single_size(shadow_mgr mgr, ref_t r);
+size_t cudd_set_size(shadow_mgr mgr, set_ptr roots);
+
 
 /* Have CUDD perform garbage collection */
 /* Returns number of nodes collected */
