@@ -22,6 +22,7 @@
 #include "cudd.h"
 #include "shadow.h"
 #include "report.h"
+#include "conjunct.h"
 
 /* Keep, but do not compile, old versions of reduction */
 #define OLD_REDUCE 0
@@ -29,9 +30,6 @@
 /* Global parameters */
 /* Should I perform garbage collection? */
 int enable_collect = 1;
-
-/* Should I check results of conjunct (and possibly other) operations? */
-int check_results = 0;
 
 bool do_cudd = false;
 bool do_local = false;
@@ -164,7 +162,7 @@ static void console_init(bool do_dist) {
 	    " zf f           | Convert f to ZDD and name zf");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
     add_param("allvars", &all_vars, "Count all variables in support", NULL);
-    add_param("check", &check_results, "Check results of conjunct (and other?) operations", NULL);
+    init_conjunct();
 }
 
 static bool bdd_quit(int argc, char *argv[]) {
@@ -324,7 +322,7 @@ int main(int argc, char *argv[]) {
 #define SATVAL ((word_t) 1<<20)
 
 /* Increment reference count for new ref */
-static void root_addref(ref_t r, bool saturate) {
+void root_addref(ref_t r, bool saturate) {
     int ocnt = 0;
     int ncnt = 0;
     if (REF_IS_INVALID(r))
@@ -347,7 +345,7 @@ static void root_addref(ref_t r, bool saturate) {
 
 
 /* Decrement reference count for ref */
-static void root_deref(ref_t r) {
+void root_deref(ref_t r) {
     int ocnt = 0;
     int ncnt = 0;
     if (REF_IS_INVALID(r))
@@ -989,26 +987,21 @@ bool do_conjunct(int argc, char *argv[]) {
 	return false;
     }
 
-    ref_t rprod = REF_INVALID;
-    // Correctness checking
-    if (check_results)
-	rprod = tree_reduce(argv, shadow_one(smgr), shadow_and, 2, argc-1);
+    int i;
+    for (i = 2; i < argc; i++) {
+	ref_t rarg = get_ref(argv[i]);
+	if (REF_IS_INVALID(rarg)) {
+	    clear_conjunction();
+	    return rarg;
+	}
+	conjunct_add_term(rarg);
+    }
 
-    ref_t rval = simplify_reduce(argc, argv);
+    ref_t rval = compute_conjunction();
     if (REF_IS_INVALID(rval)) {
 	return false;
     }
     assign_ref(argv[1], rval, false);
-
-    if (check_results) {
-	if (rprod != rval) {
-	    char prod_buf[24], conj_buf[24];
-	    shadow_show(smgr, rprod, prod_buf);
-	    shadow_show(smgr, rval, conj_buf);
-	    report(0, "WARNING: Conjuncting (%s) != Product (%s)", conj_buf, prod_buf);
-	}
-	root_deref(rprod);
-    }
     root_deref(rval);
     return true;
 }

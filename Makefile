@@ -19,8 +19,8 @@ CFLAGS = -Wall -g -O2 -DRPT=$(VLEVEL)
 BDDFLAGS=
 #BDDFLAGS=-DSMALL_HASH
 
-PFILES = agent.h bdd.h chunk.h console.h dtype.h msg.h report.h shadow.h table.h \
-	agent.c bdd.c bworker.c chunk.c console.c controller.c msg.c report.c \
+PFILES = agent.h bdd.h chunk.h conjunct.h console.h dtype.h msg.h report.h shadow.h table.h \
+	agent.c bdd.c bworker.c chunk.c conjunct.c console.c controller.c msg.c report.c \
 	router.c runbdd.c shadow.c table.c 
 
 default: runbdd
@@ -53,6 +53,9 @@ shadow.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg
 shadow-nochain.o: shadow.c shadow.h bdd.h table.h chunk.h report.h console.h agent.h msg.h
 	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -DNO_CHAINING -c shadow.c -o shadow-nochain.o
 
+conjunct.o: conjunct.c msg.h console.h agent.h bdd.h shadow.h report.h conjunct.h
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC)  -c conjunct.c
+
 console.o: console.c console.h report.h
 	$(CC) $(CFLAGS) -c console.c
 
@@ -83,8 +86,8 @@ shadow_test: shadow_test.c console.o chunk.o table.o report.o bdd.o shadow.o msg
 console_test: console_test.c console.h report.h console.o report.o chunk.o table.o
 	$(CC) $(CFLAGS) -o console_test console_test.c console.o report.o chunk.o table.o
 
-runbdd: runbdd.c console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
-	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS) -lm
+runbdd: runbdd.c conjunct.o console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o conjunct.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS) -lm
 
 bworker: bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o
 	$(CC) $(CFLAGS) -o bworker bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o
