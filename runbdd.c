@@ -30,7 +30,7 @@
 /* Should I perform garbage collection? */
 int enable_collect = 1;
 
-/* Should I check results of conjoin (and possibly other) operations? */
+/* Should I check results of conjunct (and possibly other) operations? */
 int check_results = 0;
 
 bool do_cudd = false;
@@ -65,7 +65,7 @@ keyvalue_table_ptr reftable;
 bool do_aconvert(int argc, char *argv[]);
 bool do_and(int argc, char *argv[]);
 bool do_collect(int argc, char *argv[]);
-bool do_conjoin(int argc, char *argv[]);
+bool do_conjunct(int argc, char *argv[]);
 bool do_delete(int argc, char *argv[]);
 bool do_cofactor(int argc, char *argv[]);
 bool do_count(int argc, char *argv[]);
@@ -116,7 +116,7 @@ static void console_init(bool do_dist) {
 	    " af f ...       | Convert f to ADD and name af");
     add_cmd("and", do_and,
 	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
-    add_cmd("conjoin", do_conjoin,
+    add_cmd("conjunct", do_conjunct,
 	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
     add_cmd("cofactor", do_cofactor,
 	    " fd f l1 ...    | fd <- cofactor(f, l1, ...");
@@ -164,7 +164,7 @@ static void console_init(bool do_dist) {
 	    " zf f           | Convert f to ZDD and name zf");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
     add_param("allvars", &all_vars, "Count all variables in support", NULL);
-    add_param("check", &check_results, "Check results of conjoin (and other?) operations", NULL);
+    add_param("check", &check_results, "Check results of conjunct (and other?) operations", NULL);
 }
 
 static bool bdd_quit(int argc, char *argv[]) {
@@ -983,7 +983,7 @@ static ref_t simplify_reduce(int argc, char *argv[]) {
 }
 
 
-bool do_conjoin(int argc, char *argv[]) {
+bool do_conjunct(int argc, char *argv[]) {
     if (argc < 2) {
 	report(0, "Need destination name");
 	return false;
@@ -1005,7 +1005,7 @@ bool do_conjoin(int argc, char *argv[]) {
 	    char prod_buf[24], conj_buf[24];
 	    shadow_show(smgr, rprod, prod_buf);
 	    shadow_show(smgr, rval, conj_buf);
-	    report(0, "WARNING: Conjoining (%s) != Product (%s)", conj_buf, prod_buf);
+	    report(0, "WARNING: Conjuncting (%s) != Product (%s)", conj_buf, prod_buf);
 	}
 	root_deref(rprod);
     }
