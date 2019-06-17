@@ -91,7 +91,7 @@ chunk_ptr run_flush();
 
 static ref_t get_ref(char *name);
 static set_ptr get_refs(int cnt, char *names[]);
-static void assign_ref(char *name, ref_t r, bool saturate);
+static void assign_ref(char *name, ref_t r, bool fresh);
 
 static void client_gc_start();
 static void client_gc_finish();
@@ -322,9 +322,11 @@ int main(int argc, char *argv[]) {
 #define SATVAL ((word_t) 1<<20)
 
 /* Increment reference count for new ref */
-void root_addref(ref_t r, bool saturate) {
+/* Argument fresh indicates whether argument is result of new operation */
+void root_addref(ref_t r, bool fresh) {
     int ocnt = 0;
     int ncnt = 0;
+    bool saturate = false;
     if (REF_IS_INVALID(r))
 	return;
     ref_t ar = shadow_absval(smgr, r);
@@ -336,6 +338,9 @@ void root_addref(ref_t r, bool saturate) {
     else
 	ncnt = ocnt+1;
     keyvalue_insert(reftable, (word_t) ar, ncnt);
+    if (fresh && ocnt > 0 && ocnt != SATVAL)
+	/* Only maintain single Cudd reference for all managed refs */
+	shadow_deref(smgr, r);
 #if RPT >= 5
     char buf[24];
     shadow_show(smgr, ar, buf);
@@ -376,11 +381,11 @@ void root_deref(ref_t r) {
 }
 
 /* Add reference to table.  Makes permanent copy of name */
-static void assign_ref(char *name, ref_t r, bool saturate) {
+static void assign_ref(char *name, ref_t r, bool fresh) {
     ref_t rold;
     char *sname;
     /* Add reference to new value */
-    root_addref(r, saturate);
+    root_addref(r, fresh);
     /* (Try to) remove old value */
     word_t wk, wv;
     if (keyvalue_remove(nametable, (word_t) name, &wk, &wv)) {
@@ -514,7 +519,7 @@ static ref_t tree_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int a
 		rval = rhi;
 	    } else {
 		rval = cfun(smgr, rlo, rhi);
-		root_addref(rval, false);
+		root_addref(rval, true);
 		root_deref(rlo);
 		root_deref(rhi);
 		/* Check for local garbage collection */
@@ -557,14 +562,13 @@ static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun
 static ref_t linear_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int arglo, int arghi) {
     ref_t rval = unit_ref;
     int i;
-    /* Not really necessary, but looks cleaner */
     root_addref(rval, false);
     for (i = arglo; i <= arghi; i++) {
 	ref_t rarg = get_ref(argv[i]);
 	if (REF_IS_INVALID(rarg))
 	    return rarg;
 	ref_t nval = cfun(smgr, rval, rarg);
-	root_addref(nval, false);
+	root_addref(nval, true);
 	root_deref(rval);
 	rval = nval;
 	/* Check for local garbage collection */
@@ -593,7 +597,7 @@ static bool do_reduce_monolithic(int argc, char *argv[], ref_t unit_ref, combine
 	if (REF_IS_INVALID(rarg))
 	    return false;
 	ref_t nval = cfun(smgr, rval, rarg);
-	root_addref(nval, false);
+	root_addref(nval, true);
 	if (argc > 2)
 	    root_deref(rval);
 	rval = nval;
@@ -852,7 +856,7 @@ static ref_t simplify_downstream(ref_t fun, int argc, char *argv[], int sidx) {
 	    root_deref(rval);
 	    return nval;
 	}
-	root_addref(nval, false);
+	root_addref(nval, true);
 	root_deref(rval);
 	rval = nval;
 	/* Check for local garbage collection */
@@ -950,7 +954,7 @@ static ref_t simplify_reduce(int argc, char *argv[]) {
 	}
 
 	ref_t nval = shadow_and(smgr, rval, rarg);
-	root_addref(nval, false);
+	root_addref(nval, true);
 	root_deref(rval);
 	root_deref(rarg);
 
@@ -1430,7 +1434,7 @@ bool do_var(int argc, char *argv[]) {
 	rv = shadow_new_variable(smgr);
 	if (REF_IS_INVALID(rv))
 	    return false;
-	assign_ref(argv[i], rv, true);
+	assign_ref(argv[i], rv, false);
 	shadow_show(smgr, rv, buf);
 #if RPT >= 2
 	report(2, "VAR %s = %s", argv[i], buf);

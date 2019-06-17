@@ -108,6 +108,7 @@ static void reference_dd(shadow_mgr mgr, DdNode *n) {
 	return;
     }
     Cudd_Ref(n);
+    report(5, "Called Cudd_Ref on node %p", n);
 }
 
 static void unreference_dd(shadow_mgr mgr, DdNode *n, dd_type_t dtype) {
@@ -115,8 +116,10 @@ static void unreference_dd(shadow_mgr mgr, DdNode *n, dd_type_t dtype) {
 	return;
     if (dtype == IS_ZDD) {
 	Cudd_RecursiveDerefZdd(mgr->bdd_manager, n);
+	report(5, "Called Cudd_RecursiveDrefZdd on node %p", n);
     } else {
 	Cudd_RecursiveDeref(mgr->bdd_manager, n);
+	report(5, "Called Cudd_RecursiveDref on node %p", n);
     }
 }
 
@@ -339,6 +342,8 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 
 void free_shadow_mgr(shadow_mgr mgr) {
     if (mgr->do_cudd) {
+	int left = Cudd_CheckZeroRef(mgr->bdd_manager);
+	report(1, "Cudd reports %d nodes with nonzero reference counts\n", left);
 	Cudd_Quit(mgr->bdd_manager);
     }
     if (do_ref(mgr)) 
@@ -819,8 +824,9 @@ bool shadow_gc_check(shadow_mgr mgr) {
 	return false;
 }
 
-/* Only call this when removing r from unique table */
 void shadow_deref(shadow_mgr mgr, ref_t r) {
+/* Only call this when removing r from unique table */
+
     if (!mgr->do_cudd)
 	return;
     DdNode *n = get_ddnode(mgr, r);
@@ -852,6 +858,13 @@ void shadow_deref(shadow_mgr mgr, ref_t r) {
 	keyvalue_remove(mgr->r2c_table, (word_t ) nr, NULL, NULL);
 	unreference_dd(mgr, nn, IS_BDD);
     }
+}
+
+void shadow_addref(shadow_mgr mgr, ref_t r) {
+    if (!mgr->do_cudd)
+	return;
+    DdNode *n = get_ddnode(mgr, r);
+    reference_dd(mgr, n);
 }
 
 void shadow_satisfy(shadow_mgr mgr, ref_t r) {

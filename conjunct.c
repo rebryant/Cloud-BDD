@@ -92,6 +92,7 @@ ref_t compute_conjunction() {
     for (i = 0; i < term_count; i++) {
 	ref_t arg = terms[i].fun;
 	ref_t nval = shadow_and(smgr, rval, arg);
+	root_addref(nval, true);
 	root_deref(rval);
 	rval = nval;
     }

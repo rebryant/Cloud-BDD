@@ -5,7 +5,7 @@ extern shadow_mgr smgr;
 extern keyvalue_table_ptr reftable;
 
 /* Functions defined in runbdd.c */
-void root_addref(ref_t r, bool saturate);
+void root_addref(ref_t r, bool fresh);
 void root_deref(ref_t r);
 
 
