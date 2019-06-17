@@ -521,8 +521,8 @@ class MProblem:
 
     # At what level should streamline constraints be introduced?
     streamlineLevel = 2
-    # At what levels should we conjoin, rather than and
-    conjoinLevels = range(3,7)
+    # At what levels should we conjunct, rather than and
+    conjunctLevels = range(3,7)
 
     def __init__(self, dim, auxCount, ckt = None):
         if type(dim) == type(2):
@@ -691,8 +691,8 @@ class MProblem:
                     tlist = [streamlineNode] + tlist
                     args = circuit.Vec(tlist)
                 bn = BrentTerm(idx)
-                if level in self.conjoinLevels:
-                    self.ckt.conjoinN(bn, args)
+                if level in self.conjunctLevels:
+                    self.ckt.conjunctN(bn, args)
                 else:
                     self.ckt.andN(bn, args)
                 self.ckt.decRefs([terms])
