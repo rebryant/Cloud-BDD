@@ -72,6 +72,7 @@ static ref_t and_check() {
     return rval;
 }
 
+
 void clear_conjunction() {
     int i;
     for (i = 0; i < term_count; i++) {
@@ -79,6 +80,15 @@ void clear_conjunction() {
 	root_deref(arg);
     }
     term_count = 0;
+}
+
+ref_t linear_combine(int arglo, int arghi) {
+}
+
+ref_t tree_combine(int arglo, int int arghi) {
+}
+
+ref_t simplify(ref_t fun, int argstart, int argfinish) {
 }
 
 /* Compute conjunction of terms.  Reset term set to empty */
