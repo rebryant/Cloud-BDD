@@ -11,10 +11,21 @@ void root_deref(ref_t r);
 
 void init_conjunct();
 
+/* Data structure for representing lists of refs */
+typedef struct RSET rset;
+
+
+/* Create empty rset */
+rset *rset_new();
+
 /* Add function to set to be conjuncted */
-void conjunct_add_term(ref_t fun);
+void rset_add_term(rset *set, ref_t fun);
 
-/* Clear partially computed conjunction */
-void clear_conjunction();
+/* Clear elements of rset (for error recovery) and free all storage */
+void rset_free(rset *set);
 
-ref_t compute_conjunction();
+/* Compute conjunction.  rset is destructively modified */
+ref_t rset_conjunct(rset *set);
+
+/* Perform Coudert/Madre restriction to simplify function based on functions in rset */
+ref_t simplify_with_rset(ref_t fun, rset *set);

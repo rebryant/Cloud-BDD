@@ -86,6 +86,8 @@ keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots);
 */
 keyvalue_table_ptr shadow_count(shadow_mgr mgr, set_ptr roots);
 
+double cudd_single_count(shadow_mgr mgr, ref_t r);
+
 /* Compute set of variables (given by refs) in support of set of roots */
 set_ptr shadow_support(shadow_mgr mgr, set_ptr roots);
 

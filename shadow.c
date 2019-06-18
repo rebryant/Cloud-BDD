@@ -1004,29 +1004,36 @@ static word_t apa2word(DdApaNumber num, int digits) {
 }
 #endif
 
+double cudd_single_count(shadow_mgr mgr, ref_t r) {
+    if (!mgr->do_cudd)
+	return 0.0;
+    DdNode *n = get_ddnode(mgr, r);
+    bool zdd = is_zdd(mgr, r);
+#if USE_APA
+    int digits;
+    DdApaNumber num = Cudd_ApaCountMinterm(mgr->bdd_manager, n, mgr->nvars,
+					   &digits);
+    wv = apa2word(num, digits);
+    FREE(num);
+#else
+    double fv = 0.0;
+    if (zdd) {
+	fv = Cudd_zddCountMinterm(mgr->bdd_manager, n, mgr->nzvars);
+    } else {
+	fv = Cudd_CountMinterm(mgr->bdd_manager, n, mgr->nvars);
+    }
+#endif
+    return fv;
+}
+
 static keyvalue_table_ptr cudd_count(shadow_mgr mgr, set_ptr roots) {
     word_t wk, wv;
     keyvalue_table_ptr result = word_keyvalue_new();
     set_iterstart(roots);
     while (set_iternext(roots, &wk)) {
 	ref_t r = (ref_t) wk;
-	DdNode *n = get_ddnode(mgr, r);
-	bool zdd = is_zdd(mgr, r);
-#if USE_APA
-	int digits;
-	DdApaNumber num = Cudd_ApaCountMinterm(mgr->bdd_manager, n, mgr->nvars,
-					       &digits);
-	wv = apa2word(num, digits);
-	FREE(num);
-#else
-	double fv = 0.0;
-	if (zdd) {
-	    fv = Cudd_zddCountMinterm(mgr->bdd_manager, n, mgr->nzvars);
-	} else {
-	    fv = Cudd_CountMinterm(mgr->bdd_manager, n, mgr->nvars);
-	}
+	double fv = cudd_single_count(mgr, r);
 	wv = (word_t) fv;
-#endif
 	keyvalue_insert(result, wk, wv);
     }
     return result;

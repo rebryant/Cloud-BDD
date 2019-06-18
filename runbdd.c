@@ -881,20 +881,24 @@ bool do_simplify(int argc, char *argv[]) {
     // And of fold f1 f2 ...
     ref_t prod_init = tree_reduce(argv, shadow_one(smgr), shadow_and, 2, argc-1);
 
-    // Set = { fold }
-    set_ptr roots = get_refs(1, argv+2);
-    if (!roots)
-	return false;
-    if (smgr->do_cudd) {
-	ocnt = cudd_set_size(smgr, roots);
-	report(0, "Simplify.  Before simplification %s cudd size = %lu nodes", argv[2], ocnt);
-    }
-    set_free(roots);
-
     ref_t fun = get_ref(argv[2]);
-    ref_t rval = simplify_downstream(fun, argc, argv, 3);
-    if (REF_IS_INVALID(rval))
+    ocnt = cudd_single_size(smgr, fun);
+
+    int i;
+    rset *set = rset_new();
+    for (i = 3; i < argc; i++) {
+	ref_t rarg = get_ref(argv[i]);
+	if (REF_IS_INVALID(rarg)) {
+	    rset_free(set);
+	    return false;
+	}
+	rset_add_term(set, rarg);
+    }
+
+    ref_t rval = simplify_with_rset(fun, set);
+    if (REF_IS_INVALID(rval)) {
 	return false;
+    }
     // Assign to fnew
     assign_ref(argv[1], rval, false);
 
@@ -904,7 +908,6 @@ bool do_simplify(int argc, char *argv[]) {
     // Combine with fnew
     ref_t prod_final = shadow_and(smgr, partial_prod_final, rval);
     root_deref(partial_prod_final);
-    root_deref(rval);
 
     if (prod_init != prod_final) {
 	char init_buf[24], final_buf[24];
@@ -915,17 +918,12 @@ bool do_simplify(int argc, char *argv[]) {
     root_deref(prod_init);
     root_deref(prod_final);
 
-    // Set = { fnew }
-    roots = get_refs(1, argv+1);
-    if (!roots)
-	return false;
     if (smgr->do_cudd) {
-	ncnt = cudd_set_size(smgr, roots);
+	ncnt = cudd_single_size(smgr, rval);
 	double ratio = (double) ocnt/ncnt;
-	report(0, "Simplify.  After simplification %s cudd size = %lu nodes (%.2fX reduction)", argv[1], ncnt, ratio);
+	report(1, "Simplify of %s: Size %lu --> %lu (%.2fX reduction)", argv[1], ocnt, ncnt, ratio);
     }
-    set_free(roots);
-
+    root_deref(rval);
     return true;
 }
 
@@ -992,21 +990,23 @@ bool do_conjunct(int argc, char *argv[]) {
     }
 
     int i;
+    rset *set = rset_new();
     for (i = 2; i < argc; i++) {
 	ref_t rarg = get_ref(argv[i]);
 	if (REF_IS_INVALID(rarg)) {
-	    clear_conjunction();
+	    rset_free(set);
 	    return rarg;
 	}
-	conjunct_add_term(rarg);
+	rset_add_term(set, rarg);
     }
 
-    ref_t rval = compute_conjunction();
+    ref_t rval = rset_conjunct(set);
     if (REF_IS_INVALID(rval)) {
 	return false;
     }
     assign_ref(argv[1], rval, false);
     root_deref(rval);
+    rset_free(set);
     return true;
 }
 
