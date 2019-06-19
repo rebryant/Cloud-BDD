@@ -9,7 +9,7 @@ void root_addref(ref_t r, bool fresh);
 void root_deref(ref_t r);
 
 
-void init_conjunct();
+void init_conjunct(char *cstring);
 
 /* Data structure for representing lists of refs */
 typedef struct RSET rset;

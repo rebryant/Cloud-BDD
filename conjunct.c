@@ -36,12 +36,21 @@ int check_results = 0;
    type >=  2 ==> tree reduction.
    type ==  1 ==> dynamically sorted reduction
    type ==  0 ==> linear reduction
-   type == -1 ==> adaptive reduction 
+   type == -1 ==> pairwise reduction 
  */
 int reduction_type = 0;
 
+#define TERNARY_REDUCTION 3
+#define BINARY_REDUCTION 2
+#define DYNAMIC_REDUCTION 1
+#define LINEAR_REDUCTION 0
+#define PAIRWISE_REDUCTION -1
+
 /* Should arguments to conjunction be preprocessed with Coudert/Madre restrict operation */
 int preprocess = 0;
+
+/* Should arguments to conjunction be sorted in descending order of sat count before preprocessing? */
+int presort = 0;
 
 /* Should arguments be reprocessed with Coudert/Madre restrict operation as conjunction proceeds? */
 int reprocess = 0;
@@ -73,14 +82,30 @@ typedef struct {
     size_t total_size;
 } conjunction_data;
 
-void init_conjunct() {
+/* String representation of conjunction options */
+bool do_cstring(int argc, char *argv[]);
+static bool parse_cstring(char *cstring);
+static void compute_cstring(char *cstring);
 
+
+void init_conjunct(char *cstring) {
     /* Add commands and options */
+    add_cmd("cstring", do_cstring,
+	    "(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y) | Set options for conjunction");
     add_param("check", &check_results, "Check results of conjunctoperations", NULL);
-    add_param("reduction", &reduction_type, "Reduction degree (2+: tree, 1:dynamic, 0:linear, -1:adaptive)", NULL);
+    add_param("reduction", &reduction_type, "Reduction degree (2+: tree, 1:dynamic, 0:linear, -1:pairwise)", NULL);
     add_param("preprocess", &preprocess, "Preprocess conjunction arguments with Coudert/Madre restrict", NULL);
+    add_param("presort", &presort, "Sort by descending SAT count before preprocessing", NULL);
     add_param("reprocess", &preprocess, "Reprocess arguments with Coudert/Madre restrict during conjunction", NULL);
     add_param("right", &right_to_left, "Perform C/M restriction starting with rightmost (rather than leftmost) element", NULL);
+    if (!parse_cstring(cstring)) {
+	/* Revert to defaults */
+	reduction_type = LINEAR_REDUCTION;
+	preprocess = 0;
+	presort = 0;
+	reprocess = 0;
+	right_to_left = 0;
+    }
 }
 
 /*** Operations on rsets ***/
@@ -328,7 +353,7 @@ static void simplify_recurse(rset_ele *ptr, bool preorder) {
 }
 
 /* Simplify all functions in rset */
-static void simplify_rset(rset *set, bool right_first) {
+static void simplify_rset(rset *set) {
     if (verblevel >= 2) {
 	report_noreturn(2, "Before simplification:");
 	rset_ele *ptr = set->head;
@@ -339,7 +364,7 @@ static void simplify_rset(rset *set, bool right_first) {
 	report(2, "");
     }
 
-    simplify_recurse(set->head, !right_first);
+    simplify_recurse(set->head, !right_to_left);
 
     if (verblevel >= 2) {
 	report_noreturn(2, "After simplification:");
@@ -365,9 +390,15 @@ static ref_t linear_combine(rset *set, conjunction_data *data) {
 	ref_t rarg = rset_remove_first(set);
 	ref_t nval = shadow_and(smgr, rval, rarg);
 	root_addref(nval, true);
-	root_deref(rval);
-	rval = nval;
 	root_deref(rarg);
+	root_deref(rval);
+	if (reprocess) {
+	    ref_t sval = simplify_downstream(nval, set->head);
+	    root_addref(sval, true);
+	    root_deref(nval);
+	    nval = sval;
+	}
+	rval = nval;
 	report_combination(set, rval, data);
     }
     return rval;
@@ -395,7 +426,7 @@ static ref_t sorted_combine(rset *set, conjunction_data *data) {
     return rval;
 }
 
-static ref_t adaptive_combine(rset *set, conjunction_data *data) {
+static ref_t pairwise_combine(rset *set, conjunction_data *data) {
     ref_t rval;
     if (set->length == 0) {
 	rval = shadow_one(smgr);
@@ -431,6 +462,8 @@ static ref_t adaptive_combine(rset *set, conjunction_data *data) {
 	    set->tail = best_ele;
 	free_block(bnext, sizeof(rset_ele));
 	set->length--;
+	if (reprocess)
+	    simplify_rset(set);
 	report_combination(set, nval, data);
 	best_ele->fun = nval;
     }
@@ -455,6 +488,12 @@ static ref_t tree_combiner(rset *set, size_t degree, size_t count, conjunction_d
 	root_addref(nval, true);
 	root_deref(rval);
 	root_deref(subval);
+	if (reprocess) {
+	    ref_t sval = simplify_downstream(nval, set->head);
+	    root_addref(sval, true);
+	    root_deref(nval);
+	    nval = sval;
+	}
 	report_combination(set, rval, data);
 	rval = nval;
     }
@@ -467,23 +506,32 @@ ref_t tree_combine(rset *set, size_t degree, conjunction_data *data) {
 
 /* Compute conjunction of set (destructive) */
 ref_t rset_conjunct(rset *set) {
+    char cstring[6];
     conjunction_data cdata;
     cdata.max_size = 0;
     cdata.total_size = 0;
     cdata.sum_size = 0;
     ref_t rprod = check_results ? and_check(set) : REF_INVALID;
 
+    if (presort)
+	rset_sort(set, false, false);
+
     if (preprocess)
-	simplify_rset(set, right_to_left);
+	simplify_rset(set);
 
     ref_t rval = shadow_one(smgr);
 
     if (reduction_type > 1)
 	rval = tree_combine(set, reduction_type, &cdata);
-    else if (reduction_type == 1)
+    else if (reduction_type == DYNAMIC_REDUCTION) {
+	if (reprocess) {
+	    report(0, "WARNING: Cannot reprocess arguments when using dynamic reduction.  Reprocessing disabled");
+	    reprocess = 0;
+	}
 	rval = sorted_combine(set, &cdata);
-    else if (reduction_type == -1)
-	rval = adaptive_combine(set, &cdata);
+    }
+    else if (reduction_type == PAIRWISE_REDUCTION)
+	rval = pairwise_combine(set, &cdata);
     else
 	rval = linear_combine(set, &cdata);
 
@@ -498,11 +546,129 @@ ref_t rset_conjunct(rset *set) {
     }
 
     size_t rsize = cudd_single_size(smgr, rval);
-    report(0, "Generated conjunction with %zd nodes.  Max BDD size = %zd.  Max combined size = %zd.  Max sum size = %zd",
-	   rsize, cdata.max_size, cdata.total_size, cdata.sum_size);
+    compute_cstring(cstring);
+    report(0, "Conjunction options %s: %zd nodes.  Max BDD = %zd.  Max combined = %zd.  Max sum = %zd",
+	   cstring, rsize, cdata.max_size, cdata.total_size, cdata.sum_size);
 
     return rval;
 }
 
+bool do_cstring(int argc, char *argv[]) {
+    if (argc != 2) {
+	report(0, "Must provide single argument to cstring command");
+	return false;
+    }
+    return parse_cstring(argv[1]);
+}
 
 
+static bool parse_cstring(char *cstring) {
+    if (strlen(cstring) != 4) {
+	report(0, "cstring must be of length 4, of form '(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y)'");
+	return false;
+    }
+    switch(cstring[0]) {
+    case 'T':
+	reduction_type = TERNARY_REDUCTION;
+	break;
+    case 'B':
+	reduction_type = BINARY_REDUCTION;
+	break;
+    case 'L':
+	reduction_type = LINEAR_REDUCTION;
+	break;
+    case 'D':
+	reduction_type = DYNAMIC_REDUCTION;
+	break;
+    case 'P':
+	reduction_type = PAIRWISE_REDUCTION;
+	break;
+    default:
+	report(0, "cstring must be of form '(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y)'");
+	return false;
+    }
+    switch(cstring[1]) {
+    case 'N':
+	preprocess = 0;
+	presort = 0;
+	break;
+    case 'U':
+	preprocess = 1;
+	presort = 0;
+	break;
+    case 'S':
+	preprocess = 1;
+	presort = 1;
+	break;
+    default:
+	report(0, "cstring must be of form '(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y)'");
+	return false;
+    }
+    if (preprocess) {
+	switch(cstring[2]) {
+	case 'L':
+	    right_to_left = 0;
+	    break;
+	case 'R':
+	    right_to_left = 1;
+	    break;
+	default:
+	    report(0, "cstring must be of form '(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y)'");
+	    return false;
+	}
+    } else {
+	if (cstring[2] != 'O') {
+	    report(0, "cstring must be of form '(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y)'");
+	    return false;
+	}
+    }
+    switch (cstring[3]) {
+    case 'N':
+	reprocess = 0;
+	break;
+    case 'Y':
+	reprocess = 0;
+	if (reduction_type == DYNAMIC_REDUCTION)
+	    report(0, "Cannot do reprocessing with dynamic reduction.  Reprocessing disabled");
+	else if (!preprocess)
+	    report(0, "Can only reprocess if first preprocess.  Reprocessing disabled");
+	else
+	    reprocess = 1;
+	break;
+    default:
+	report(0, "cstring must be of form '(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y)'");
+	return false;
+    }
+    return true;
+}
+
+static void compute_cstring(char *cstring) {
+    switch (reduction_type) {
+    case TERNARY_REDUCTION:
+	cstring[0] = 'T';
+	break;
+    case BINARY_REDUCTION:
+	cstring[0] = 'B';
+	break;
+    case LINEAR_REDUCTION:
+	cstring[0] = 'L';
+	break;
+    case DYNAMIC_REDUCTION:
+	cstring[0] = 'D';
+	break;
+    case PAIRWISE_REDUCTION:
+	cstring[0] = 'P';
+	break;
+    default:
+	cstring[0] = '?';
+    }
+    if (preprocess) {
+	cstring[1] = presort ? 'S' : 'U';
+	cstring[2] = right_to_left ? 'R' : 'L';
+    } else {
+	cstring[1] = 'N';
+	cstring[2] = 'O';
+    }
+    cstring[3] = reprocess ? 'Y' : 'N';
+    cstring[4] = '\0';
+}

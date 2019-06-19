@@ -109,7 +109,7 @@ static void bdd_init() {
     set_gc_handlers(client_gc_start, client_gc_finish);
 }
 
-static void console_init(bool do_dist) {
+static void console_init(bool do_dist, char *cstring) {
     add_cmd("aconvert", do_aconvert,
 	    " af f ...       | Convert f to ADD and name af");
     add_cmd("and", do_and,
@@ -162,7 +162,7 @@ static void console_init(bool do_dist) {
 	    " zf f           | Convert f to ZDD and name zf");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
     add_param("allvars", &all_vars, "Count all variables in support", NULL);
-    init_conjunct();
+    init_conjunct(cstring);
 }
 
 static bool bdd_quit(int argc, char *argv[]) {
@@ -209,6 +209,7 @@ static void usage(char *cmd) {
     printf("\t-L FILE    Echo results to FILE\n");
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
+    printf("\t-O (L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y) | Set options for conjunction\n");
     exit(0);
 }
 
@@ -226,13 +227,15 @@ int main(int argc, char *argv[]) {
     char hbuf[BUFSIZE] = "localhost";
     unsigned port = CPORT;
     bool try_local_router = false;
+    char cstring[6] = "LNON";
     
     do_cudd = 1;
     do_local = 0;
     do_dist = 0;
     chaining_type = CHAIN_ALL;
 
-    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:")) != -1) {
+
+    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:O:")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -287,6 +290,9 @@ int main(int argc, char *argv[]) {
 		err(true, "Invalid chaining type '%c'\n", optarg[0]);
 	    }
 	    break;
+	case 'O':
+	    strcpy(cstring, optarg);
+	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);
@@ -300,7 +306,7 @@ int main(int argc, char *argv[]) {
 	set_agent_flush_helper(run_flush);
 	set_agent_stat_helper(do_summary_stat);
     }
-    console_init(do_dist);
+    console_init(do_dist, cstring);
     set_verblevel(level);
     if (logfile_name)
 	set_logfile(logfile_name);
