@@ -522,7 +522,7 @@ class MProblem:
     # At what level should streamline constraints be introduced?
     streamlineLevel = 2
     # At what levels should we conjunct, rather than and
-    conjunctLevels = range(3,7)
+    conjunctLevels = range(4,7)
 
     def __init__(self, dim, auxCount, ckt = None):
         if type(dim) == type(2):
