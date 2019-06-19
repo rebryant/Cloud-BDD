@@ -33,9 +33,10 @@
 int check_results = 0;
 /*
   How should terms be combined?  
-   type >= 2 ==> tree reduction.
-   type == 1 ==> dynamically sorted reduction
-   type == 0 ==> linear reduction
+   type >=  2 ==> tree reduction.
+   type ==  1 ==> dynamically sorted reduction
+   type ==  0 ==> linear reduction
+   type == -1 ==> adaptive reduction 
  */
 int reduction_type = 0;
 
@@ -68,6 +69,7 @@ struct RSET {
 /* Data collected during conjunction */
 typedef struct {
     size_t max_size;
+    size_t sum_size;
     size_t total_size;
 } conjunction_data;
 
@@ -75,7 +77,7 @@ void init_conjunct() {
 
     /* Add commands and options */
     add_param("check", &check_results, "Check results of conjunctoperations", NULL);
-    add_param("reduction", &reduction_type, "Reduction degree (2+: tree, 1:dynamic, 0:linear)", NULL);
+    add_param("reduction", &reduction_type, "Reduction degree (2+: tree, 1:dynamic, 0:linear, -1:adaptive)", NULL);
     add_param("preprocess", &preprocess, "Preprocess conjunction arguments with Coudert/Madre restrict", NULL);
     add_param("reprocess", &preprocess, "Reprocess arguments with Coudert/Madre restrict during conjunction", NULL);
     add_param("right", &right_to_left, "Perform C/M restriction starting with rightmost (rather than leftmost) element", NULL);
@@ -143,24 +145,32 @@ ref_t rset_remove_first(rset *set) {
     return rval;
 }
 
+static size_t get_size(rset_ele *ptr) {
+    if (ptr == NULL)
+	return 0;
+    if (ptr->size == 0)
+	ptr->size = cudd_single_size(smgr, ptr->fun);
+    return ptr->size;
+}
+
+static double get_sat_count(rset_ele *ptr) {
+    if (ptr == NULL)
+	return 0.0;
+    if (ptr->sat_count <= 0.0)
+	ptr->sat_count = cudd_single_count(smgr, ptr->fun);
+    return ptr->sat_count;
+}
+
 /* Comparison function for sorting */
 static bool elements_ordered(rset_ele *ptr1, rset_ele *ptr2, bool by_size, bool ascending) {
     /* Fill in fields, if necessary */
     if (by_size) {
-	if (ptr1->size == 0)
-	    ptr1->size = cudd_single_size(smgr, ptr1->fun);
-	if (ptr2->size == 0)
-	    ptr2->size = cudd_single_size(smgr, ptr2->fun);
-	size_t n1 = ptr1->size;
-	size_t n2 = ptr2->size;
+	size_t n1 = get_size(ptr1);
+	size_t n2 = get_size(ptr2);
 	return ascending == (n1 <= n2);
     }
-    if (ptr1->sat_count < 0.0)
-	ptr1->sat_count = cudd_single_count(smgr, ptr1->fun);
-    if (ptr2->sat_count < 0.0)
-	ptr2->sat_count = cudd_single_count(smgr, ptr2->fun);
-    double d1 = ptr1->sat_count;
-    double d2 = ptr2->sat_count;
+    double d1 = get_sat_count(ptr1);
+    double d2 = get_sat_count(ptr2);
     return ascending == (d1 <= d2);
 }
 
@@ -200,9 +210,9 @@ static void rset_sort(rset *set, bool by_size, bool ascending) {
     rset_ele *ptr = set->head;
     while (ptr) {
 	if (by_size)
-	    report_noreturn(2, " %zd", ptr->size);
+	    report_noreturn(2, " %zd", get_size(ptr));
 	else
-	    report_noreturn(2, " %.0f", ptr->sat_count);
+	    report_noreturn(2, " %.0f", get_sat_count(ptr));
 	ptr = ptr->next;
     }
     report(2, "");
@@ -227,28 +237,43 @@ static ref_t and_check(rset *set) {
 
 /* Print statistics about partial results */
 static void report_combination(rset *set, ref_t sofar, conjunction_data *data) {
+    size_t result_size = 0;
+    size_t max_size = 0;
+    size_t sum_size = 0;
+    size_t count = set->length;
     if (verblevel < 1)
 	return;
     /* Must convert to other form of set */
     set_ptr pset = word_set_new();
-    set_insert(pset, (word_t) sofar);
-    size_t result_size = cudd_single_size(smgr, sofar);
-    size_t max_size = result_size;
+    if (!REF_IS_INVALID(sofar)) {
+	set_insert(pset, (word_t) sofar);
+	result_size = cudd_single_size(smgr, sofar);
+	max_size = result_size;
+	sum_size += result_size;
+	count++;
+    }
     rset_ele *ptr = set->head;
     while (ptr) {
 	ref_t r = ptr->fun;
-	set_insert(pset, (word_t) r);
-	size_t nsize = cudd_single_size(smgr, r);
-	max_size = SMAX(max_size, nsize);
+	if (REF_IS_INVALID(r)) {
+	    count--;
+	} else {
+	    set_insert(pset, (word_t) r);
+	    size_t nsize = cudd_single_size(smgr, r);
+	    max_size = SMAX(max_size, nsize);
+	    sum_size += nsize;
+	}
 	ptr = ptr->next;
     }
     size_t total_size = cudd_set_size(smgr, pset);
-    report(1, "Partial result with %d values.  Max size = %zd.  Combined size = %zd.  Computed size = %zd",
-	   set->length+1, max_size, total_size, result_size);
+    double ratio = (double) total_size/sum_size;
+    report(1, "Partial result with %d values.  Max size = %zd.  Sum of sizes = %d.  Combined size = %zd.  (Sharing factor = %.2f) Computed size = %zd",
+	   set->length+1, max_size, sum_size, total_size, ratio, result_size);
     set_free(pset);
     if (data) {
 	data->total_size = SMAX(data->total_size, total_size);
 	data->max_size = SMAX(data->max_size, max_size);
+	data->sum_size = SMAX(data->sum_size, sum_size);
     }
 }
 
@@ -308,9 +333,7 @@ static void simplify_rset(rset *set, bool right_first) {
 	report_noreturn(2, "Before simplification:");
 	rset_ele *ptr = set->head;
 	while (ptr) {
-	    if (ptr->size == 0)
-		ptr->size = cudd_single_size(smgr, ptr->fun);
-	    report_noreturn(2, " %zd", ptr->size);
+	    report_noreturn(2, " %zd", get_size(ptr));
 	    ptr = ptr->next;
 	}
 	report(2, "");
@@ -322,9 +345,7 @@ static void simplify_rset(rset *set, bool right_first) {
 	report_noreturn(2, "After simplification:");
 	rset_ele *ptr = set->head;
 	while (ptr) {
-	    if (ptr->size == 0)
-		ptr->size = cudd_single_size(smgr, ptr->fun);
-	    report_noreturn(2, " %zd", ptr->size);
+	    report_noreturn(2, " %zd", get_size(ptr));
 	    ptr = ptr->next;
 	}
 	report(2, "");
@@ -374,6 +395,49 @@ static ref_t sorted_combine(rset *set, conjunction_data *data) {
     return rval;
 }
 
+static ref_t adaptive_combine(rset *set, conjunction_data *data) {
+    ref_t rval;
+    if (set->length == 0) {
+	rval = shadow_one(smgr);
+	root_addref(rval, false);
+	return rval;
+    }
+    while (set->length > 1) {
+	rset_ele *ptr = set->head;
+	rset_ele *best_ele = NULL;
+	size_t best_score = 0;
+	bool first = true;
+	/* Find adjacent elements that minimize product of sizes */
+	while (ptr->next) {
+	    rset_ele *next = ptr->next;
+	    size_t score = get_size(ptr) * get_size(next);
+	    if (first || score < best_score) {
+		first = false;
+		best_score = score;
+		best_ele = ptr;
+	    }
+	    ptr = next;
+	}
+	rset_ele *bnext = best_ele->next;
+	/* Combine two elements */
+	ref_t nval = shadow_and(smgr, best_ele->fun, bnext->fun);
+	root_addref(nval, true);
+	root_deref(best_ele->fun);
+	root_deref(bnext->fun);
+	// Hold spot in list
+	best_ele->fun = REF_INVALID;
+	best_ele->next = bnext->next;
+	if (set->tail == bnext)
+	    set->tail = best_ele;
+	free_block(bnext, sizeof(rset_ele));
+	set->length--;
+	report_combination(set, nval, data);
+	best_ele->fun = nval;
+    }
+    rval = rset_remove_first(set);
+    return rval;
+}
+
 /* Recursive helper function for tree combination */
 static ref_t tree_combiner(rset *set, size_t degree, size_t count, conjunction_data *data) {
     ref_t rval = shadow_one(smgr);
@@ -406,6 +470,7 @@ ref_t rset_conjunct(rset *set) {
     conjunction_data cdata;
     cdata.max_size = 0;
     cdata.total_size = 0;
+    cdata.sum_size = 0;
     ref_t rprod = check_results ? and_check(set) : REF_INVALID;
 
     if (preprocess)
@@ -417,6 +482,8 @@ ref_t rset_conjunct(rset *set) {
 	rval = tree_combine(set, reduction_type, &cdata);
     else if (reduction_type == 1)
 	rval = sorted_combine(set, &cdata);
+    else if (reduction_type == -1)
+	rval = adaptive_combine(set, &cdata);
     else
 	rval = linear_combine(set, &cdata);
 
@@ -431,8 +498,8 @@ ref_t rset_conjunct(rset *set) {
     }
 
     size_t rsize = cudd_single_size(smgr, rval);
-    report(0, "Generated conjunction with %zd nodes.  Max BDD size = %zd nodes.  Max combined size = %zd nodes",
-	   rsize, cdata.max_size, cdata.total_size);
+    report(0, "Generated conjunction with %zd nodes.  Max BDD size = %zd.  Max combined size = %zd.  Max sum size = %zd",
+	   rsize, cdata.max_size, cdata.total_size, cdata.sum_size);
 
     return rval;
 }
