@@ -839,35 +839,6 @@ bool do_restrict(int argc, char *argv[]) {
     return true;
 }
 
-/* Simplify function run, based of functions at sidx and beyond. */
-/* Result has reference count set */
-static ref_t simplify_downstream(ref_t fun, int argc, char *argv[], int sidx) {
-    ref_t rval = fun;
-    if (REF_IS_INVALID(rval))
-	return rval;
-    root_addref(rval, false);
-    int i;
-    for (i = sidx; i < argc; i++) {
-	ref_t arg = get_ref(argv[i]);
-	if (REF_IS_INVALID(arg))
-	    return arg;
-	ref_t nval = shadow_cm_restrict(smgr, rval, arg);
-	if (REF_IS_INVALID(nval)) {
-	    root_deref(rval);
-	    return nval;
-	}
-	root_addref(nval, true);
-	root_deref(rval);
-	rval = nval;
-	/* Check for local garbage collection */
-	if (shadow_gc_check(smgr))
-	    do_collect(0, NULL);
-	/* Initiate any deferred garbage collection */
-	if (do_dist)
-	    undefer();
-    }
-    return rval;
-}
 
 bool do_simplify(int argc, char *argv[]) {
     size_t ocnt = 0, ncnt = 0;
@@ -926,62 +897,6 @@ bool do_simplify(int argc, char *argv[]) {
     root_deref(rval);
     return true;
 }
-
-static ref_t simplify_reduce(int argc, char *argv[]) {
-    ref_t rval = shadow_one(smgr);
-    int i;
-    size_t ocnt = 1, ncnt = 1;
-    root_addref(rval, false);
-    for (i = 2; i < argc; i++) {
-
-	ref_t fun = get_ref(argv[i]);
-	if (smgr->do_cudd)
-	    ocnt = cudd_single_size(smgr, fun);
-
-	ref_t rarg = simplify_downstream(fun, argc, argv, i+1);
-	if (REF_IS_INVALID(rarg)) {
-	    root_deref(rval);
-	    return rarg;
-	}
-
-	if (smgr->do_cudd) {
-	    ncnt = cudd_single_size(smgr, rarg);
-	    double ratio = (double) ocnt/ncnt;
-	    if (i < argc-1)
-		report(0, "After simplification argument %s %lu --> %lu nodes (%.2fX reduction)", argv[i], ocnt, ncnt, ratio);
-	}
-
-	ref_t nval = shadow_and(smgr, rval, rarg);
-	root_addref(nval, true);
-	root_deref(rval);
-	root_deref(rarg);
-
-#if 0
-	ref_t rnval = simplify_downstream(nval, argc, argv, i+1);
-	ocnt = ncnt = 1;
-	if (smgr->do_cudd) {
-	    ocnt = cudd_single_size(smgr, nval);
-	    ncnt = cudd_single_size(smgr, rnval);
-	    report(0, "Simplifying product %lu --> %lu nodes (%.2fX reduction)", ocnt, ncnt, (double) ocnt/ncnt);
-	}
-	root_deref(nval);
-	nval = rnval;
-#else
-	ncnt = cudd_single_size(smgr, nval);
-	report(0, "Product %lu nodes", ncnt);
-#endif
-
-	rval = nval;
-	/* Check for local garbage collection */
-	if (shadow_gc_check(smgr))
-	    do_collect(0, NULL);
-	/* Initiate any deferred garbage collection */
-	if (do_dist)
-	    undefer();
-    }
-    return rval;
-}
-
 
 bool do_conjunct(int argc, char *argv[]) {
     if (argc < 2) {
