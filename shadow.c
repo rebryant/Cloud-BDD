@@ -343,7 +343,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 void free_shadow_mgr(shadow_mgr mgr) {
     if (mgr->do_cudd) {
 	int left = Cudd_CheckZeroRef(mgr->bdd_manager);
-	report(1, "Cudd reports %d nodes with nonzero reference counts\n", left);
+	report(1, "Cudd reports %d nodes with nonzero reference counts", left);
 	Cudd_Quit(mgr->bdd_manager);
     }
     if (do_ref(mgr)) 
@@ -429,6 +429,9 @@ ref_t shadow_cm_restrict(shadow_mgr mgr, ref_t fref, ref_t cref) {
     DdNode *n = NULL;
     ref_t r = REF_INVALID;
     dd_type_t dtype = IS_BDD;
+
+    if (do_ref(mgr))
+	return r;
 
     if (mgr->do_cudd) {
 	if (is_zdd(mgr, fref) || is_zdd(mgr, cref)) {
@@ -804,8 +807,11 @@ ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		unreference_dd(mgr, bn, IS_ADD);
 	}
     }
-    if (dtype == IS_BDD)
-	r = shadow_ite(mgr, aref, shadow_negate(mgr, bref), bref);
+    if (dtype == IS_BDD) {
+	ref_t bn = shadow_negate(mgr, bref);
+	r = shadow_ite(mgr, aref, bn, bref);
+	shadow_deref(mgr, bn);
+    }
 
 #if RPT >= 4
     char buf1[24], buf2[24], buf3[24];

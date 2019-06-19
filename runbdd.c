@@ -87,6 +87,7 @@ bool do_zconvert(int argc, char *argv[]);
 
 chunk_ptr run_flush();
 
+void root_deref(ref_t r);
 static ref_t get_ref(char *name);
 static set_ptr get_refs(int cnt, char *names[]);
 static void assign_ref(char *name, ref_t r, bool fresh);
@@ -163,15 +164,23 @@ static void console_init(bool do_dist, char *cstring) {
 }
 
 static bool bdd_quit(int argc, char *argv[]) {
-    word_t wk;
-    while (keyvalue_removenext(nametable, &wk, NULL)) {
+    word_t wk, wv;
+    while (keyvalue_removenext(nametable, &wk, &wv)) {
 	char *s = (char *) wk;
+	ref_t rold = (ref_t) wv;
+	report(2, "Removing function %s from name table", s);
+	root_deref(rold);
 #if RPT >= 5
 	report(5, "Freeing string '%s' from name table", s);
 #endif
 	free_string(s);
     }
     keyvalue_free(nametable);
+    if (reftable->nelements > 0) {
+	report(2, "Still have references to %zd functions", reftable->nelements);
+    } else {
+	report(2, "Reference table empty");
+    }
     keyvalue_free(reftable);
     if (do_ref(smgr)) {
 	ref_show_stat(smgr->ref_mgr);
@@ -441,7 +450,7 @@ static ref_t get_ref(char *name) {
 	    ref_t nr = (ref_t) wv;
 	    r = shadow_negate(smgr, nr);
 	    // Create record of resulting value
-	    assign_ref(name, r, false);
+	    assign_ref(name, r, true);
 	    return r;
 	}
     }
@@ -775,7 +784,6 @@ static void client_gc_finish() {
 #endif
 }
 
-
 bool do_delete(int argc, char *argv[]) {
     size_t i;
     for (i = 1; i < argc; i++) {
@@ -798,6 +806,21 @@ bool do_delete(int argc, char *argv[]) {
 	} else {
 	    report(0, "Function '%s' not found", argv[i]);
 	    return false;
+	}
+	char nname[MAX_CHAR];
+	sprintf(nname, "!%s", argv[i]);
+	if (keyvalue_remove(nametable, (word_t) nname, &wk, &wv)) {
+	    olds = (char *) wk;
+	    rold = (ref_t) wv;
+#if RPT >= 5
+	    if (verblevel >= 5) {
+		char buf[24];
+		shadow_show(smgr, rold, buf);
+		report(5, "Removed entry %s:%s from name table", olds, buf);
+	    }
+#endif
+	    root_deref(rold);
+	    free_string(olds);
 	}
     }
     return true;
@@ -1032,6 +1055,7 @@ bool do_count(int argc, char *argv[]) {
 		    report_noreturn(0, " %s", buf);
 		}
 	    }
+	    root_deref(r);
 	}
 	report(0, "");
 #if RPT >= 1
@@ -1296,8 +1320,9 @@ bool do_information(int argc, char *argv[]) {
 		report_noreturn(0, " %s", buf);
 	    }
 	}
+	shadow_deref(smgr, r);
     }
-    report_noreturn(0, "\n");
+    report(0, "");
     set_free(supset);
     if (smgr->do_local) {
 	set_ptr rset = ref_reach(smgr->ref_mgr, roots);

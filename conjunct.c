@@ -334,7 +334,6 @@ static void simplify_recurse(rset_ele *ptr, bool preorder) {
     if (preorder) {
 	ref_t fun = ptr->fun;
 	ref_t nval = simplify_downstream(fun, rest);
-	root_addref(nval, true);
 	root_deref(fun);
 	ptr->fun = nval;
 	ptr->size = 0;
@@ -344,7 +343,6 @@ static void simplify_recurse(rset_ele *ptr, bool preorder) {
     if (!preorder) {
 	ref_t fun = ptr->fun;
 	ref_t nval = simplify_downstream(fun, rest);
-	root_addref(nval, true);
 	root_deref(fun);
 	ptr->fun = nval;
 	ptr->size = 0;
@@ -394,7 +392,6 @@ static ref_t linear_combine(rset *set, conjunction_data *data) {
 	root_deref(rval);
 	if (reprocess) {
 	    ref_t sval = simplify_downstream(nval, set->head);
-	    root_addref(sval, true);
 	    root_deref(nval);
 	    nval = sval;
 	}
@@ -421,6 +418,7 @@ static ref_t sorted_combine(rset *set, conjunction_data *data) {
 	root_deref(arg2);
 	report_combination(set, nval, data);
 	rset_add_term_first(set, nval);
+	root_deref(nval);
     }
     rval = rset_remove_first(set);
     return rval;
@@ -462,10 +460,10 @@ static ref_t pairwise_combine(rset *set, conjunction_data *data) {
 	    set->tail = best_ele;
 	free_block(bnext, sizeof(rset_ele));
 	set->length--;
-	if (reprocess)
-	    simplify_rset(set);
 	report_combination(set, nval, data);
 	best_ele->fun = nval;
+	if (reprocess)
+	    simplify_rset(set);
     }
     rval = rset_remove_first(set);
     return rval;
@@ -490,7 +488,6 @@ static ref_t tree_combiner(rset *set, size_t degree, size_t count, conjunction_d
 	root_deref(subval);
 	if (reprocess) {
 	    ref_t sval = simplify_downstream(nval, set->head);
-	    root_addref(sval, true);
 	    root_deref(nval);
 	    nval = sval;
 	}
@@ -547,7 +544,7 @@ ref_t rset_conjunct(rset *set) {
 
     size_t rsize = cudd_single_size(smgr, rval);
     compute_cstring(cstring);
-    report(0, "Conjunction options %s: %zd nodes.  Max BDD = %zd.  Max combined = %zd.  Max sum = %zd",
+    report(0, "Conjunction %s Result %zd Max_BDD %zd Max_combined %zd Max_sum %zd",
 	   cstring, rsize, cdata.max_size, cdata.total_size, cdata.sum_size);
 
     return rval;
