@@ -48,8 +48,6 @@ shadow_mgr smgr;
 
 /* Mapping from string names to shadow pointers */
 keyvalue_table_ptr nametable;
-/* Mapping from string names to vectors (represented as chunks) */
-keyvalue_table_ptr vectable;
 
 /*
   Maintain reference count for each ref reachable from nametable
@@ -100,7 +98,6 @@ static void client_gc_finish();
 static void bdd_init() {
     smgr = new_shadow_mgr(do_cudd, do_local, do_dist, chaining_type);
     nametable = keyvalue_new(string_hash, string_equal);
-    vectable = keyvalue_new(string_hash, string_equal);
     reftable = word_keyvalue_new();
     ref_t rzero = shadow_zero(smgr);
     ref_t rone = shadow_one(smgr);
@@ -166,7 +163,7 @@ static void console_init(bool do_dist, char *cstring) {
 }
 
 static bool bdd_quit(int argc, char *argv[]) {
-    word_t wk, wv;
+    word_t wk;
     while (keyvalue_removenext(nametable, &wk, NULL)) {
 	char *s = (char *) wk;
 #if RPT >= 5
@@ -175,16 +172,6 @@ static bool bdd_quit(int argc, char *argv[]) {
 	free_string(s);
     }
     keyvalue_free(nametable);
-    while (keyvalue_removenext(vectable, &wk, &wv)) {
-	char *s = (char *) wk;
-#if RPT >= 5
-	report(5, "Freeing string '%s' from vector table", s);
-#endif
-	free_string(s);
-	chunk_ptr cp = (chunk_ptr) wv;
-	chunk_free(cp);
-    }
-    keyvalue_free(vectable);
     keyvalue_free(reftable);
     if (do_ref(smgr)) {
 	ref_show_stat(smgr->ref_mgr);
