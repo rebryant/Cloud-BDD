@@ -7,7 +7,6 @@ import xmlrpclib
 import glob
 import os.path
 import sys
-import time
 import getopt
 import subprocess
 
@@ -21,13 +20,13 @@ def usage(name):
     print "  Client options"
     print "   -H HOST:PORT     Retrieve command file and mode information from server at HOST:PORT"
     print "  Local & server options"
-    print "   -r               Redo runs that didn't complete"
-    print "   -R               Redo all runs"
     print "   -m M1:M2...      Specify reduction mode(s) T, B, L, P, D"
     print "   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)(Y|N)"
     print "   -f FILE          Command file"
     print "   -I DIR           Process all .cmd files in DIR"
     print "  Local & client options"
+    print "   -r               Redo runs that didn't complete"
+    print "   -R               Redo all runs"
     print "   -C               Disable chaining"
     print "   -v VERB          Set verbosity level"
     print "   -q               Don't print output results"
@@ -153,7 +152,7 @@ def shouldRun(cmdPath, mode):
 def process(cmdPath, mode):
     lpath = shouldRun(cmdPath, mode)
     if lpath is None:
-        print "Skipping %s + %s" % (cmdPath, mode)
+        print "Already ran %s + %s.  Skipping" % (cmdPath, mode)
         return
     cmd = ["/".join(homePathFields + runbddFields), '-c']
     if not chain:
@@ -164,9 +163,6 @@ def process(cmdPath, mode):
     if verbLevel is not None:
         cmd += ['-v', str(verbLevel)]
     cmdLine = " ".join(cmd)
-    print "Command '%s'" % cmdLine
-    time.sleep(2.0)
-    return
     if not quietMode:
         print "Running '%s'" % cmdLine
     if quietMode:
@@ -228,23 +224,8 @@ def run(name, args):
         print "Need command file(s)"
         usage(name)
         return
-    modeList = []
-    for r in reductions:
-        for p in processings:
-            if compatibleModes(r,p):
-                mode = makeMode(r,p)
-                modeList.append(mode)
-            else:
-                print "Invalid mode: %s.  Skipping" % makeMode(r, p)
-    pairGenerator = Pair(cmdPaths, modeList)
-    if isServer:
-        try:
-            server = Server(port, pairGenerator)
-        except Exception as ex:
-            print "Couldn't set up server on port %d (%s)" % (port, str(ex))
-            return
-        server.run()
-    elif isClient:
+
+    if isClient:
         try:
             cname = 'http://%s:%d' % (host, port)
             print "Attempting to connect to '%s'" % cname
@@ -265,6 +246,24 @@ def run(name, args):
             else:
                 print "Terminated"
                 return
+
+    modeList = []
+    for r in reductions:
+        for p in processings:
+            if compatibleModes(r,p):
+                mode = makeMode(r,p)
+                modeList.append(mode)
+            else:
+                print "Invalid mode: %s.  Skipping" % makeMode(r, p)
+    pairGenerator = Pair(cmdPaths, modeList)
+
+    if isServer:
+        try:
+            server = Server(port, pairGenerator)
+        except Exception as ex:
+            print "Couldn't set up server on port %d (%s)" % (port, str(ex))
+            return
+        server.run()
     else:
         while True:
             tuple = pairGenerator.nextOrEmpty()
