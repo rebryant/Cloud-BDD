@@ -277,6 +277,7 @@ static void report_combination(rset *set, ref_t sofar, conjunction_data *data) {
 	sum_size += result_size;
 	count++;
     }
+    size_t set_size = count;
     rset_ele *ptr = set->head;
     while (ptr) {
 	ref_t r = ptr->fun;
@@ -292,8 +293,8 @@ static void report_combination(rset *set, ref_t sofar, conjunction_data *data) {
     }
     size_t total_size = cudd_set_size(smgr, pset);
     double ratio = (double) total_size/sum_size;
-    report(1, "Partial result with %d values.  Max size = %zd.  Sum of sizes = %d.  Combined size = %zd.  (Sharing factor = %.2f) Computed size = %zd",
-	   set->length+1, max_size, sum_size, total_size, ratio, result_size);
+    report(1, "Partial result with %zd values.  Max size = %zd.  Sum of sizes = %d.  Combined size = %zd.  (Sharing factor = %.2f) Computed size = %zd",
+	   set_size, max_size, sum_size, total_size, ratio, result_size);
     set_free(pset);
     if (data) {
 	data->total_size = SMAX(data->total_size, total_size);
@@ -483,6 +484,8 @@ static ref_t tree_combiner(rset *set, size_t degree, size_t count, conjunction_d
     rval = tree_combiner(set, degree, sub_count, data);
     for (d = 1; d < degree; d++) {
 	ref_t subval = tree_combiner(set, degree, sub_count, data);
+	if (subval == shadow_one(smgr))
+	    continue;
 	ref_t nval = shadow_and(smgr, rval, subval);
 	root_addref(nval, true);
 	root_deref(rval);
@@ -499,6 +502,7 @@ static ref_t tree_combiner(rset *set, size_t degree, size_t count, conjunction_d
 }
 
 ref_t tree_combine(rset *set, size_t degree, conjunction_data *data) {
+    report_combination(set, REF_INVALID, data);
     return tree_combiner(set, degree, set->length, data);
 }
 
