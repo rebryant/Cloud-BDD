@@ -480,7 +480,8 @@ static ref_t tree_combiner(rset *set, size_t degree, size_t count, conjunction_d
     }
     size_t sub_count = (count + degree-1)/degree;
     int d;
-    for (d = 0; d < degree; d++) {
+    rval = tree_combiner(set, degree, sub_count, data);
+    for (d = 1; d < degree; d++) {
 	ref_t subval = tree_combiner(set, degree, sub_count, data);
 	ref_t nval = shadow_and(smgr, rval, subval);
 	root_addref(nval, true);
@@ -491,8 +492,8 @@ static ref_t tree_combiner(rset *set, size_t degree, size_t count, conjunction_d
 	    root_deref(nval);
 	    nval = sval;
 	}
-	report_combination(set, rval, data);
 	rval = nval;
+	report_combination(set, rval, data);
     }
     return rval;
 }
