@@ -432,6 +432,7 @@ static ref_t pairwise_combine(rset *set, conjunction_data *data) {
 	root_addref(rval, false);
 	return rval;
     }
+    report_combination(set, REF_INVALID, data);
     while (set->length > 1) {
 	rset_ele *ptr = set->head;
 	rset_ele *best_ele = NULL;
