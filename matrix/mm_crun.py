@@ -13,7 +13,7 @@ import subprocess
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [(-P PORT|-H HOST:PORT)] [-r] [-R] [-C] [-v VERB] [-q] [-m MODES] [-p PROCS] (-f FILE|-I DIR)"
+    print "Usage %s [-h] [(-P PORT|-H HOST:PORT)] [-r] [-R] [-C] [-v VERB] [-q] [-m MODES] [-p PROCS] (-f FILE|-I DIR) [-s SUP]"
     print "   -h               Print this message"
     print "  Server options"
     print "   -P PORT          Set up server on specified port"
@@ -30,6 +30,7 @@ def usage(name):
     print "   -C               Disable chaining"
     print "   -v VERB          Set verbosity level"
     print "   -q               Don't print output results"
+    print "   -s SUP           Set superset fraction in similarity metric [0-100]"
     sys.exit(0)
 
 # Set to home directory for program, split into tokens
@@ -41,6 +42,8 @@ isServer = False
 isClient = False
 port = 6616
 host = 'localhost'
+
+supersetFraction = None
 
 softRedo = False
 hardRedo = False
@@ -160,6 +163,8 @@ def process(cmdPath, mode):
     cmd += ['-O', mode]
     cmd += ['-f', cmdPath]
     cmd += ['-L', lpath]
+    if supersetFraction is not None:
+        cmd += ['-s', str(superset_fraction)]
     if verbLevel is not None:
         cmd += ['-v', str(verbLevel)]
     cmdLine = " ".join(cmd)
@@ -181,10 +186,11 @@ def process(cmdPath, mode):
 def run(name, args):
     global softRedo, hardRedo, chain, verbLevel, quietMode
     global isClient, isServer, host, port
+    global supersetFraction
     reductions = reductionList
     processings = processingList
     cmdPaths = []
-    optlist, args = getopt.getopt(args, 'hP:H:rRCv:qf:I:m:p:')
+    optlist, args = getopt.getopt(args, 'hP:H:rRCv:qf:I:m:p:s:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -220,6 +226,8 @@ def run(name, args):
             reductions = val.split(':')
         elif opt == '-p':
             processings = val.split(':')
+        elif opt == '-s':
+            supersetFraction = int(val)
     if len(cmdPaths) == 0 and not isClient:
         print "Need command file(s)"
         usage(name)

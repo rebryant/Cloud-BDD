@@ -3,6 +3,8 @@
 /* Global variables defined in runbdd.c */
 extern shadow_mgr smgr;
 extern keyvalue_table_ptr reftable;
+/* What should be factor determining balance between superset and similarity metrics (*100) */
+extern int superset_percent;
 
 /* Functions defined in runbdd.c */
 void root_addref(ref_t r, bool fresh);

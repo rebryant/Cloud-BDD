@@ -103,6 +103,7 @@ void init_conjunct(char *cstring) {
     add_param("presort", &presort, "Sort by descending SAT count before preprocessing", NULL);
     add_param("reprocess", &preprocess, "Reprocess arguments with Coudert/Madre restrict during conjunction", NULL);
     add_param("right", &right_to_left, "Perform C/M restriction starting with rightmost (rather than leftmost) element", NULL);
+    add_param("superset", &superset_percent, "Balance between superset and similarity metrics [0,100]", NULL);
     if (!parse_cstring(cstring)) {
 	/* Revert to defaults */
 	reduction_type = LINEAR_REDUCTION;
@@ -464,11 +465,12 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 	rset_ele *best1 = NULL;
 	rset_ele *best2 = NULL;
 	rset_ele *ptr1, *ptr2;
+	double superset_factor = (double) superset_percent / 100.0;
 	for (ptr1 = set->head; ptr1; ptr1 = ptr1->next) {
 	    ref_t r1 = ptr1->fun;
 	    for (ptr2 = ptr1->next; ptr2; ptr2 = ptr2->next) {
 		ref_t r2 = ptr2->fun;
-		double sim = shadow_similar(smgr, r1, r2);
+		double sim = shadow_similarity(smgr, r1, r2, superset_factor);
 		if (sim > best_sim) {
 		    best_sim = sim;
 		    best1 = ptr1;
@@ -662,6 +664,7 @@ bool do_similar(int argc, char *argv[]) {
     for (c = 2; c < argc; c++)
 	report_noreturn(0, "\t%s", argv[c]);
     report(0, "");
+    double superset_factor = (double) superset_percent / 100.0;
     for (r = 1; r < argc-1; r++) {
 	report_noreturn(0, argv[r]);
 	for (c = 2; c <= r; c++)
@@ -669,7 +672,7 @@ bool do_similar(int argc, char *argv[]) {
 	ref_t r1 = get_ref(argv[r]);
 	for (; c < argc; c++) {
 	    ref_t r2 = get_ref(argv[c]);
-	    double s = shadow_similar(smgr, r1, r2);
+	    double s = shadow_similarity(smgr, r1, r2, superset_factor);
 	    report_noreturn(0, "\t%.3f", s);
 	}
 	report(0, "");
