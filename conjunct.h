@@ -7,13 +7,12 @@ extern keyvalue_table_ptr reftable;
 /* Functions defined in runbdd.c */
 void root_addref(ref_t r, bool fresh);
 void root_deref(ref_t r);
-
+ref_t get_ref(char *name);
 
 void init_conjunct(char *cstring);
 
 /* Data structure for representing lists of refs */
 typedef struct RSET rset;
-
 
 /* Create empty rset */
 rset *rset_new();

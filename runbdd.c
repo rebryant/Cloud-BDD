@@ -88,7 +88,7 @@ bool do_zconvert(int argc, char *argv[]);
 chunk_ptr run_flush();
 
 void root_deref(ref_t r);
-static ref_t get_ref(char *name);
+ref_t get_ref(char *name);
 static set_ptr get_refs(int cnt, char *names[]);
 static void assign_ref(char *name, ref_t r, bool fresh);
 
@@ -205,7 +205,7 @@ static void usage(char *cmd) {
     printf("\t-L FILE    Echo results to FILE\n");
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
-    printf("\t-O (L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y) | Set options for conjunction\n");
+    printf("\t-O (L|B|T|P|D|S)(NO|UL|UR|SL|SR)(N|Y) | Set options for conjunction\n");
     exit(0);
 }
 
@@ -433,7 +433,7 @@ static void assign_ref(char *name, ref_t r, bool fresh) {
 /* Command implementations */
 /* Retrieve reference, given its name. */
 /* Can prefix name with '!' to indicate negation */
-static ref_t get_ref(char *name) {
+ref_t get_ref(char *name) {
     ref_t r;
     word_t wv;
 

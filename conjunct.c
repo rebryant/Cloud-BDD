@@ -36,7 +36,8 @@ int check_results = 0;
    type >=  2 ==> tree reduction.
    type ==  1 ==> dynamically sorted reduction
    type ==  0 ==> linear reduction
-   type == -1 ==> pairwise reduction 
+   type == -1 ==> similarity reduction 
+   type == -2 ==> pairwise reduction 
  */
 int reduction_type = 0;
 
@@ -44,7 +45,8 @@ int reduction_type = 0;
 #define BINARY_REDUCTION 2
 #define DYNAMIC_REDUCTION 1
 #define LINEAR_REDUCTION 0
-#define PAIRWISE_REDUCTION -1
+#define SIMILARITY_REDUCTION -1
+#define PAIRWISE_REDUCTION -2
 
 /* Should arguments to conjunction be preprocessed with Coudert/Madre restrict operation */
 int preprocess = 0;
@@ -84,6 +86,7 @@ typedef struct {
 
 /* String representation of conjunction options */
 bool do_cstring(int argc, char *argv[]);
+bool do_similar(int argc, char *argv[]);
 static bool parse_cstring(char *cstring);
 static void compute_cstring(char *cstring);
 
@@ -92,8 +95,10 @@ void init_conjunct(char *cstring) {
     /* Add commands and options */
     add_cmd("cstring", do_cstring,
 	    "(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y) | Set options for conjunction");
+    add_cmd("similar", do_similar,
+	    "f1 f2 ...       | Compute pairwise support similarity for functions");
     add_param("check", &check_results, "Check results of conjunctoperations", NULL);
-    add_param("reduction", &reduction_type, "Reduction degree (2+: tree, 1:dynamic, 0:linear, -1:pairwise)", NULL);
+    add_param("reduction", &reduction_type, "Reduction degree (2+: tree, 1:dynamic, 0:linear, -1:similarity, -2:pairwise)", NULL);
     add_param("preprocess", &preprocess, "Preprocess conjunction arguments with Coudert/Madre restrict", NULL);
     add_param("presort", &presort, "Sort by descending SAT count before preprocessing", NULL);
     add_param("reprocess", &preprocess, "Reprocess arguments with Coudert/Madre restrict during conjunction", NULL);
@@ -168,6 +173,28 @@ ref_t rset_remove_first(rset *set) {
     free_block((void *) ptr, sizeof(rset_ele));
     set->length--;
     return rval;
+}
+
+bool rset_remove_element(rset *set, rset_ele *ele) {
+    rset_ele *next = set->head;
+    rset_ele *prev = NULL;
+    while (next && next != ele) {
+	prev = next;
+	next = next->next;
+    }
+    if (!next)
+	return false;
+    /* next == ele, prev points to predecessor */
+    if (prev)
+	prev->next = ele->next;
+    else
+	set->head = ele->next;
+    if (set->tail == ele) {
+	set->tail = prev;
+    }
+    free_block((void *) ele, sizeof(rset_ele));
+    set->length--;
+    return true;
 }
 
 static size_t get_size(rset_ele *ptr) {
@@ -425,6 +452,55 @@ static ref_t sorted_combine(rset *set, conjunction_data *data) {
     return rval;
 }
 
+static ref_t similarity_combine(rset *set, conjunction_data *data) {
+    ref_t rval;
+    if (set->length == 0) {
+	rval = shadow_one(smgr);
+	root_addref(rval, false);
+	return rval;
+    }
+    while (set->length > 1) {
+	double best_sim = -1.0;
+	rset_ele *best1 = NULL;
+	rset_ele *best2 = NULL;
+	rset_ele *ptr1, *ptr2;
+	for (ptr1 = set->head; ptr1; ptr1 = ptr1->next) {
+	    ref_t r1 = ptr1->fun;
+	    for (ptr2 = ptr1->next; ptr2; ptr2 = ptr2->next) {
+		ref_t r2 = ptr2->fun;
+		double sim = shadow_similar(smgr, r1, r2);
+		if (sim > best_sim) {
+		    best_sim = sim;
+		    best1 = ptr1;
+		    best2 = ptr2;
+		}
+	    }
+	}
+	ref_t arg1 = best1->fun;
+	ref_t arg2 = best2->fun;
+	if (!rset_remove_element(set, best1) || !rset_remove_element(set, best2)) {
+	    err(true, "Internal error.  Could not remove elements from rset");
+	}
+	ref_t nval = shadow_and(smgr, arg1, arg2);
+	root_addref(nval, true);
+	if (verblevel >= 3) {
+	    char arg1_buf[24], arg2_buf[24], nval_buf[24];
+	    shadow_show(smgr, arg1, arg1_buf);
+	    shadow_show(smgr, arg2, arg2_buf);
+	    shadow_show(smgr, nval, nval_buf);
+	    report(3, "%s & %s (sim = %.3f) --> %s", arg1_buf, arg2_buf, best_sim, nval_buf);
+	}
+	root_deref(arg1);
+	root_deref(arg2);
+	report_combination(set, nval, data);
+	rset_add_term_first(set, nval);
+	root_deref(nval);
+    }
+    rval = rset_remove_first(set);
+    return rval;
+}
+
+
 static ref_t pairwise_combine(rset *set, conjunction_data *data) {
     ref_t rval;
     if (set->length == 0) {
@@ -532,8 +608,13 @@ ref_t rset_conjunct(rset *set) {
 	    reprocess = 0;
 	}
 	rval = sorted_combine(set, &cdata);
-    }
-    else if (reduction_type == PAIRWISE_REDUCTION)
+    } else if (reduction_type == SIMILARITY_REDUCTION) {
+	if (reprocess) {
+	    report(0, "WARNING: Cannot reprocess arguments when using similarity reduction.  Reprocessing disabled");
+	    reprocess = 0;
+	}
+	rval = similarity_combine(set, &cdata);
+    } else if (reduction_type == PAIRWISE_REDUCTION)
 	rval = pairwise_combine(set, &cdata);
     else
 	rval = linear_combine(set, &cdata);
@@ -564,10 +645,43 @@ bool do_cstring(int argc, char *argv[]) {
     return parse_cstring(argv[1]);
 }
 
+bool do_similar(int argc, char *argv[]) {
+    int r, c;
+    /* Check refs */
+    bool ok = true;
+    for (r = 1; r < argc; r++) {
+	ref_t ref = get_ref(argv[r]);
+	if (REF_IS_INVALID(ref)) {
+	    err(false, "Invalid function name: %s", argv[r]);
+	    ok = false;
+	}
+    }
+    if (!ok)
+	return ok;
+    /* Write column headings */
+    for (c = 2; c < argc; c++)
+	report_noreturn(0, "\t%s", argv[c]);
+    report(0, "");
+    for (r = 1; r < argc-1; r++) {
+	report_noreturn(0, argv[r]);
+	for (c = 2; c <= r; c++)
+	    report_noreturn(0, "\t--");
+	ref_t r1 = get_ref(argv[r]);
+	for (; c < argc; c++) {
+	    ref_t r2 = get_ref(argv[c]);
+	    double s = shadow_similar(smgr, r1, r2);
+	    report_noreturn(0, "\t%.3f", s);
+	}
+	report(0, "");
+    }
+    return ok;
+}
+
+
 
 static bool parse_cstring(char *cstring) {
     if (strlen(cstring) != 4) {
-	report(0, "cstring must be of length 4, of form '(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y)'");
+	report(0, "cstring must be of length 4, of form '(L|B|T|P|D|S)(NO|UL|UR|SL|SR)(N|Y)'");
 	return false;
     }
     switch(cstring[0]) {
@@ -585,6 +699,9 @@ static bool parse_cstring(char *cstring) {
 	break;
     case 'P':
 	reduction_type = PAIRWISE_REDUCTION;
+	break;
+    case 'S':
+	reduction_type = SIMILARITY_REDUCTION;
 	break;
     default:
 	report(0, "cstring must be of form '(L|B|T|P|D)(NO|UL|UR|SL|SR)(N|Y)'");
@@ -633,6 +750,8 @@ static bool parse_cstring(char *cstring) {
 	reprocess = 0;
 	if (reduction_type == DYNAMIC_REDUCTION)
 	    report(0, "Cannot do reprocessing with dynamic reduction.  Reprocessing disabled");
+	else if (reduction_type == SIMILARITY_REDUCTION)
+	    report(0, "Cannot do reprocessing with similarity reduction.  Reprocessing disabled");
 	else if (!preprocess)
 	    report(0, "Can only reprocess if first preprocess.  Reprocessing disabled");
 	else
@@ -658,6 +777,9 @@ static void compute_cstring(char *cstring) {
 	break;
     case DYNAMIC_REDUCTION:
 	cstring[0] = 'D';
+	break;
+    case SIMILARITY_REDUCTION:
+	cstring[0] = 'S';
 	break;
     case PAIRWISE_REDUCTION:
 	cstring[0] = 'P';

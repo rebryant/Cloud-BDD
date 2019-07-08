@@ -80,6 +80,9 @@ void shadow_satisfy(shadow_mgr mgr, ref_t r);
 /* Create key-value table mapping set of root nodes to their densities. */
 keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots);
 
+/* Compute similarity metric for support sets of two functions */
+double shadow_similar(shadow_mgr mgr, ref_t r1, ref_t r2);
+
 /*
   Create key-value table mapping set of root nodes to their counts.
   Results are actual counts
