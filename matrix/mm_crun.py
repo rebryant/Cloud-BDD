@@ -20,7 +20,7 @@ def usage(name):
     print "  Client options"
     print "   -H HOST:PORT     Retrieve command file and mode information from server at HOST:PORT"
     print "  Local & server options"
-    print "   -m M1:M2...      Specify reduction mode(s) T, B, L, P, D"
+    print "   -m M1:M2...      Specify reduction mode(s) T, B, L, P, D, S"
     print "   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)(Y|N)"
     print "   -f FILE          Command file"
     print "   -I DIR           Process all .cmd files in DIR"
@@ -52,7 +52,7 @@ quietMode = False
 
 cmdPrefix = "cmd>"
 
-reductionList = ['T', 'B', 'L', 'P', 'D']
+reductionList = ['T', 'B', 'L', 'P', 'D', 'S']
 processingList = ['NON', 'ULN', 'URN', 'SLN', 'SLY', 'SRN', 'SRY']
 
 # Like an iterator, returning pairs from each of two lists
@@ -106,7 +106,7 @@ def compatibleModes(reduction, processing):
         return False
     if processing not in processingList:
         return False
-    if reduction == 'D' and processing[-1] == 'Y':
+    if reduction in ['D', 'S'] and processing[-1] == 'Y':
         return False
     return True;
     
