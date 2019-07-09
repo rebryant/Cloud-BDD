@@ -164,7 +164,7 @@ def process(cmdPath, mode):
     cmd += ['-f', cmdPath]
     cmd += ['-L', lpath]
     if supersetFraction is not None:
-        cmd += ['-s', str(superset_fraction)]
+        cmd += ['-s', str(supersetFraction)]
     if verbLevel is not None:
         cmd += ['-v', str(verbLevel)]
     cmdLine = " ".join(cmd)
