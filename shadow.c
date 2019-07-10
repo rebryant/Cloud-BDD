@@ -51,6 +51,8 @@ bool do_ref(shadow_mgr mgr) {
 
 /* When using only CUDD, ref is copy of DdNode for BDD, DdNode +2 for ZDD, +3 for ADD */
 static ref_t dd2ref(DdNode *n, dd_type_t dtype) {
+    if (n == NULL)
+	return REF_INVALID;
     ref_t r = (ref_t) n;
     if (dtype == IS_ZDD)
 	r += 2;
@@ -604,7 +606,7 @@ ref_t shadow_absval(shadow_mgr mgr, ref_t r) {
     }
 }
 
-ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
+ref_t shadow_and_limit(shadow_mgr mgr, ref_t aref, ref_t bref, size_t limit) {
     ref_t r = REF_ZERO;
     dd_type_t dtype = IS_BDD;
     bool za = is_zdd(mgr, aref);
@@ -618,10 +620,10 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 	DdNode *bn = get_ddnode(mgr, bref);
 	DdNode *rn;
 	if (za || zb) {
+	    dtype = IS_ZDD;
 	    if (aa || ab) {
 		err(false, "Can't mix ADDs and ZDDs");
 	    }
-	    dtype = IS_ZDD;
 	    /* Make sure they're both ZDDs */
 	    if (!za) {
 		an = zconvert(mgr, an);
@@ -639,7 +641,7 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		unreference_dd(mgr, bn, IS_ZDD);
 	}
     }
-    if (mgr->do_cudd) {
+    if (dtype == IS_BDD && mgr->do_cudd) {
 	/* Check whether arguments are ADDs */
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);
@@ -663,7 +665,16 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		unreference_dd(mgr, bn, IS_ADD);
 	}
     }
-    if (dtype == IS_BDD)
+    if (dtype == IS_BDD && mgr->do_cudd) {
+	DdNode *an = get_ddnode(mgr, aref);
+	DdNode *bn = get_ddnode(mgr, bref);
+	DdNode *rn = limit == 0 ? Cudd_bddAnd(mgr->bdd_manager, an, bn) : Cudd_bddAndLimit(mgr->bdd_manager, an, bn, (unsigned) limit);
+	r = dd2ref(rn, IS_BDD);
+	if (!REF_IS_INVALID(r)) {
+	    reference_dd(mgr, rn);
+	    add_ref(mgr, r, rn);
+	}
+    } else
 	r = shadow_ite(mgr, aref, bref, shadow_zero(mgr));
 
 #if RPT >= 4
@@ -675,6 +686,11 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 #endif
     return r;
 }
+
+ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
+    return shadow_and_limit(mgr, aref, bref, 0);
+}
+	
 
 ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
     ref_t r = REF_ONE;
@@ -711,7 +727,7 @@ ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		unreference_dd(mgr, bn, IS_ZDD);
 	}
     }
-    if (mgr->do_cudd) {
+    if (dtype == IS_BDD && mgr->do_cudd) {
 	/* Check whether arguments are ADDs */
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);
@@ -783,7 +799,7 @@ ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref) {
 		unreference_dd(mgr, bn, IS_ZDD);
 	}
     }
-    if (mgr->do_cudd) {
+    if (dtype == IS_BDD && mgr->do_cudd) {
 	/* Check whether arguments are ADDs */
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);

@@ -60,9 +60,12 @@ int reprocess = 0;
 /* Should preprocessing be done right-to-left */
 int right_to_left = 0;
 
+/* Maximum number of pairs to try when doing conjunction with aborts */
+int abort_limit = 3;
+/* Maximum expansion factor for conjunction (scaled 100x) */
+int expansion_factor_scaled = 200;
+
 /* Representation of set of terms to be conjuncted */
-
-
 /* Linked list elements */
 typedef struct RELE {
     ref_t fun;
@@ -98,6 +101,8 @@ void init_conjunct(char *cstring) {
     add_cmd("similar", do_similar,
 	    "f1 f2 ...       | Compute pairwise support similarity for functions");
     add_param("check", &check_results, "Check results of conjunctoperations", NULL);
+    add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
+    add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100)", NULL);
     add_param("reduction", &reduction_type, "Reduction degree (2+: tree, 1:dynamic, 0:linear, -1:similarity, -2:pairwise)", NULL);
     add_param("preprocess", &preprocess, "Preprocess conjunction arguments with Coudert/Madre restrict", NULL);
     add_param("presort", &presort, "Sort by descending SAT count before preprocessing", NULL);
@@ -271,6 +276,17 @@ static void rset_sort(rset *set, bool by_size, bool ascending) {
     report(2, "");
 }
 
+/* Find largest element in set */
+static size_t rset_max_size(rset *set) {
+    size_t size = 0;
+    rset_ele *ptr;
+    for (ptr = set->head; ptr; ptr = ptr->next) {
+	size_t esize = get_size(ptr);
+	if (esize > size)
+	    size = esize;
+    }
+    return size;
+}
 
 /* Compute AND of terms without decrementing reference counts */
 static ref_t and_check(rset *set) {
@@ -453,44 +469,115 @@ static ref_t sorted_combine(rset *set, conjunction_data *data) {
     return rval;
 }
 
+/* Manage candidate argument pairs */
+typedef struct {
+    rset_ele *ptr1;
+    rset_ele *ptr2;
+    double sim;
+} pair;
+
+/* Manage set of candidates */
+static void clear_candidates(pair *candidates) {
+    int i;
+    for (i = 0; i < abort_limit; i++) {
+	candidates[i].ptr1 = NULL;
+	candidates[i].ptr2 = NULL;
+	candidates[i].sim = -1.0;
+    }
+}
+
+/* Ordered insertion into candidates.  Element 0 has highest sim */
+static void insert_candidate(pair *candidates, rset_ele *ptr1, rset_ele *ptr2, double sim)  {
+    int idx;
+    for (idx = 0; idx < abort_limit; idx++) {
+	if (sim > candidates[idx].sim) {
+	    /* Replace with new values and shift old values down */
+	    rset_ele *nptr1 = candidates[idx].ptr1;
+	    rset_ele *nptr2 = candidates[idx].ptr2;
+	    double nsim = candidates[idx].sim;
+	    candidates[idx].ptr1 = ptr1;
+	    candidates[idx].ptr2 = ptr2;
+	    candidates[idx].sim = sim;
+	    ptr1 = nptr1;
+	    ptr2 = nptr2;
+	    sim = nsim;
+	}
+    }
+}
+
+
 static ref_t similarity_combine(rset *set, conjunction_data *data) {
-    ref_t rval;
+    double superset_factor = (double) superset_percent / 100.0;
+    double expansion_factor = (double) expansion_factor_scaled / 100.0;
+    pair candidates[abort_limit];
     if (set->length == 0) {
-	rval = shadow_one(smgr);
+	ref_t rval = shadow_one(smgr);
 	root_addref(rval, false);
 	return rval;
     }
     while (set->length > 1) {
-	double best_sim = -1.0;
-	rset_ele *best1 = NULL;
-	rset_ele *best2 = NULL;
-	rset_ele *ptr1, *ptr2;
-	double superset_factor = (double) superset_percent / 100.0;
+	clear_candidates(candidates);
+	rset_ele *ptr1 = NULL;
+	rset_ele *ptr2 = NULL;
+	size_t size_limit = (size_t) (rset_max_size(set) * expansion_factor);
+	report(4, "Setting size limit to %zd", size_limit);
+	int ccount = 0;
 	for (ptr1 = set->head; ptr1; ptr1 = ptr1->next) {
-	    ref_t r1 = ptr1->fun;
 	    for (ptr2 = ptr1->next; ptr2; ptr2 = ptr2->next) {
-		ref_t r2 = ptr2->fun;
-		double sim = shadow_similarity(smgr, r1, r2, superset_factor);
-		if (sim > best_sim) {
-		    best_sim = sim;
-		    best1 = ptr1;
-		    best2 = ptr2;
-		}
+		double sim = shadow_similarity(smgr, ptr1->fun, ptr2->fun, superset_factor);
+		insert_candidate(candidates, ptr1, ptr2, sim);
+		if (ccount < abort_limit)
+		    ccount++;
 	    }
 	}
-	ref_t arg1 = best1->fun;
-	ref_t arg2 = best2->fun;
-	if (!rset_remove_element(set, best1) || !rset_remove_element(set, best2)) {
-	    err(true, "Internal error.  Could not remove elements from rset");
+	int try = 0;
+	/* Loop around all cases.  If don't succeed with bounded AND on first pass
+	   then do one more try with unbounded */
+	ref_t arg1 = REF_INVALID;
+	ref_t arg2 = REF_INVALID;
+	ref_t nval = REF_INVALID;
+	double sim = -1.0;
+	for (try = 0; try <= ccount; try++) {
+	    bool retry = try == ccount;
+	    int tidx = retry ? 0 : try;
+	    ptr1 = candidates[tidx].ptr1;
+	    ptr2 = candidates[tidx].ptr2;
+	    sim = candidates[tidx].sim;
+	    arg1 = ptr1->fun;
+	    arg2 = ptr2->fun;
+	    nval = retry ? shadow_and(smgr, arg1, arg2) : shadow_and_limit(smgr, arg1, arg2, size_limit);
+	    if (!REF_IS_INVALID(nval))
+		break;
+	    if (verblevel >= 4) {
+		char arg1_buf[24], arg2_buf[24];
+		shadow_show(smgr, arg1, arg1_buf);
+		shadow_show(smgr, arg2, arg2_buf);
+		report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd nodes", arg1_buf, arg2_buf, sim, try+1, size_limit);
+	    }
 	}
-	ref_t nval = shadow_and(smgr, arg1, arg2);
+	if (REF_IS_INVALID(nval))
+	    err(true, "Couldn't compute conjunction");
+	if (!rset_remove_element(set, ptr1)) {
+	    if (!ptr1)
+		err(true, "Internal error.  rset ptr1 = NULL");
+	    char arg_buf[24];
+	    shadow_show(smgr, ptr1->fun, arg_buf);
+	    err(true, "Internal error.  Could not remove element containing reference %s from rset", arg_buf);
+	}
+	if (!rset_remove_element(set, ptr2)) {
+	    if (!ptr2)
+		err(true, "Internal error.  rset ptr2 = NULL");
+	    char arg_buf[24];
+	    shadow_show(smgr, ptr2->fun, arg_buf);
+	    err(true, "Internal error.  Could not remove element containing reference %s from rset", arg_buf);
+	}
 	root_addref(nval, true);
 	if (verblevel >= 3) {
 	    char arg1_buf[24], arg2_buf[24], nval_buf[24];
 	    shadow_show(smgr, arg1, arg1_buf);
 	    shadow_show(smgr, arg2, arg2_buf);
 	    shadow_show(smgr, nval, nval_buf);
-	    report(3, "%s & %s (sim = %.3f) --> %s", arg1_buf, arg2_buf, best_sim, nval_buf);
+	    report(3, "%s & %s (sim = %.3f, try #%d) --> %s", arg1_buf, arg2_buf, sim, try+1, nval_buf);
 	}
 	root_deref(arg1);
 	root_deref(arg2);
@@ -498,8 +585,7 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 	rset_add_term_first(set, nval);
 	root_deref(nval);
     }
-    rval = rset_remove_first(set);
-    return rval;
+    return rset_remove_first(set);
 }
 
 
