@@ -177,6 +177,9 @@ def process(cmdPath, mode):
         for line in lines:
             if "Conjunction" in line:
                 print line
+        lines = stderr.split("\n")
+        for line in lines:
+            print "stderr: " + line
     else:
         p = subprocess.Popen(cmd)
         p.wait()
