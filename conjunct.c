@@ -61,9 +61,11 @@ int reprocess = 0;
 int right_to_left = 0;
 
 /* Maximum number of pairs to try when doing conjunction with aborts */
-int abort_limit = 3;
+int abort_limit = 7;
 /* Maximum expansion factor for conjunction (scaled 100x) */
-int expansion_factor_scaled = 200;
+int expansion_factor_scaled = 142;
+/* Number of passes of conjunction before giving up */
+int pass_limit = 3;
 
 /* Representation of set of terms to be conjuncted */
 /* Linked list elements */
@@ -102,7 +104,8 @@ void init_conjunct(char *cstring) {
 	    "f1 f2 ...       | Compute pairwise support similarity for functions");
     add_param("check", &check_results, "Check results of conjunctoperations", NULL);
     add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
-    add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100)", NULL);
+    add_param("pass", &pass_limit, "Maximum number of passes during single conjunction", NULL);
+    add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
     add_param("reduction", &reduction_type, "Reduction degree (2+: tree, 1:dynamic, 0:linear, -1:similarity, -2:pairwise)", NULL);
     add_param("preprocess", &preprocess, "Preprocess conjunction arguments with Coudert/Madre restrict", NULL);
     add_param("presort", &presort, "Sort by descending SAT count before preprocessing", NULL);
@@ -519,8 +522,6 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 	clear_candidates(candidates);
 	rset_ele *ptr1 = NULL;
 	rset_ele *ptr2 = NULL;
-	size_t size_limit = (size_t) (rset_max_size(set) * expansion_factor);
-	report(4, "Setting size limit to %zd", size_limit);
 	int ccount = 0;
 	for (ptr1 = set->head; ptr1; ptr1 = ptr1->next) {
 	    for (ptr2 = ptr1->next; ptr2; ptr2 = ptr2->next) {
@@ -530,22 +531,31 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 		    ccount++;
 	    }
 	}
-	int try = 0;
+	int try;
 	/* Loop around all cases.  If don't succeed with bounded AND on first pass
 	   then do one more try with unbounded */
 	ref_t arg1 = REF_INVALID;
 	ref_t arg2 = REF_INVALID;
 	ref_t nval = REF_INVALID;
 	double sim = -1.0;
-	for (try = 0; try <= ccount; try++) {
-	    bool retry = try == ccount;
-	    int tidx = retry ? 0 : try;
+	/* Each pass allows a larger limit.  Final pass removes size bound */
+	size_t size_limit = rset_max_size(set);
+	int try_limit = ccount * pass_limit + 1;
+	for (try = 0; try <= try_limit; try++) {
+	    /* Increase size limit for this pass */
+	    bool final_try = try == try_limit;
+	    int tidx = try % ccount;
+	    if (tidx == 0) {
+		/* Start of a new pass */
+		size_limit = (size_t) (size_limit * expansion_factor);
+		report(5, "Setting size limit to %zd", size_limit);
+	    }
 	    ptr1 = candidates[tidx].ptr1;
 	    ptr2 = candidates[tidx].ptr2;
 	    sim = candidates[tidx].sim;
 	    arg1 = ptr1->fun;
 	    arg2 = ptr2->fun;
-	    nval = retry ? shadow_and(smgr, arg1, arg2) : shadow_and_limit(smgr, arg1, arg2, size_limit);
+	    nval = final_try ? shadow_and(smgr, arg1, arg2) : shadow_and_limit(smgr, arg1, arg2, size_limit);
 	    if (!REF_IS_INVALID(nval))
 		break;
 	    if (verblevel >= 4) {
@@ -554,6 +564,7 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 		shadow_show(smgr, arg2, arg2_buf);
 		report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd nodes", arg1_buf, arg2_buf, sim, try+1, size_limit);
 	    }
+
 	}
 	if (REF_IS_INVALID(nval))
 	    err(true, "Couldn't compute conjunction");

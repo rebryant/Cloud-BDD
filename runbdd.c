@@ -171,7 +171,7 @@ static bool bdd_quit(int argc, char *argv[]) {
     while (keyvalue_removenext(nametable, &wk, &wv)) {
 	char *s = (char *) wk;
 	ref_t rold = (ref_t) wv;
-	report(2, "Removing function %s from name table", s);
+	report(5, "Removing function %s from name table", s);
 	root_deref(rold);
 #if RPT >= 5
 	report(5, "Freeing string '%s' from name table", s);
