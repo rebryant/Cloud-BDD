@@ -531,7 +531,6 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 		    ccount++;
 	    }
 	}
-	int try;
 	/* Loop around all cases.  If don't succeed with bounded AND on first pass
 	   then do one more try with unbounded */
 	ref_t arg1 = REF_INVALID;
@@ -541,12 +540,13 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 	/* Each pass allows a larger limit.  Final pass removes size bound */
 	size_t size_limit = rset_max_size(set);
 	int try_limit = ccount * pass_limit + 1;
+	int try;
 	for (try = 0; try <= try_limit; try++) {
-	    /* Increase size limit for this pass */
 	    bool final_try = try == try_limit;
 	    int tidx = try % ccount;
 	    if (tidx == 0) {
 		/* Start of a new pass */
+		/* Increase size limit for this pass */
 		size_limit = (size_t) (size_limit * expansion_factor);
 		report(5, "Setting size limit to %zd", size_limit);
 	    }
@@ -556,6 +556,13 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 	    arg1 = ptr1->fun;
 	    arg2 = ptr2->fun;
 	    nval = final_try ? shadow_and(smgr, arg1, arg2) : shadow_and_limit(smgr, arg1, arg2, size_limit);
+#if 0
+	    if (smgr->do_cudd) {
+		int collected = cudd_collect(smgr);
+		report(4, "Garbage collected %d nodes", collected);
+	    }
+#endif
+
 	    if (!REF_IS_INVALID(nval))
 		break;
 	    if (verblevel >= 4) {
