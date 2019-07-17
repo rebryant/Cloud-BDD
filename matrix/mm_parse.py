@@ -64,14 +64,19 @@ def loadDatabase(databaseDict, databasePathFields):
         print "Couldn't open database file '%s' (%s)" % (dbname, str(ex))
         return
     first = True
+    lineNumber = 0
     for line in dbfile:
+        lineNumber += 1
         if first:
             first = False
             continue
         line = brent.trim(line)
+        if len(line) == 0:
+            continue
         fields = line.split('\t')
         if len(fields) != len(databaseConverters):
             print "Bad database format.  Expected %d fields, but found %d" % (len(databaseConverters), len(fields))
+            print "Line #%d '%s'" % (lineNumber, line)
             break
         try:
             entry = [convert(field) for convert, field in zip(databaseConverters, fields)]
@@ -252,7 +257,7 @@ def generateSolutions(iname, fileScheme):
                     if not quietMode:
                         print "Completely new Solution"
                     sourceSignature = fileScheme.sign()
-                    recordSolution(sc, metadata = ["Derived from scheme with signature %s" % sourceSignature]))
+                    recordSolution(sc, metadata = ["Derived from scheme with signature %s" % sourceSignature])
         index += 1
         if not quietMode:
             ss.printPolynomial()
