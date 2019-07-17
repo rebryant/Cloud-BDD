@@ -188,7 +188,7 @@ def generateSignature(scheme):
     signature = "\n".join(sigList)
     return signature
     
-def recordSolution(scheme):
+def recordSolution(scheme, metadata = []):
     fname = scheme.sign() + '.exp'
     pathFields = generatedPathFields + [fname]
     path = "/".join(pathFields)
@@ -198,7 +198,7 @@ def recordSolution(scheme):
     except Exception as ex:
         print "Can't open output file '%s' (%s)" % (fpath, str(ex))
         return
-    scheme.printPolynomial(outf)
+    scheme.printPolynomial(outf, metadata = metadata)
     outf.close()
     dbEntryFields = [scheme.sign(), str(scheme.addCount()), scheme.kernelTerms.sign(), path]
     dbpath = "/".join(homePathFields + generatedDatabasePathFields)
@@ -251,7 +251,8 @@ def generateSolutions(iname, fileScheme):
                     freshCount += 1
                     if not quietMode:
                         print "Completely new Solution"
-                    recordSolution(sc)
+                    sourceSignature = fileScheme.sign()
+                    recordSolution(sc, metadata = ["Derived from scheme with signature %s" % sourceSignature]))
         index += 1
         if not quietMode:
             ss.printPolynomial()

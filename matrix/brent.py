@@ -875,10 +875,13 @@ class MScheme(MProblem):
         return lines
         
 
-    def printPolynomial(self, outfile = sys.stdout):
+    def printPolynomial(self, outfile = sys.stdout, metadata = []):
         outfile.write("# Compute A (%d x %d) X B (%d x %d) = C (%d x %d)\n" % self.fullRanges())
         outfile.write("# Requires %d multiplications and %d additions\n" % (self.auxCount, self.addCount()))
         outfile.write("# Kernel signature %s\n" % self.kernelTerms.sign())
+        outfile.write("# Own signature %s\n" % self.sign())
+        for line in metadata:
+            outfile.write("# %s\n" % line)
         if self.isCanonical:
             outfile.write("# This representation has been put into canonical form\n")
 
