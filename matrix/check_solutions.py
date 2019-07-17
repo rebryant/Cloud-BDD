@@ -14,7 +14,7 @@ import circuit
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-c] [-d DIR]"
+    print("Usage %s [-h] [-c] [-d DIR]")
     sys.exit(0)
 
 # validCount
@@ -40,10 +40,10 @@ def checkSolution(directory, fname):
     try:
         s = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
     except Exception as ex:
-        print "ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex))
+        print("ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex)))
         return
     if not s.obeysBrent():
-        print "ERROR: Solution in file '%s' is not valid" % path
+        print("ERROR: Solution in file '%s' is not valid" % path)
         return
     omit = False
     counts[0] += 1
@@ -72,12 +72,12 @@ def clearHistory():
         try:
             os.remove(reportPath)
         except:
-            print "Couldn't remove '%s'" % reportPath
+            print("Couldn't remove '%s'" % reportPath)
     if os.path.exists(archivePath):
         try:
             os.remove(archivePath)
         except:
-            print "Couldn't remove '%s'" % archivePath
+            print("Couldn't remove '%s'" % archivePath)
 
 
 def reset(total = False):
@@ -103,7 +103,7 @@ def load():
             fresh = True
             rfile = open(reportPath, 'r')
         except Exception as ex:
-            print "Couldn't open or create file '%s' (%s)" % (reportPath, str(ex))
+            print("Couldn't open or create file '%s' (%s)" % (reportPath, str(ex)))
             return
     reset(True)
     first = True
@@ -126,7 +126,7 @@ def load():
 def show(list, archive = True):
     slist = [str(x) for x in list]
     s = "\t".join(slist)
-    print s
+    print(s)
     if archive:
         try:
             rfile = open(reportPath, 'a')
@@ -181,7 +181,7 @@ def run(name, args):
         elif opt == '-d':
             dir = val
         else:
-            print "Unknown option '%s'" % opt
+            print("Unknown option '%s'" % opt)
             usage(name)
     reportPath = dir + "/report.txt"
     archivePath = dir + "/candidates.txt"

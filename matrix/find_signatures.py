@@ -46,19 +46,19 @@ def checkSolution(subPath):
     try:
         s = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
     except Exception as ex:
-        print "ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex))
+        print("ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex)))
         return
     solutionCount += 1
     sc = s.canonize()
     sig = sc.kernelTerms.signature()
     list = signatureDict[sig] if sig in signatureDict else []
     if len(list) == 0:
-        print "File %s has new signature '%s'" % (subPath, sig)
+        print("File %s has new signature '%s'" % (subPath, sig))
         signatureCount += 1
         hashDict[sig] = sc.kernelTerms.sign()
         schemeDict[sig] = sc
     else:
-        print "File %s has same signature as %d other downloaded files" % (subPath, len(list))        
+        print("File %s has same signature as %d other downloaded files" % (subPath, len(list)))        
     list.append(path)
     signatureDict[sig] = list
 
@@ -70,7 +70,7 @@ def checkGeneratedSolution(subPath):
     try:
         s = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
     except Exception as ex:
-        print "ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex))
+        print("ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex)))
         return
     generatedSolutionCount += 1
     sc = s.canonize()
@@ -79,15 +79,15 @@ def checkGeneratedSolution(subPath):
     if len(list) == 0:
         generatedSignatureCount += 1
         if sig in signatureDict:
-            print "File %s has new signature among generated solutions '%s'" % (subPath, sig)
+            print("File %s has new signature among generated solutions '%s'" % (subPath, sig))
         else:
-            print "File %s has new signature '%s'" % (subPath, sig)
+            print("File %s has new signature '%s'" % (subPath, sig))
             signatureCount += 1
             hashDict[sig] = sc.kernelTerms.sign()
             signatureDict[sig] = [path]
             schemeDict[sig] = sc
     else:
-        print "File %s has same signature as %d other generated files" % (subPath, len(list))        
+        print("File %s has same signature as %d other generated files" % (subPath, len(list)))        
     list.append(path)
     generatedSignatureDict[sig] = list
 
@@ -96,7 +96,7 @@ def processHeule():
     try:
         cfile = open(candidatePath, 'r')
     except:
-        print "Cannot open file '%s'" % candidatePath
+        print("Cannot open file '%s'" % candidatePath)
         return
 
     for line in cfile:
@@ -118,7 +118,7 @@ def saveScheme(id, scheme):
     try:
         sfile = open(sname, 'w')
     except:
-        print "Couldn't open file '%s'" % sname
+        print("Couldn't open file '%s'" % sname)
         return
     scheme.printPolynomial(sfile)
     sfile.close()
@@ -135,12 +135,12 @@ def process():
     try:
         ofile = open(reportPath, 'w')
     except:
-        print "Cannot open file '%s'" % reportPath
+        print("Cannot open file '%s'" % reportPath)
         return
 
     
     totalCount = solutionCount + generatedSolutionCount
-    print "%d solutions (%d downloaded, %d generated), %d unique signatures" % (totalCount, solutionCount, generatedSolutionCount, signatureCount)
+    print("%d solutions (%d downloaded, %d generated), %d unique signatures" % (totalCount, solutionCount, generatedSolutionCount, signatureCount))
 
 
     fields = ["Sig #", "Hash", "Downloaded", "Generated", "Signature"]
@@ -158,7 +158,7 @@ def process():
         try:
             sfile = open(sname, 'w')
         except:
-            print "Couldn't open file '%s'" % sname
+            print("Couldn't open file '%s'" % sname)
             continue
         plist = sorted(signatureDict[k])
         for p in plist:

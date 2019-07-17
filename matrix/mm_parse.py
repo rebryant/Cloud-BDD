@@ -14,16 +14,16 @@ import glob
 
 
 def usage(name):
-    print "Usage: %s [-h] [-u] [-b] [-q] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
-    print " -h               Print this message"
-    print " -u               Print number of nodes at each level, rather than solutions"
-    print " -q               Quiet mode.  Only summarize results"
-    print " -b               Commands generated via breadth-first traversal"
-    print " -I IDIR          Run for all files with extension '.log' in directory IDIR"
-    print " -i IFILE         Specify input file"
-    print " -s PFILE         Read hard-coded values from polynomial in PFILE"
-    print " -p AUX           Number of auxiliary variables"
-    print " -n N or N1:N2:N3 Matrix dimension(s)"
+    print("Usage: %s [-h] [-u] [-b] [-q] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name)
+    print(" -h               Print this message")
+    print(" -u               Print number of nodes at each level, rather than solutions")
+    print(" -q               Quiet mode.  Only summarize results")
+    print(" -b               Commands generated via breadth-first traversal")
+    print(" -I IDIR          Run for all files with extension '.log' in directory IDIR")
+    print(" -i IFILE         Specify input file")
+    print(" -s PFILE         Read hard-coded values from polynomial in PFILE")
+    print(" -p AUX           Number of auxiliary variables")
+    print(" -n N or N1:N2:N3 Matrix dimension(s)")
 
 # Quiet mode
 quietMode = False
@@ -61,7 +61,7 @@ def loadDatabase(databaseDict, databasePathFields):
     try:
         dbfile = open(dbname, 'r')
     except Exception as ex:
-        print "Couldn't open database file '%s' (%s)" % (dbname, str(ex))
+        print("Couldn't open database file '%s' (%s)" % (dbname, str(ex)))
         return
     first = True
     lineNumber = 0
@@ -75,18 +75,18 @@ def loadDatabase(databaseDict, databasePathFields):
             continue
         fields = line.split('\t')
         if len(fields) != len(databaseConverters):
-            print "Bad database format.  Expected %d fields, but found %d" % (len(databaseConverters), len(fields))
-            print "Line #%d '%s'" % (lineNumber, line)
+            print("Bad database format.  Expected %d fields, but found %d" % (len(databaseConverters), len(fields)))
+            print("Line #%d '%s'" % (lineNumber, line))
             break
         try:
             entry = [convert(field) for convert, field in zip(databaseConverters, fields)]
         except Exception as ex:
-            print "Bad database format.  Couldn't convert entry (%s)" % str(ex)
+            print("Bad database format.  Couldn't convert entry (%s)" % str(ex))
             break
         databaseDict[entry[0]] = entry
     dbfile.close()
     if not quietMode:
-        print "Database %s contains %d entries" % (databasePathFields[-1], len(databaseDict))
+        print("Database %s contains %d entries" % (databasePathFields[-1], len(databaseDict)))
         
 
 # Extract the support information from file:
@@ -95,7 +95,7 @@ def getSupport(fname):
     try:
         inf = open(fname, 'r')
     except:
-        print "Couldn't open input file '%s'" % fname
+        print("Couldn't open input file '%s'" % fname)
         return []
     rline = "%sinfo %s" % (cmdPrefix, str(brent.BrentTerm()))
     ready = False
@@ -116,7 +116,7 @@ def getPeakNodes(fname):
     try:
         inf = open(fname, 'r')
     except:
-        print "Couldn't open input file '%s'" % fname
+        print("Couldn't open input file '%s'" % fname)
         return []
     value = None
     for line in inf:
@@ -127,7 +127,7 @@ def getPeakNodes(fname):
                 snum = sm.group(1)
                 value = int(snum)
             except:
-                print "Couldn't extract peak nodes from line '%s' % line"
+                print("Couldn't extract peak nodes from line '%s' % line")
                 continue
     inf.close()
     return value
@@ -140,7 +140,7 @@ def getSolutions(fname):
     try:
         inf = open(fname, 'r')
     except:
-        print "Couldn't open input file '%s'" % fname
+        print("Couldn't open input file '%s'" % fname)
         return slist
     for line in inf:
         m = matcher.match(line)
@@ -160,7 +160,7 @@ def getSizes(fname):
     try:
         inf = open(fname, 'r')
     except:
-        print "Couldn't open input file '%s'" % fname
+        print("Couldn't open input file '%s'" % fname)
         return []
     ready = False
     gotFinal = False
@@ -183,7 +183,7 @@ def getSizes(fname):
                 size = int(snum)
                 slist.append(size)
             except:
-                print "Couldn't extract size from line '%s' % line"
+                print("Couldn't extract size from line '%s' % line")
                 continue
     inf.close()
     return slist
@@ -201,7 +201,7 @@ def recordSolution(scheme, metadata = []):
     try:
         outf = open(fpath, 'w')
     except Exception as ex:
-        print "Can't open output file '%s' (%s)" % (fpath, str(ex))
+        print("Can't open output file '%s' (%s)" % (fpath, str(ex)))
         return
     scheme.printPolynomial(outf, metadata = metadata)
     outf.close()
@@ -210,7 +210,7 @@ def recordSolution(scheme, metadata = []):
     try:
         dbfile = open(dbpath, 'a')
     except Exception as ex:
-        print "Can't open database file '%s' (%s)" % (dbpath, str(ex))
+        print("Can't open database file '%s' (%s)" % (dbpath, str(ex)))
         return
     dbfile.write("\t".join(dbEntryFields) + '\n')
     dbfile.close()
@@ -227,7 +227,7 @@ def generateSolutions(iname, fileScheme):
         try:
             ss = fileScheme.duplicate().parseFromSolver(supportNames, s)
         except Exception as ex:
-            print "Couldn't process solution: %s" % str(ex)
+            print("Couldn't process solution: %s" % str(ex))
             continue
         sname = "%s #%d" % (iname, index)
         sc = ss.canonize()
@@ -236,26 +236,26 @@ def generateSolutions(iname, fileScheme):
         if found:
             osname = solutionDict[signature]
             if not quietMode:
-                print "Solution %s.  %d additions.  Isomorphic to solution %s" % (sname, ss.addCount(), osname)
+                print("Solution %s.  %d additions.  Isomorphic to solution %s" % (sname, ss.addCount(), osname))
         else:
             newCount += 1
             if not quietMode:
-                print "Solution %s.  %d additions" % (sname, ss.addCount())
+                print("Solution %s.  %d additions" % (sname, ss.addCount()))
             solutionDict[signature] = sname
         if not found:
             hash = sc.sign()
             if hash in heuleDatabaseDict:
                 if not quietMode:
-                    print "Probably isomorphic to solution in '%s'" % heuleDatabaseDict[hash][fieldIndex['path']]
+                    print("Probably isomorphic to solution in '%s'" % heuleDatabaseDict[hash][fieldIndex['path']])
             else:
                 nonHeuleCount += 1
                 if hash in generatedDatabaseDict:
                     if not quietMode:
-                        print "Probably isomorphic to solution in '%s'" % generatedDatabaseDict[hash][fieldIndex['path']]
+                        print("Probably isomorphic to solution in '%s'" % generatedDatabaseDict[hash][fieldIndex['path']])
                 else:
                     freshCount += 1
                     if not quietMode:
-                        print "Completely new Solution"
+                        print("Completely new Solution")
                     sourceSignature = fileScheme.sign()
                     recordSolution(sc, metadata = ["Derived from scheme with signature %s" % sourceSignature])
         index += 1
@@ -263,7 +263,7 @@ def generateSolutions(iname, fileScheme):
             ss.printPolynomial()
     if quietMode:
         fields = [iname, str(len(slist)), str(newCount), str(nonHeuleCount), str(freshCount)]
-        print "\t".join(fields)
+        print("\t".join(fields))
         
 
 def run(name, args):
@@ -302,21 +302,21 @@ def run(name, args):
             elif len(fields) == 3:
                 n1, n2, n3 = int(fields[0]), int(fields[1]), int(fields[2])
             else:
-                print "Invalid matrix dimension '%s'" % val
+                print("Invalid matrix dimension '%s'" % val)
                 usage(name)
                 return
         elif opt == '-o':
             try:
                 outf = open(val, 'w')
             except:
-                print "Couldn't open output file '%s'" % val
+                print("Couldn't open output file '%s'" % val)
                 return
         else:
-            print "Unknown option '%s'" % opt
+            print("Unknown option '%s'" % opt)
             usage(name)
             return
     if len(inameList) == 0:
-        print "Error. Require input file name"
+        print("Error. Require input file name")
         return
     if not solve:
         fields = ['File', 'Peak', 'Brent']
@@ -324,7 +324,7 @@ def run(name, args):
             fields += ["Level %d" % l for l in brent.unitRange(6)]
         else:
             fields += ["Level 6"]
-        print "\t".join(fields)
+        print("\t".join(fields))
 
         for iname in inameList:
             peak = getPeakNodes(iname)
@@ -333,21 +333,21 @@ def run(name, args):
             szlist = getSizes(iname)
             if len(szlist) > 0:
                 fields += [str(n) for n in szlist]
-                print "\t".join(fields)
+                print("\t".join(fields))
         return
     if pname is None:
-        print "Error. Require solution file name"
+        print("Error. Require solution file name")
 
     if quietMode:
         fields = ['File', 'Solutions', 'Local New', 'Non Heule', 'DB New']
-        print "\t".join(fields)
+        print("\t".join(fields))
 
     ckt = circuit.Circuit()
     fileScheme = brent.MScheme((n1, n2, n3), auxCount, ckt)
     try:
         fileScheme.parseFromFile(pname)
     except brent.MatrixException as ex:
-        print "Parse of file '%s' failed: %s" % (pname, str(ex))
+        print("Parse of file '%s' failed: %s" % (pname, str(ex)))
         return
     loadDatabase(heuleDatabaseDict, heuleDatabasePathFields)
     loadDatabase(generatedDatabaseDict, generatedDatabasePathFields)

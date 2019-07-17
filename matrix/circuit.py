@@ -6,7 +6,7 @@ import sys
 
 # Class to define use of ZDDs
 class Z:
-    none, vars, convert, avars = range(4)
+    none, vars, convert, avars = list(range(4))
     names = ["none", "vars", "convert", "avars"]
     suffixes = ["b", "v", "z", "a"]
 
@@ -124,7 +124,7 @@ class Vec:
     # Create interleaved vector
     def interleave(self, other):
         if len(self) < len(other):
-            short, long = self.nodes, other.nodes
+            short, long  = self.nodes, other.nodes
             nshort, nlong = len(self), len(other)
         else:
             short, long = other.nodes, self.nodes
@@ -217,7 +217,7 @@ class Circuit:
     # Obj can be single node or vector, or list of nodes/vectors
     def cmdLine(self, cmd, obj):
         if type(obj) in [type([]), type(())]:
-            ls = map(str, obj)
+            ls = list(map(str, obj))
             s = " ".join(ls)
         else:
             s = str(obj)

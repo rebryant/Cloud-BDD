@@ -34,13 +34,13 @@ def checkSolution(subPath):
     try:
         s = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
     except Exception as ex:
-        print "ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex))
+        print("ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex)))
         return
     solutionCount += 1
     count = s.addCount()
     list = addcountDict[count] if count in addcountDict else []
     if len(list) == 0:
-        print "File %s has new addition count '%d'" % (subPath, count)
+        print("File %s has new addition count '%d'" % (subPath, count))
     list.append(subPath)
     addcountDict[count] = list
 
@@ -48,12 +48,12 @@ def process():
     try:
         cfile = open(candidatePath, 'r')
     except:
-        print "Cannot open file '%s'" % candidatePath
+        print("Cannot open file '%s'" % candidatePath)
         return
     try:
         ofile = open(reportPath, 'w')
     except:
-        print "Cannot open file '%s'" % reportPath
+        print("Cannot open file '%s'" % reportPath)
         return
 
     for line in cfile:
@@ -62,7 +62,7 @@ def process():
 
     cfile.close()
 
-    print "%d solutions" % (solutionCount)
+    print("%d solutions" % (solutionCount))
     fields = ["Additions", "Count"]
     ofile.write("\t".join(fields) + '\n')
 
@@ -75,7 +75,7 @@ def process():
     try:
         sfile = open(minimumPath, 'w')
     except:
-        print "Couldn't open file '%s'" % minimumPath
+        print("Couldn't open file '%s'" % minimumPath)
         return
     plist = sorted(addcountDict[keys[0]])
     for p in plist:

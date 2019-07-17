@@ -8,20 +8,20 @@ import getopt
 import subprocess
 
 def usage(name):
-    print "Usage %s [-h] [-k] [-e] [-b] [-z] [-t SECS] [-S SEED] [-l LTHRESH] [-u UTHRESH] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name
-    print " -h               Print this message"
-    print " -k               Use fixed values for Kronecker terms"
-    print " -e               Generate streamline constraints based on singleton exclusion property"
-    print " -b               Combine products in breadth-first order"
-    print " -z               Use a ZDD representation"
-    print " -t SECS          Set runtime limit (in seconds)"
-    print " -S SEED          Set seed"
-    print " -l LTHRESH       Set lower threshold of fix_ab + fix_c (100 = all)"
-    print " -u UTHRESH       Set upper threshold of fix_ab + fix_c (100 = all)"
-    print " -c CMIN          Set lower bound on fix_c (0-100)"
-    print " -s PFILE         Read hard-coded values from polynomial in PFILE"
-    print " -p AUX           Number of auxiliary variables"
-    print " -n N or N1:N2:N3 Matrix dimension(s)"
+    print("Usage %s [-h] [-k] [-e] [-b] [-z] [-t SECS] [-S SEED] [-l LTHRESH] [-u UTHRESH] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name)
+    print(" -h               Print this message")
+    print(" -k               Use fixed values for Kronecker terms")
+    print(" -e               Generate streamline constraints based on singleton exclusion property")
+    print(" -b               Combine products in breadth-first order")
+    print(" -z               Use a ZDD representation")
+    print(" -t SECS          Set runtime limit (in seconds)")
+    print(" -S SEED          Set seed")
+    print(" -l LTHRESH       Set lower threshold of fix_ab + fix_c (100 = all)")
+    print(" -u UTHRESH       Set upper threshold of fix_ab + fix_c (100 = all)")
+    print(" -c CMIN          Set lower bound on fix_c (0-100)")
+    print(" -s PFILE         Read hard-coded values from polynomial in PFILE")
+    print(" -p AUX           Number of auxiliary variables")
+    print(" -n N or N1:N2:N3 Matrix dimension(s)")
     sys.exit(0)
 
 # General parameters
@@ -66,11 +66,11 @@ def generate(seed, abprob, cprob, breadthFirst, useZdd):
     program = "/".join(homePathFields + generatorFields)
     cmd = [program] + argList
     cmdLine = " ".join(cmd)
-    print "Generating %s" % outName
+    print("Generating %s" % outName)
     p = subprocess.Popen(cmd)
     p.wait()
     if p.returncode != 0:
-        print "Something went wrong executing '%s'.  Exit code %d" % (cmdLine, p.returncode)
+        print("Something went wrong executing '%s'.  Exit code %d" % (cmdLine, p.returncode))
         return False
     return True
     
@@ -125,7 +125,7 @@ def run(name, args):
             elif len(fields) == 3:
                 dim = (int(fields[0]), int(fields[1]), int(fields[2]))
             else:
-                print "Invalid matrix dimension '%s'" % val
+                print("Invalid matrix dimension '%s'" % val)
                 usage(name)
                 return
     for limit in range(lowThresh, highThresh+deltaC, deltaC):

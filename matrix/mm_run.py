@@ -11,12 +11,12 @@ import subprocess
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-r] [-R] [-C] [-I]"
-    print " -h               Print this message"
-    print " -r               Redo runs that didn't complete"
-    print " -R               Redo all runs"
-    print " -C               Disable chaining"
-    print " -I IDIR          Directory containing command files"
+    print("Usage %s [-h] [-r] [-R] [-C] [-I]")
+    print(" -h               Print this message")
+    print(" -r               Redo runs that didn't complete")
+    print(" -R               Redo all runs")
+    print(" -C               Disable chaining")
+    print(" -I IDIR          Directory containing command files")
     sys.exit(0)
 
 # Set to home directory for program, split into tokens
@@ -36,7 +36,7 @@ cmdPrefix = "cmd>"
 def shouldRun(cmdPath):
     fields = cmdPath.split('.')
     if fields[-1] != 'cmd':
-        print "Path does not appear to be a command file '%s'" % cmdPath
+        print("Path does not appear to be a command file '%s'" % cmdPath)
         return False
     fields[-1] = 'log'
     logPath = ".".join(fields)
@@ -48,7 +48,7 @@ def shouldRun(cmdPath):
         try:
             lfile = open(logPath, 'r')
         except Exception as ex:
-            print "Could not open log file '%s' (%s)" % (logPath, str(ex))
+            print("Could not open log file '%s' (%s)" % (logPath, str(ex)))
             return logPath
         quitLine = cmdPrefix + "quit"
         for line in lfile:
@@ -65,7 +65,7 @@ def shouldRun(cmdPath):
 def process(cmdPath):
     logPath = shouldRun(cmdPath)
     if logPath is None:
-        print "Skipping %s" % cmdPath
+        print("Skipping %s" % cmdPath)
     else:
         cmd = ["/".join(homePathFields + runbddFields), '-c']
         if not chain:
@@ -73,11 +73,11 @@ def process(cmdPath):
         cmd += ['-f', cmdPath]
         cmd += ['-L', logPath]
         cmdLine = " ".join(cmd)
-        print "Running %s" % cmdPath
+        print("Running %s" % cmdPath)
         p = subprocess.Popen(cmd)
         p.wait()
         if p.returncode != 0:
-            print "Running command '%s' failed.  Return code = %d" % (cmdLine, p.returncode)
+            print("Running command '%s' failed.  Return code = %d" % (cmdLine, p.returncode))
 
 
 def run(name, args):

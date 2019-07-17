@@ -21,7 +21,7 @@ class MatrixException(Exception):
 
 # Sequence of digits starting at one
 def unitRange(n):
-    return range(1, n+1)
+    return list(range(1, n+1))
 
 # Trim string
 def trim(s):
@@ -446,7 +446,7 @@ class KernelSet:
         # Only problem is that the levels should be sorted inversely by length
         # and secondarily by indices of first element
         levelList = self.levelize()
-        levelList.sort(key = lambda(ls) : "%d+%s" % (999-len(ls), ls[0].generateString(False)))
+        levelList.sort(key = lambda ls : "%d+%s" % (999-len(ls), ls[0].generateString(False)))
 
         # Map from old level to new level
         levelPermuter = {}
@@ -465,7 +465,7 @@ class KernelSet:
         if self.dim[0] != self.dim[1] or self.dim[1] != self.dim[2]:
             return self.levelCanonize()
         indexPermuterList = allPermuters(unitRange(self.dim[0]))
-        ijkPermuterList = allPermuters(range(3))
+        ijkPermuterList = allPermuters(list(range(3)))
         bestSet = None
         bestIjkPermuter = None
         bestIndexPermuter = None
@@ -522,7 +522,7 @@ class MProblem:
     # At what level should streamline constraints be introduced?
     streamlineLevel = 2
     # At what levels should we conjunct, rather than and
-    conjunctLevels = range(4,7)
+    conjunctLevels = list(range(4,7))
 
     def __init__(self, dim, auxCount, ckt = None):
         if type(dim) == type(2):
@@ -598,7 +598,7 @@ class MProblem:
             for cat in ['gamma', 'alpha', 'beta']:
                 nrow = self.nrow(cat)
                 ncol = self.ncol(cat)
-                allVars = [BrentVariable(cat, i/ncol+1, (i%ncol)+1, level) for i in range(nrow*ncol)]
+                allVars = [BrentVariable(cat, i//ncol+1, (i%ncol)+1, level) for i in range(nrow*ncol)]
                 vars = [v for v in allVars if v not in fixedList]
                 if len(vars) > 0:
                     if not generatedComment:
@@ -958,7 +958,7 @@ class MScheme(MProblem):
             for cat in ['gamma', 'alpha', 'beta']:
                 nrow = self.nrow(cat)
                 ncol = self.ncol(cat)
-                allVars = [BrentVariable(cat, i/ncol+1, (i%ncol)+1, level) for i in range(nrow*ncol)]
+                allVars = [BrentVariable(cat, i//ncol+1, (i%ncol)+1, level) for i in range(nrow*ncol)]
                 lits = [Literal(v, 1 if v == ktVars[cat] else 0) for v in allVars]
                 lvec = circuit.Vec(lits)
                 self.ckt.andN(tv[cat][j], lvec)
@@ -973,11 +973,11 @@ class MScheme(MProblem):
         vlist = []
         if fixKV:
             vlist = self.kernelTerms.variables()
-            ka = self.assignment.subset(lambda(v): v in vlist)
+            ka = self.assignment.subset(lambda v: v in vlist)
             fixedAssignment.overWrite(ka)
         for cat in categoryProbabilities.keys():
             prob = categoryProbabilities[cat]
-            ca = self.assignment.subset(lambda(v): v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
+            ca = self.assignment.subset(lambda v: v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
             fixedAssignment.overWrite(ca)
         if len(fixedAssignment) > 0:
             self.ckt.comment("Fixed assignments")
@@ -986,7 +986,7 @@ class MScheme(MProblem):
         self.declareVariables(fixedVariables)
 
     def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False, breadthFirst = False, levelList = None, useZdd = False):
-        plist = categoryProbabilities.values()
+        plist = list(categoryProbabilities.values())
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
         if timeLimit is not None:

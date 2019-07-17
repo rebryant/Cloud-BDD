@@ -14,7 +14,7 @@ class Matrix:
         self.k = k
         if elements is not None:
             if len(elements) != k * k:
-                print "Matrix must have %d elements.  Only %d provided" % (k * k, len(elements))
+                print("Matrix must have %d elements.  Only %d provided" % (k * k, len(elements)))
                 return
             self.elements = elements
         else:
@@ -28,7 +28,7 @@ class Matrix:
         return r*self.k + c
 
     def row(self, idx):
-        return idx / self.k
+        return idx // self.k
 
     def col(self, idx):
         return idx % self.k
@@ -97,7 +97,7 @@ def showPair(m1, m2, outf = sys.stdout):
     for r in range(m1.k):
         s1 = m1.rowString(r)
         s2 = m2.rowString(r)
-        sep = " * " if r == m1.k/2 else "   "
+        sep = " * " if r == m1.k//2 else "   "
         outf.write(s1 + sep + s2 + '\n')
 
 def signatureRange(k):

@@ -5,8 +5,8 @@
 # Run command file
 # Parse solution
 
-from SimpleXMLRPCServer import SimpleXMLRPCServer
-import xmlrpclib
+from xmlrpc.server import SimpleXMLRPCServer
+import xmlrpc.client
 import glob
 import os.path
 import sys
@@ -17,20 +17,20 @@ import mm_generate
 import mm_parse
 
 def usage(name):
-    print "Usage %s [-h] [(-P PORT|-H HOST:PORT)] [-r] [-R] [-d DBFILE] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB]"
-    print "   -h               Print this message"
-    print "  Server options"
-    print "   -P PORT          Set up server on specified port"
-    print "  Client options"
-    print "   -H HOST:PORT     Retrieve source file name from server at HOST:PORT"
-    print "  Local & server options"
-    print "   -R               Allow unrestricted solution types"
-    print "   -d DBFILE        Solution database file"
-    print "  Local & client options"
-    print "   -t SECS          Set runtime limit (in seconds)"
-    print "   -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class"
-    print "   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)N"
-    print "   -v VERB          Set verbosity level"
+    print("Usage %s [-h] [(-P PORT|-H HOST:PORT)] [-r] [-R] [-d DBFILE] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB]")
+    print("   -h               Print this message")
+    print("  Server options")
+    print("   -P PORT          Set up server on specified port")
+    print("  Client options")
+    print("   -H HOST:PORT     Retrieve source file name from server at HOST:PORT")
+    print("  Local & server options")
+    print("   -R               Allow unrestricted solution types")
+    print("   -d DBFILE        Solution database file")
+    print("  Local & client options")
+    print("   -t SECS          Set runtime limit (in seconds)")
+    print("   -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class")
+    print("   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)N")
+    print("   -v VERB          Set verbosity level")
     sys.exit(0)
 
 # Set to home directory for program, split into tokens
@@ -92,11 +92,11 @@ class Server:
         host = ''
         self.pairGenerator = generator
         self.server = SimpleXMLRPCServer((host, port))
-        self.server.register_function(self.next, "next")
+        self.server.register_function(self.__next__, "next")
     
-    def next(self):
+    def __next__(self):
         pair = self.pairGenerator.nextOrEmpty()
-        print "Returning %s" % str(pair)
+        print("Returning %s" % str(pair))
         return pair
 
     def run(self):
@@ -127,7 +127,7 @@ def logPath(cmdPath, mode):
 def shouldRun(cmdPath, mode):
     fields = cmdPath.split('.')
     if fields[-1] != 'cmd':
-        print "Path does not appear to be a command file '%s'" % cmdPath
+        print("Path does not appear to be a command file '%s'" % cmdPath)
         return False
     lpath = logPath(cmdPath, mode)
     if hardRedo:
@@ -138,7 +138,7 @@ def shouldRun(cmdPath, mode):
         try:
             lfile = open(lpath, 'r')
         except Exception as ex:
-            print "Could not open log file '%s' (%s)" % (lpath, str(ex))
+            print("Could not open log file '%s' (%s)" % (lpath, str(ex)))
             return lpath
         quitLine = cmdPrefix + "quit"
         for line in lfile:
@@ -155,7 +155,7 @@ def shouldRun(cmdPath, mode):
 def process(cmdPath, mode):
     lpath = shouldRun(cmdPath, mode)
     if lpath is None:
-        print "Already ran %s + %s.  Skipping" % (cmdPath, mode)
+        print("Already ran %s + %s.  Skipping" % (cmdPath, mode))
         return
     cmd = ["/".join(homePathFields + runbddFields), '-c']
     if not chain:
@@ -169,22 +169,22 @@ def process(cmdPath, mode):
         cmd += ['-v', str(verbLevel)]
     cmdLine = " ".join(cmd)
     if not quietMode:
-        print "Running '%s'" % cmdLine
+        print("Running '%s'" % cmdLine)
     if quietMode:
         p = subprocess.Popen(cmd, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
         (stdout, stderr) = p.communicate()
         lines = stdout.split('\n')
         for line in lines:
             if "Conjunction" in line:
-                print line
+                print(line)
         lines = stderr.split("\n")
         for line in lines:
-            print "stderr: " + line
+            print("stderr: " + line)
     else:
         p = subprocess.Popen(cmd)
         p.wait()
         if p.returncode != 0:
-            print "Running command '%s' failed.  Return code = %d" % (cmdLine, p.returncode)
+            print("Running command '%s' failed.  Return code = %d" % (cmdLine, p.returncode))
 
 def run(name, args):
     global softRedo, hardRedo, chain, verbLevel, quietMode
@@ -205,7 +205,7 @@ def run(name, args):
             isClient = True
             fields = val.split(':')
             if len(fields) != 2:
-                print "Must have host of form HOST:PORT"
+                print("Must have host of form HOST:PORT")
                 usage(name)
                 return
             host = fields[0]
@@ -232,30 +232,30 @@ def run(name, args):
         elif opt == '-s':
             supersetFraction = int(val)
     if len(cmdPaths) == 0 and not isClient:
-        print "Need command file(s)"
+        print("Need command file(s)")
         usage(name)
         return
 
     if isClient:
         try:
             cname = 'http://%s:%d' % (host, port)
-            print "Attempting to connect to '%s'" % cname
-            c = xmlrpclib.ServerProxy(cname)
+            print("Attempting to connect to '%s'" % cname)
+            c = xmlrpc.client.ServerProxy(cname)
         except Exception as ex:
-            print "Failed to connect to server (%s)" % str(ex)
+            print("Failed to connect to server (%s)" % str(ex))
             return
         while True:
             try:
-                tuple = c.next()
+                tuple = next(c)
             except Exception as ex:
-                print "Could not get value from server (%s)" % str(ex)
+                print("Could not get value from server (%s)" % str(ex))
                 return
             if len(tuple) > 0:
                 cmdPath = tuple[0]
                 mode = tuple[1]
                 process(cmdPath, mode)
             else:
-                print "Terminated"
+                print("Terminated")
                 return
 
     modeList = []
@@ -265,14 +265,14 @@ def run(name, args):
                 mode = makeMode(r,p)
                 modeList.append(mode)
             else:
-                print "Invalid mode: %s.  Skipping" % makeMode(r, p)
+                print("Invalid mode: %s.  Skipping" % makeMode(r, p))
     pairGenerator = Pair(cmdPaths, modeList)
 
     if isServer:
         try:
             server = Server(port, pairGenerator)
         except Exception as ex:
-            print "Couldn't set up server on port %d (%s)" % (port, str(ex))
+            print("Couldn't set up server on port %d (%s)" % (port, str(ex)))
             return
         server.run()
     else:
