@@ -4,6 +4,7 @@ import re
 import random
 import sys
 import hashlib
+from functools import total_ordering
 
 import circuit
 
@@ -71,6 +72,7 @@ def signPerm(p):
     return "".join(slist)
 
 # Brent variables
+@total_ordering
 class BrentVariable:
     symbol = 'a'
     prefix = 'alpha'
@@ -170,19 +172,26 @@ class BrentVariable:
     def __eq__(self, other):
         return str(self) == str(other)
 
-    def __cmp__(self, other):
-        c = cmp(self.level, other.level)
-        if c != 0:
-            return c
-        if self.prefix != other.prefix:
-            if self.prefix in self.prefixOrder and other.prefix in other.prefixOrder:
-                return cmp(self.prefixOrder[self.prefix], other.prefixOrder[other.prefix])
-            return cmp(self.prefix, other.prefix)
-        c = cmp(self.row, other.row)
-        if c != 0:
-            return c
-        c = cmp(self.column, other.column)
-        return c
+    def __lt__(self, other):
+        if self.level < other.level:
+            return True
+        if self.level > other.level:
+            return False
+        if self.prefix in self.prefixOrder and other.prefix in other.prefixOrder:
+            if self.prefixOrder[self.prefix] < other.prefixOrder[other.prefix]:
+                return True
+            if self.prefixOrder[self.prefix] > other.prefixOrder[other.prefix]:
+                return False
+        else:
+            if self.prefix < other.prefix:
+                return True
+            if self.prefix > other.prefix:
+                return False
+        if self.row < other.row:
+            return True
+        if self.row > other.row:
+            return False
+        return self.column < other.column
 
 
 # A literal is either a variable (phase = 1) or its complement (phase = 0)
@@ -302,6 +311,7 @@ class BrentTerm:
         return self.prefix + '-' + '.'.join(self.indices) + self.suffix
 
 # Representation of a triple a_i,j * b_j,k --> c_i,k
+@total_ordering
 class KernelTerm:
 
     i = 1
@@ -355,17 +365,23 @@ class KernelTerm:
             level = levelPermuter[level]
         return KernelTerm(i, j, k, level)
 
-    def __cmp__(self, other):
-        c = cmp(self.level, other.level)
-        if c != 0:
-            return c
-        c = cmp(self.i, other.i)
-        if c != 0:
-            return c
-        c = cmp(self.j, other.j)
-        if c != 0:
-            return c
-        return cmp(self.k, other.k)
+    def __lt__(self, other):
+        if self.level < other.level:
+            return True
+        if self.level > other.level:
+            return False
+        if self.i < other.i:
+            return True
+        if self.i > other.i:
+            return False
+        if self.j < other.j:
+            return True
+        if self.j > other.j:
+            return False
+        return self.k < other.k
+
+    def __eq__(self, other):
+        return self.level == other.level and self.i == other.i and self.j == other.j and self.k == other.k
 
     def generateString(self, showLevel = True):
         astring = self.alpha().generateTerm()
@@ -430,7 +446,7 @@ class KernelSet:
 
     def sign(self):
         sig = self.signature()
-        return "K" + hashlib.sha1(sig).hexdigest()[:hashLength]
+        return "K" + hashlib.sha1(sig.encode('ASCII')).hexdigest()[:hashLength]
 
     def __str__(self):
         return self.generateString()
@@ -895,7 +911,7 @@ class MScheme(MProblem):
 
     def sign(self):
         sig = self.signature()
-        return "M" + hashlib.sha1(sig).hexdigest()[:hashLength]
+        return "M" + hashlib.sha1(sig.encode('ASCII')).hexdigest()[:hashLength]
         
 
     # Parse from polynomial representation
