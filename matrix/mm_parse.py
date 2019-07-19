@@ -214,6 +214,7 @@ def recordSolution(scheme, metadata = []):
         return
     dbfile.write("\t".join(dbEntryFields) + '\n')
     dbfile.close()
+    
 
 def generateSolutions(iname, fileScheme):
     global solutionDict, nonHeuleCount, freshCount
@@ -242,7 +243,6 @@ def generateSolutions(iname, fileScheme):
             if not quietMode:
                 print("Solution %s.  %d additions" % (sname, ss.addCount()))
             solutionDict[signature] = sname
-        if not found:
             hash = sc.sign()
             if hash in heuleDatabaseDict:
                 if not quietMode:
@@ -265,7 +265,6 @@ def generateSolutions(iname, fileScheme):
         fields = [iname, str(len(slist)), str(newCount), str(nonHeuleCount), str(freshCount)]
         print("\t".join(fields))
         
-
 def run(name, args):
     global solutionDict, quietMode
     n1, n2, n3 = 3, 3, 3
@@ -353,12 +352,13 @@ def run(name, args):
     loadDatabase(generatedDatabaseDict, generatedDatabasePathFields)
 
 
-    sname = "%s" % (pname)
     signature = generateSignature(fileScheme)
-    solutionDict[signature] = sname
+    # Preload with provided solution
+    solutionDict[signature] = pname
     for iname in inameList:
         generateSolutions(iname, fileScheme)
             
+
     
 if __name__ == "__main__":
     current = os.path.realpath(__file__)
