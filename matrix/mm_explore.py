@@ -104,8 +104,9 @@ class SchemeGenerator:
         self.tryLimit = limit
         self.count = 0
         db = {}
-        mm_parse.loadDatabase(db, mm_parse.generatedDatabasePathFields)
-        mm_parse.loadDatabase(db, mm_parse.heuleDatabasePathFields)
+        mm_parse.loadDatabase(db, mm_parse.generatedDatabasePathFields, False)
+        mm_parse.loadDatabase(db, mm_parse.heuleDatabasePathFields, False)
+        report(1, "Loaded %d entries into database" % len(db))
         self.candidates = [v[mm_parse.fieldIndex['path']] for v in db.values()]
         self.vpList = [brent.ijk2var(p) for p in brent.allPermuters(list(range(3)))]
         
@@ -135,6 +136,9 @@ class SchemeGenerator:
         report(0, "Couldn't find any candidates after %d tries" % self.tryLimit)
         return None
 
+    def addCandidate(self, path):
+        self.candidates.append(path)
+
 class Server:
     generator = None
     server = None
@@ -152,7 +156,6 @@ class Server:
             return False
         else:
             return s.bundle()
-
 
     def run(self):
         self.server.serve_forever()
@@ -277,6 +280,8 @@ def run(name, args):
         elif opt == '-v':
             vlevel = int(val)
     setVerbLevel(vlevel)
+    mm_parse.loadDatabase(mm_parse.heuleDatabaseDict, mm_parse.heuleDatabasePathFields, mm_parse.quietMode)
+    mm_parse.loadDatabase(mm_parse.generatedDatabaseDict, mm_parse.generatedDatabasePathFields, mm_parse.quietMode)
     generator = SchemeGenerator(3, 23, permute = True)
     errorCount = 0
     generateCount = 0

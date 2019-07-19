@@ -22,7 +22,7 @@ auxCount = 23
 ckt = circuit.Circuit()
 
 def process(checkValidity):
-    mm_parse.loadDatabase(mm_parse.heuleDatabaseDict, mm_parse.heuleDatabasePathFields)
+    mm_parse.loadDatabase(mm_parse.heuleDatabaseDict, mm_parse.heuleDatabasePathFields, False)
     fields = mm_parse.homePathFields + mm_parse.generatedDatabasePathFields
     dbPath = "/".join(fields)
     try:

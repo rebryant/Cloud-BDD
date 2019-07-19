@@ -56,7 +56,7 @@ nonHeuleCount = 0
 freshCount = 0
 
 
-def loadDatabase(databaseDict, databasePathFields):
+def loadDatabase(databaseDict, databasePathFields, quiet):
     dbname = '/'.join(homePathFields + databasePathFields)
     try:
         dbfile = open(dbname, 'r')
@@ -85,7 +85,7 @@ def loadDatabase(databaseDict, databasePathFields):
             break
         databaseDict[entry[0]] = entry
     dbfile.close()
-    if not quietMode:
+    if not quiet:
         print("Database %s contains %d entries" % (databasePathFields[-1], len(databaseDict)))
         
 
@@ -134,7 +134,7 @@ def getPeakNodes(fname):
     
 
 # Extract solutions from file:
-def getSolutions(fname):
+def getBitSolutions(fname):
     slist = []
     matcher = re.compile("[01]+")
     try:
@@ -214,16 +214,49 @@ def recordSolution(scheme, metadata = []):
         return
     dbfile.write("\t".join(dbEntryFields) + '\n')
     dbfile.close()
+    return fpath
     
+# Process a generated solution
+def processSolution(scheme, sname, metadata = [], recordFunction = recordSolution):
+    global solutionDict, nonHeuleCount, freshCount
+    if not scheme.isCanonical:
+        scheme = scheme.canonize()
+    signature = scheme.signature()
+    found = signature in solutionDict
+    if found:
+        if not quietMode:
+            osname = solutionDict[signature]
+            print("Solution %s.  %d additions.  Isomorphic to solution %s" % (sname, scheme.addCount(), osname))
+        return False
+    if not quietMode:
+        print("Solution %s.  %d additions" % (sname, scheme.addCount()))
+    solutionDict[signature] = sname
+    hash = scheme.sign()
+    if hash in heuleDatabaseDict:
+        if not quietMode:
+            print("Probably isomorphic to solution in '%s'" % heuleDatabaseDict[hash][fieldIndex['path']])
+    else:
+        nonHeuleCount += 1
+        if hash in generatedDatabaseDict:
+            if not quietMode:
+                print("Probably isomorphic to solution in '%s'" % generatedDatabaseDict[hash][fieldIndex['path']])
+        else:
+            freshCount += 1
+            if not quietMode:
+                print("Completely new Solution")
+            recordFunction(scheme, metadata = metadata)
+    return True
+
 
 def generateSolutions(iname, fileScheme):
-    global solutionDict, nonHeuleCount, freshCount
+    global nonHeuleCount, freshCount
     supportNames = getSupport(iname)
-    slist = getSolutions(iname)
+    slist = getBitSolutions(iname)
     index = 1
     newCount = 0
     nonHeuleCount = 0
     freshCount = 0
+    metadata = ["Derived from scheme with signature %s" % fileScheme.sign()]
     for s in slist:
         try:
             ss = fileScheme.duplicate().parseFromSolver(supportNames, s)
@@ -231,36 +264,11 @@ def generateSolutions(iname, fileScheme):
             print("Couldn't process solution: %s" % str(ex))
             continue
         sname = "%s #%d" % (iname, index)
-        sc = ss.canonize()
-        signature = sc.signature()
-        found = signature in solutionDict
-        if found:
-            osname = solutionDict[signature]
-            if not quietMode:
-                print("Solution %s.  %d additions.  Isomorphic to solution %s" % (sname, ss.addCount(), osname))
-        else:
+        if processSolution(ss, sname, metadata, recordSolution):
             newCount += 1
-            if not quietMode:
-                print("Solution %s.  %d additions" % (sname, ss.addCount()))
-            solutionDict[signature] = sname
-            hash = sc.sign()
-            if hash in heuleDatabaseDict:
-                if not quietMode:
-                    print("Probably isomorphic to solution in '%s'" % heuleDatabaseDict[hash][fieldIndex['path']])
-            else:
-                nonHeuleCount += 1
-                if hash in generatedDatabaseDict:
-                    if not quietMode:
-                        print("Probably isomorphic to solution in '%s'" % generatedDatabaseDict[hash][fieldIndex['path']])
-                else:
-                    freshCount += 1
-                    if not quietMode:
-                        print("Completely new Solution")
-                    sourceSignature = fileScheme.sign()
-                    recordSolution(sc, metadata = ["Derived from scheme with signature %s" % sourceSignature])
         index += 1
         if not quietMode:
-            ss.printPolynomial()
+            ss.printPolynomial(metadata = metadata)
     if quietMode:
         fields = [iname, str(len(slist)), str(newCount), str(nonHeuleCount), str(freshCount)]
         print("\t".join(fields))
@@ -348,8 +356,8 @@ def run(name, args):
     except brent.MatrixException as ex:
         print("Parse of file '%s' failed: %s" % (pname, str(ex)))
         return
-    loadDatabase(heuleDatabaseDict, heuleDatabasePathFields)
-    loadDatabase(generatedDatabaseDict, generatedDatabasePathFields)
+    loadDatabase(heuleDatabaseDict, heuleDatabasePathFields, quietMode)
+    loadDatabase(generatedDatabaseDict, generatedDatabasePathFields, quietMode)
 
 
     signature = generateSignature(fileScheme)
