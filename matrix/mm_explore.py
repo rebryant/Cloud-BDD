@@ -20,6 +20,7 @@ import getopt
 import random
 import os.path
 import subprocess
+import datetime
 
 import brent
 import mm_parse
@@ -116,7 +117,8 @@ class SchemeGenerator:
         
     def select(self):
         if self.count >= self.limit:
-            report(1, "Generated %d schemes" % self.count)
+            if self.count == self.limit:
+                report(1, "Generated %d schemes" % self.count)
             return None
         self.count += 1
         for t in range(self.tryLimit):
@@ -135,7 +137,7 @@ class SchemeGenerator:
             if self.permute:
                 vp = random.choice(self.vpList)
                 s = s.permute(variablePermuter = vp)
-                report(2, "   Permuted as: %s" % brent.showPerm(vp))
+                report(2, "   Permuted as: %s (Hash = %s)" % (brent.showPerm(vp), s.sign()))
             return s
         report(0, "Couldn't find any candidates after %d tries" % self.tryLimit)
         return None
@@ -161,13 +163,12 @@ class Server:
         if s is None:
             return False
         else:
-            report(1, "Server returning scheme %s" % s.sign())
             return s.bundle()
 
     def record(self, schemeBundle, metadata):
         scheme = brent.MScheme(dim, auxCount, ckt).unbundle(schemeBundle)
         hash = scheme.sign()
-        report(2, "Received bundle from client giving scheme %s" % hash)
+        report(3, "Received bundle from client giving scheme %s" % hash)
         signature = scheme.signature()
         found = signature in mm_parse.solutionDict or hash in mm_parse.heuleDatabaseDict or hash in mm_parse.generatedDatabaseDict
         if found:
@@ -185,10 +186,14 @@ class Server:
 class Client:
     host = ""
     port = ""
+    start = None
+    count = 0
 
     def __init__(self, host, port):
         self.host = host
         self.port = port
+        self.start = datetime.datetime.now()
+        self.count = 0
 
     def connect(self):
         try:
@@ -199,6 +204,12 @@ class Client:
         except Exception as ex:
             report(0, "Failed to connect to server (%s)" % str(ex))
             return None
+
+    def incrCount(self, incr = 1):
+        self.count += incr
+        dt = datetime.datetime.now() - self.start
+        secs = dt.days*(24 * 3600) + dt.seconds + dt.microseconds * 1.0e-6
+        return secs/self.count if self.count > 0 else 0.0
 
     def next(self):
         c =  self.connect()
@@ -229,7 +240,8 @@ class Client:
         report(3, "Transmitting bundle for scheme %s to server" % hash)
         try:
             if c.record(bundle, metadata):
-                report(1, "New scheme %s recorded" % hash)
+                avg = self.incrCount()
+                report(1, "New scheme %s recorded (avg time/scheme = %.1f secs)" % (hash, avg))
             else:
                 report(2, "Duplicates existing solution")
         except Exception as ex:
@@ -319,6 +331,7 @@ def runClient(host, port):
         if not runScheme(s, cli.record):
             errorCount += 1
     report(0, "%d schemes generated.  %d errors" % (generateCount, errorCount))
+    report(0, "%d new schemes recorded.  Average = %.1f secs/scheme" % (cli.count, cli.incrCount(0)))
     
 
 def runStandalone(generator):
