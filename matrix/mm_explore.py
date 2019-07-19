@@ -34,23 +34,18 @@ def usage(name):
     print("   -H HOST:PORT     Retrieve source file name from server at HOST:PORT")
     print("  Local & server options")
     print("   -R               Allow unrestricted solution types")
+    print("   -l LIMIT         Set limit on number of schemes generated")
     print("  Local & client options")
     print("   -t SECS          Set runtime limit (in seconds)")
     print("   -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class")
     print("   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)N")
     print("   -v VERB          Set verbosity level")
-    print("   -l LIMIT         Set limit on number of schemes generated")
     sys.exit(0)
 
 # Set to home directory for program, split into tokens
 homePathFields = ['.']
 
 runbddFields = ["..", "runbdd"]
-
-isServer = False
-isClient = False
-port = 6616
-host = 'localhost'
 
 # Verbosity levels:
 # 0: Error messages only
@@ -74,6 +69,14 @@ seedLimit = 100
 errorLimit = 5
 
 restrictSolutions = True
+
+dim = (3, 3, 3)
+auxCount = 27
+
+defaultHost = 'localhost'
+defaultPort = 6616
+
+ckt = circuit.Circuit()
 
 def report(level, s):
     if level <= verbLevel:
@@ -103,6 +106,7 @@ class SchemeGenerator:
         self.permute = permute
         self.tryLimit = limit
         self.count = 0
+        self.limit = limit
         db = {}
         mm_parse.loadDatabase(db, mm_parse.generatedDatabasePathFields, True)
         mm_parse.loadDatabase(db, mm_parse.heuleDatabasePathFields, True)
@@ -142,26 +146,95 @@ class SchemeGenerator:
 class Server:
     generator = None
     server = None
+    recordedCount = 0
 
     def __init__(self, port, generator):
         host = ''
         self.generator = generator
         self.server = SimpleXMLRPCServer((host, port))
         self.server.register_function(self.next, "next")
+        self.server.register_function(self.record, "record")
+        self.recordedCount = 0
     
     def next(self):
         s = self.generator.select()
-        report(1, "Server returning scheme %s" % s.sign())
         if s is None:
             return False
         else:
+            report(1, "Server returning scheme %s" % s.sign())
             return s.bundle()
 
-    def record(self, SchemeBundle, metadata):
-        pass
+    def record(self, schemeBundle, metadata):
+        scheme = brent.MScheme(dim, auxCount, ckt).unbundle(schemeBundle)
+        hash = scheme.sign()
+        report(2, "Received bundle from client giving scheme %s" % hash)
+        signature = scheme.signature()
+        found = signature in mm_parse.solutionDict or hash in mm_parse.heuleDatabaseDict or hash in mm_parse.generatedDatabaseDict
+        if found:
+            report(2, "Solution %s duplicates existing one" % hash)
+            return False
+        else:
+            mm_parse.recordSolution(scheme, metadata)
+            self.recordedCount += 1
+            report(1, "New solution %s recorded.  Session total = %d" % (hash, self.recordedCount))
+            return True
 
     def run(self):
         self.server.serve_forever()
+
+class Client:
+    host = ""
+    port = ""
+
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+
+    def connect(self):
+        try:
+            cname = 'http://%s:%d' % (self.host, self.port)
+            report(3, "Attempting to connect to '%s'" % cname)
+            c = xml_client.ServerProxy(cname)
+            return c
+        except Exception as ex:
+            report(0, "Failed to connect to server (%s)" % str(ex))
+            return None
+
+    def next(self):
+        c =  self.connect()
+        if c is None:
+            return None
+        try:
+            bundle = c.next()
+        except Exception as ex:
+            report(0, "Error.  Could not get another scheme (%s)" % str(ex))
+            return None
+        if bundle == False:
+            report(2, "Empty bundle")
+            return None
+        scheme = brent.MScheme(dim, auxCount, ckt).unbundle(bundle)
+        if scheme is None:
+            report(0, "Couldn't unbundle scheme from '%s'" % str(bundle))
+        else:
+            report(3, "Retrieved scheme %s" % scheme.sign())
+        return scheme
+
+    def record(self, scheme, metadata):
+        c =  self.connect()
+        if c is None:
+            report(0, "Failed to record scheme %s.  No connection formed" % scheme.sign())
+            return None
+        bundle = scheme.bundle()
+        hash = scheme.sign()
+        report(3, "Transmitting bundle for scheme %s to server" % hash)
+        try:
+            if c.record(bundle, metadata):
+                report(1, "New scheme %s recorded" % hash)
+            else:
+                report(2, "Duplicates existing solution")
+        except Exception as ex:
+            report(0, "Failed to transmit scheme %s to server.  (%s)" % (scheme.sign(), str(ex)))
+
 
 # Given scheme, what will you do about it?
 def fileRoot(scheme, categoryProbabilities, seed):
@@ -199,7 +272,7 @@ def generateCommandFile(scheme, seed):
     return froot
 
 # Run command file and process results
-def runCommand(scheme, froot, method):
+def runCommand(scheme, froot, method, recordFunction):
     fname = froot + ".cmd"
     lname = froot + "-" + method + ".log"
     cmd = ["/".join(homePathFields + runbddFields), '-c']
@@ -216,16 +289,49 @@ def runCommand(scheme, froot, method):
     if p.returncode != 0:
         report(0, "Returning command '%s' failed.  Return code = %d" % (cmdLine, p.returncode))
         return False
-    mm_parse.generateSolutions(lname, scheme, recordFunction = mm_parse.recordSolution)
+    mm_parse.generateSolutions(lname, scheme, recordFunction)
     return True
 
-def runScheme(scheme):
+def runScheme(scheme, recordFunction):
     seed = random.randrange(seedLimit)
     froot = generateCommandFile(scheme, seed)
     if froot == "":
         return False
     method = random.choice(reductionList) + random.choice(processingList)
-    return runCommand(scheme, froot, method)
+    return runCommand(scheme, froot, method, recordFunction)
+
+def runServer(port, generator):
+    try:
+        server = Server(port, generator)
+    except Exception as ex:
+        report(0, "Could not set up server on port %d (%s)" % (port, str(ex)))
+    server.run()
+
+def runClient(host, port):
+    cli = Client(host, port)
+    errorCount = 0
+    generateCount = 0
+    while errorCount < errorLimit:
+        s = cli.next()
+        if s is None:
+            break
+        generateCount += 1
+        if not runScheme(s, cli.record):
+            errorCount += 1
+    report(0, "%d schemes generated.  %d errors" % (generateCount, errorCount))
+    
+
+def runStandalone(generator):
+    errorCount = 0
+    generateCount = 0
+    while errorCount < errorLimit:
+        s = generator.select()
+        if s is None:
+            break
+        generateCount += 1
+        if not runScheme(s, mm_parse.recordSolution):
+            errorCount += 1
+    report(0, "%d schemes generated.  %d errors" % (generateCount, errorCount))
 
 
 #    [-h] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB]
@@ -234,13 +340,12 @@ def run(name, args):
     global processingList
     global categoryProbabilities
     global restrictSolutions
-    port = None
-    host = None
-
+    host = defaultHost
+    port = defaultPort
+    isServer = False
+    isClient = False
     vlevel = 1
     limit = 100
-
-    
 
     optlist, args = getopt.getopt(args, 'hP:H:Rt:c:p:l:v:')
     for (opt, val) in optlist:
@@ -248,9 +353,17 @@ def run(name, args):
             usage(name)
             return
         elif opt == '-P':
-            port = val
+            isServer = True
+            port = int(val)
         elif opt == '-H':
-            host = val
+            isClient = True
+            fields = val.split(':')
+            if len(fields) != 2:
+                report(0, "Must have host of form HOST:PORT")
+                usage(name)
+                return
+            host = fields[0]
+            port = int(fields[1])
         elif opt == '-t':
             timeLimit = int(val)
         elif opt == '-c':
@@ -285,18 +398,14 @@ def run(name, args):
     setVerbLevel(vlevel)
     mm_parse.loadDatabase(mm_parse.heuleDatabaseDict, mm_parse.heuleDatabasePathFields, mm_parse.quietMode)
     mm_parse.loadDatabase(mm_parse.generatedDatabaseDict, mm_parse.generatedDatabasePathFields, mm_parse.quietMode)
-    generator = SchemeGenerator(3, 23, permute = True)
-    errorCount = 0
-    generateCount = 0
-    while errorCount < errorLimit and generateCount < limit:
-        s = generator.select()
-        if s is None:
-            errorCount += 1
-            continue
-        generateCount += 1
-        if not runScheme(s):
-            errorCount += 1
-    report(0, "%d schemes generated.  %d errors" % (generateCount, errorCount))
+    if isClient:
+        runClient(host, port)
+    else:
+        generator = SchemeGenerator(3, 23, permute = True, limit = limit)
+        if isServer:
+            runServer(port, generator)
+        else:
+            runStandalone(generator)
     
 
 if __name__ == "__main__":

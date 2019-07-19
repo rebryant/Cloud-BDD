@@ -944,6 +944,8 @@ class MScheme(MProblem):
         self.__init__(dim, auxCount, self.ckt)
         for level in unitRange(auxCount):
             self.parsePolynomialLine(plist[level-1], level)
+        self.kernelTerms = self.findKernels()
+        return self
 
     # Read polynomial from file
     def parseFromFile(self, fname):
