@@ -546,7 +546,7 @@ class MProblem:
         else:
             self.dim = dim
         self.auxCount = auxCount
-        self.ckt = ckt
+        self.ckt = circuit.Circuit() if ckt is None else ckt 
             
     def nrow(self, category):
         return self.dim[1] if category == 'beta' else self.dim[0]
@@ -933,6 +933,18 @@ class MScheme(MProblem):
             for v in vars:
                 self.assignment[v] = 1
         
+    # Put into form suitable for network transmission
+    def bundle(self):
+        plist = self.generatePolynomial()
+        return (self.dim, self.auxCount, plist)
+
+    # Extract from bundled representation
+    def unbundle(self, rep):
+        dim, auxCount, plist = rep
+        self.__init__(dim, auxCount, self.ckt)
+        for level in unitRange(auxCount):
+            self.parsePolynomialLine(plist[level-1], level)
+
     # Read polynomial from file
     def parseFromFile(self, fname):
         try:
@@ -996,7 +1008,7 @@ class MScheme(MProblem):
             ca = self.assignment.subset(lambda v: v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
             fixedAssignment.overWrite(ca)
         if len(fixedAssignment) > 0:
-            self.ckt.comment("Fixed assignments")
+            self.ckt.comment("Fixed assignments, generated from scheme with signature %s" % self.sign())
             fixedAssignment.assign(self.ckt)
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)

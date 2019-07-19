@@ -59,13 +59,13 @@ def run(name, args):
             fields = val.split(':')
             levelList = tuple([int(f) for f in fields])
             if len(levelList) < 1 or len(levelList) > 6:
-                print "Levels must be in range 1 .. 6"
+                print("Levels must be in range 1 .. 6")
                 return
             if levelList[0] < 1:
-                print "Levels must be in range 1 .. 6"
+                print("Levels must be in range 1 .. 6")
                 return
             if levelList[-1] != 6:
-                print "Final level must = 6"
+                print("Final level must = 6")
                 return
             breadthFirst = True
         elif opt == '-z':
@@ -81,7 +81,7 @@ def run(name, args):
                 try:
                     pct = int(fields[0])
                 except:
-                    print "Cannot find percentage of fixed assignments from '%s'" % val
+                    print("Cannot find percentage of fixed assignments from '%s'" % val)
                     usage(name)
                 prob = pct / 100.0
                 categoryProbabilities = {'alpha':prob, 'beta':prob, 'gamma':prob}
@@ -90,19 +90,13 @@ def run(name, args):
                 try:
                     plist = [int(f)/100.0 for f in fields]
                 except:
-                    print "Cannot find 3 percentages of fixed assignments from '%s'" % val
+                    print("Cannot find 3 percentages of fixed assignments from '%s'" % val)
                     usage(name)
                 categoryProbabilities = {'alpha':plist[0], 'beta':plist[1], 'gamma':plist[2]}
                 someFixed = functools.reduce(lambda x, y: x+y, plist) > 0.0
             else:
-                print "Cannot find 3 percentages of fixed assignments from '%s'" % val
+                print("Cannot find 3 percentages of fixed assignments from '%s'" % val)
                 usage(name)
-            if 'a' in val:
-                categories += ['alpha']
-            if 'b' in val:
-                categories += ['beta']
-            if 'c' in val:
-                categories += ['gamma']
         elif opt == '-s':
             pname = val
         elif opt == '-p':
