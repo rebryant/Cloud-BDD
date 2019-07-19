@@ -104,8 +104,8 @@ class SchemeGenerator:
         self.tryLimit = limit
         self.count = 0
         db = {}
-        mm_parse.loadDatabase(db, mm_parse.generatedDatabasePathFields, False)
-        mm_parse.loadDatabase(db, mm_parse.heuleDatabasePathFields, False)
+        mm_parse.loadDatabase(db, mm_parse.generatedDatabasePathFields, True)
+        mm_parse.loadDatabase(db, mm_parse.heuleDatabasePathFields, True)
         report(1, "Loaded %d entries into database" % len(db))
         self.candidates = [v[mm_parse.fieldIndex['path']] for v in db.values()]
         self.vpList = [brent.ijk2var(p) for p in brent.allPermuters(list(range(3)))]
@@ -156,6 +156,9 @@ class Server:
             return False
         else:
             return s.bundle()
+
+    def record(self, SchemeBundle, metadata):
+        pass
 
     def run(self):
         self.server.serve_forever()
@@ -213,7 +216,7 @@ def runCommand(scheme, froot, method):
     if p.returncode != 0:
         report(0, "Returning command '%s' failed.  Return code = %d" % (cmdLine, p.returncode))
         return False
-    mm_parse.generateSolutions(lname, scheme)
+    mm_parse.generateSolutions(lname, scheme, recordFunction = mm_parse.recordSolution)
     return True
 
 def runScheme(scheme):

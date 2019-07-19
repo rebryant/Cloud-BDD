@@ -37,6 +37,9 @@ def process(checkValidity):
     pathList = glob.glob(template)
     count = 0
     for p in pathList:
+        fields = p.split('/')
+        sfields = mm_parse.generatedPathFields + fields[-1:]
+        sp = '/'.join(sfields)
         try:
             s = brent.MScheme(dim, auxCount, ckt).parseFromFile(p)
         except Exception as ex:
@@ -51,7 +54,7 @@ def process(checkValidity):
         if checkValidity and not s.obeysBrent():
             print("WARNING: Generated solution %s does not obey Brent equations" % sig)
             continue
-        dbEntryFields = [sig, str(s.addCount()), s.kernelTerms.sign(), p]
+        dbEntryFields = [sig, str(s.addCount()), s.kernelTerms.sign(), sp]
         dbFile.write("\t".join(dbEntryFields) + "\n")
         print("Recorded solution %s" % sig)
         count += 1

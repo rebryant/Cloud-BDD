@@ -214,7 +214,6 @@ def recordSolution(scheme, metadata = []):
         return
     dbfile.write("\t".join(dbEntryFields) + '\n')
     dbfile.close()
-    return fpath
     
 # Process a generated solution
 def processSolution(scheme, sname, metadata = [], recordFunction = recordSolution):
@@ -248,7 +247,7 @@ def processSolution(scheme, sname, metadata = [], recordFunction = recordSolutio
     return True
 
 
-def generateSolutions(iname, fileScheme):
+def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
     global nonHeuleCount, freshCount
     supportNames = getSupport(iname)
     slist = getBitSolutions(iname)
@@ -264,7 +263,7 @@ def generateSolutions(iname, fileScheme):
             print("Couldn't process solution: %s" % str(ex))
             continue
         sname = "%s #%d" % (iname, index)
-        if processSolution(ss, sname, metadata, recordSolution):
+        if processSolution(ss, sname, metadata, recordFunction):
             newCount += 1
         index += 1
         if not quietMode:
@@ -364,7 +363,7 @@ def run(name, args):
     # Preload with provided solution
     solutionDict[signature] = pname
     for iname in inameList:
-        generateSolutions(iname, fileScheme)
+        generateSolutions(iname, fileScheme, recordSolution)
             
 
     
