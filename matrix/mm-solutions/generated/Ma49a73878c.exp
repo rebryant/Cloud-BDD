@@ -3,7 +3,7 @@
 # Kernel signature Kac65f87215
 # Own signature Ma49a73878c
 # This representation has been put into canonical form
-# Derived from scheme with signature Me762efc535
+# Derived from scheme with signature Ma26b3c30ac
 (a11+a21+a22)*(b11+b23)*(c11+c31+c32)
 (a11+a23)*(b12+b33)*(c21+c32)
 (a13+a32+a33)*(b21+b23+b31)*(c11+c33)
