@@ -294,6 +294,7 @@ def run(name, args):
 if __name__ == "__main__":
     current = os.path.realpath(__file__)
     homePathFields = current.split('/')[:-1]
+    mm_parse.homePathFields = homePathFields
     run(sys.argv[0], sys.argv[1:])
 
     
