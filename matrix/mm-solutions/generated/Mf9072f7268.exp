@@ -1,0 +1,29 @@
+# Compute A (3 x 3) X B (3 x 3) = C (3 x 3)
+# Requires 23 multiplications and 89 additions
+# Kernel signature K45911591b5
+# Own signature Mf9072f7268
+# This representation has been put into canonical form
+# Derived from scheme with signature Ma18868feab
+(a11+a21+a22)*(b11+b23)*(c11+c31+c32)
+(a13+a32+a33)*(b23+b31)*(c11+c31+c33)
+(a23+a32+a33)*(b22+b31)*(c12+c22+c23)
+(a23+a31)*(b12+b13+b23+b33)*(c22+c32+c23)
+(a11)*(b12)*(c21+c31+c22+c32)
+(a11)*(b11+b12+b13)*(c31+c32)
+(a12)*(b21+b23)*(c11)
+(a12)*(b22)*(c21)
+(a11+a12+a13+a21+a22+a32+a33)*(b23)*(c11+c31)
+(a13)*(b32)*(c21+c31+c33)
+(a13)*(b31+b32+b33)*(c31+c33)
+(a21+a22)*(b11)*(c11+c31+c12+c32+c13)
+(a11+a21+a31)*(b12)*(c22+c32)
+(a11+a21+a23)*(b12+b13+b23)*(c32)
+(a22)*(b11+b21+b22)*(c12)
+(a22+a23+a32+a33)*(b22)*(c12+c22)
+(a23)*(b12+b13+b23+b31+b32+b33)*(c22+c23)
+(a21+a22+a31)*(b11+b21+b31)*(c13)
+(a31)*(b13+b23+b33)*(c22+c32+c23+c33)
+(a21+a22+a31+a32)*(b21+b31)*(c13)
+(a32+a33)*(b31)*(c11+c31+c12+c22+c13+c23+c33)
+(a23+a33)*(b22+b32)*(c23)
+(a13+a31+a33)*(b23+b33)*(c33)
