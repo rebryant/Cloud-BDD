@@ -68,7 +68,7 @@ levelList = [2,3,6]
 
 categoryProbabilities = {'alpha':0.0, 'beta':0.0, 'gamma':1.0}
 seedLimit = 100
-errorLimit = 100
+errorLimit = 1000
 
 restrictSolutions = True
 keepFiles = False
@@ -368,7 +368,7 @@ def runClient(host, port):
         avg = runCount * 3600.0 / overallSeconds
         report(1, "%.1f seconds (Average = %1.f runs/hour)" % (currentSeconds, avg))
     report(0, "%d schemes tested.  %d errors" % (runCount, errorCount))
-    report(0, "%d new schemes recorded.  Average = %.1f secs/scheme" % (cli.generateCount, cli.incrCount(0)))
+    report(0, "%d new schemes recorded.  Average = %.1f secs/scheme" % (cli.generatedCount, cli.incrCount(0)))
     
 
 def runStandalone(generator):
