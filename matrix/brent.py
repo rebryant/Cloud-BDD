@@ -9,7 +9,8 @@ from functools import total_ordering
 import circuit
 
 # How many hex digits should be in a hash signature?
-hashLength = 10
+schemeHashLength = 20
+kernelHashLength = 10
 
 class MatrixException(Exception):
 
@@ -446,7 +447,7 @@ class KernelSet:
 
     def sign(self):
         sig = self.signature()
-        return "K" + hashlib.sha1(sig.encode('ASCII')).hexdigest()[:hashLength]
+        return "K" + hashlib.sha1(sig.encode('ASCII')).hexdigest()[:kernelHashLength]
 
     def __str__(self):
         return self.generateString()
@@ -919,7 +920,7 @@ class MScheme(MProblem):
 
     def sign(self):
         sig = self.signature()
-        return "M" + hashlib.sha1(sig.encode('ASCII')).hexdigest()[:hashLength]
+        return "M" + hashlib.sha1(sig.encode('ASCII')).hexdigest()[:schemeHashLength]
         
 
     # Parse from polynomial representation
