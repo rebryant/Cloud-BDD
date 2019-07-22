@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Make sure generated solutions are valid and unique
+# Make sure generated solutions are canonical, unique (and possibly also valid)
 # Update database
 
 import os
@@ -45,11 +45,13 @@ def process(checkValidity):
         except Exception as ex:
             print("ERROR: Could not extract solution from file '%s' (%s)" % (p, str(ex)))
             continue
+        if not s.isCanonical():
+            print("Generated solution %s is not canoncal.  Removing" % (sig))
+            os.remove(p)
         sig = s.sign()
         if sig in mm_parse.heuleDatabaseDict:
             opath = mm_parse.heuleDatabaseDict[sig][mm_parse.fieldIndex['path']]
             print("Generated solution %s matches stored solution in %s.  Removing" % (sig, opath))
-            os.remove(p)
             continue
         if checkValidity and not s.obeysBrent():
             print("WARNING: Generated solution %s does not obey Brent equations" % sig)
