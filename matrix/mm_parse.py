@@ -214,12 +214,11 @@ def recordSolution(scheme, metadata = []):
         return
     dbfile.write("\t".join(dbEntryFields) + '\n')
     dbfile.close()
+    return path
     
 # Process a generated solution
 def processSolution(scheme, sname, metadata = [], recordFunction = recordSolution):
     global solutionDict, nonHeuleCount, freshCount
-    if not scheme.isCanonical:
-        scheme = scheme.canonize()
     signature = scheme.signature()
     found = signature in solutionDict
     if found:
@@ -263,7 +262,8 @@ def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
             print("Couldn't process solution: %s" % str(ex))
             continue
         sname = "%s #%d" % (iname, index)
-        if processSolution(ss, sname, metadata, recordFunction):
+        sc = ss.canonize()
+        if processSolution(sc, sname, metadata, recordFunction):
             newCount += 1
         index += 1
         if not quietMode:

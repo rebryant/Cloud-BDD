@@ -40,6 +40,7 @@ def usage(name):
     print("   -t SECS          Set runtime limit (in seconds)")
     print("   -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class")
     print("   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)N")
+    print("   -k               Don't delete command and log files")
     print("   -v VERB          Set verbosity level")
     sys.exit(0)
 
@@ -67,9 +68,10 @@ levelList = [2,3,6]
 
 categoryProbabilities = {'alpha':0.0, 'beta':0.0, 'gamma':1.0}
 seedLimit = 100
-errorLimit = 5
+errorLimit = 100
 
 restrictSolutions = True
+keepFiles = False
 
 dim = (3, 3, 3)
 auxCount = 27
@@ -82,6 +84,9 @@ ckt = circuit.Circuit()
 def report(level, s):
     if level <= verbLevel:
         print(s)
+
+def deltaSeconds(dt):
+    return dt.days*(24.0 * 3600) + dt.seconds + dt.microseconds * 1.0e-6
 
 def setVerbLevel(level):
     global verbLevel, runbddQuiet
@@ -145,10 +150,14 @@ class SchemeGenerator:
     def addCandidate(self, path):
         self.candidates.append(path)
 
+    def countCandidates(self):
+        return len(self.candidates)
+
 class Server:
     generator = None
     server = None
     recordedCount = 0
+    startTime = None
 
     def __init__(self, port, generator):
         host = ''
@@ -157,6 +166,7 @@ class Server:
         self.server.register_function(self.next, "next")
         self.server.register_function(self.record, "record")
         self.recordedCount = 0
+        self.startTime = datetime.datetime.now()
     
     def next(self):
         s = self.generator.select()
@@ -166,7 +176,7 @@ class Server:
             return s.bundle()
 
     def record(self, schemeBundle, metadata):
-        scheme = brent.MScheme(dim, auxCount, ckt).unbundle(schemeBundle)
+        scheme = brent.MScheme(dim, auxCount, ckt).unbundle(schemeBundle).canonize()
         hash = scheme.sign()
         report(3, "Received bundle from client giving scheme %s" % hash)
         signature = scheme.signature()
@@ -175,10 +185,16 @@ class Server:
             report(2, "Solution %s duplicates existing one" % hash)
             return False
         else:
-            mm_parse.recordSolution(scheme, metadata)
+            path = mm_parse.recordSolution(scheme, metadata)
             self.recordedCount += 1
-            report(1, "New solution %s recorded.  Session total = %d" % (hash, self.recordedCount))
+            self.generator.addCandidate(path)
+            dt = datetime.datetime.now() - self.startTime
+            secs = deltaSeconds(dt)
+            prate = self.recordedCount * 3600.0 / secs
+            ccount = self.generator.countCandidates()
+            report(1, "New solution %s recorded.  Session total = %d (Avg %.1f solutions/hour).  Now have %d candidates" % (hash, self.recordedCount, prate, ccount))
             return True
+
 
     def run(self):
         self.server.serve_forever()
@@ -186,14 +202,14 @@ class Server:
 class Client:
     host = ""
     port = ""
-    start = None
-    count = 0
+    startTime = None
+    generatedCount = 0
 
     def __init__(self, host, port):
         self.host = host
         self.port = port
-        self.start = datetime.datetime.now()
-        self.count = 0
+        self.startTime = datetime.datetime.now()
+        self.generatedCount = 0
 
     def connect(self):
         try:
@@ -206,10 +222,10 @@ class Client:
             return None
 
     def incrCount(self, incr = 1):
-        self.count += incr
-        dt = datetime.datetime.now() - self.start
-        secs = dt.days*(24 * 3600) + dt.seconds + dt.microseconds * 1.0e-6
-        return secs/self.count if self.count > 0 else 0.0
+        self.generatedCount += incr
+        dt = datetime.datetime.now() - self.startTime
+        secs = deltaSeconds(dt)
+        return secs/self.generatedCount if self.generatedCount > 0 else 0.0
 
     def next(self):
         c =  self.connect()
@@ -265,7 +281,6 @@ def fileRoot(scheme, categoryProbabilities, seed):
     fields += [sc]
     sseed = "S%.2d" % seed
     fields += [sseed]
-    root = "-".join(fields)
     return "-".join(fields)
 
 
@@ -302,6 +317,12 @@ def runCommand(scheme, froot, method, recordFunction):
         report(0, "Returning command '%s' failed.  Return code = %d" % (cmdLine, p.returncode))
         return False
     mm_parse.generateSolutions(lname, scheme, recordFunction)
+    if not keepFiles:
+        try:
+            os.remove(fname)
+            os.remove(lname)
+        except Exception as ex:
+            report(0, "Could not remove files %s and %s (%s)" % (fname, lname, str(ex)))
     return True
 
 def runScheme(scheme, recordFunction):
@@ -322,16 +343,23 @@ def runServer(port, generator):
 def runClient(host, port):
     cli = Client(host, port)
     errorCount = 0
-    generateCount = 0
+    runCount = 0
+    startTime = datetime.datetime.now()
     while errorCount < errorLimit:
+        schemeStart = datetime.datetime.now()
         s = cli.next()
         if s is None:
             break
-        generateCount += 1
+        runCount += 1
         if not runScheme(s, cli.record):
             errorCount += 1
-    report(0, "%d schemes generated.  %d errors" % (generateCount, errorCount))
-    report(0, "%d new schemes recorded.  Average = %.1f secs/scheme" % (cli.count, cli.incrCount(0)))
+        now = datetime.datetime.now()
+        overallSeconds = deltaSeconds(now-startTime)
+        currentSeconds = deltaSeconds(now-schemeStart)
+        avg = runCount * 3600.0 / overallSeconds
+        report(1, "%.1f seconds (Average = %1.f runs/hour)" % (currentSeconds, avg))
+    report(0, "%d schemes tested.  %d errors" % (runCount, errorCount))
+    report(0, "%d new schemes recorded.  Average = %.1f secs/scheme" % (cli.generateCount, cli.incrCount(0)))
     
 
 def runStandalone(generator):
@@ -353,6 +381,7 @@ def run(name, args):
     global processingList
     global categoryProbabilities
     global restrictSolutions
+    global keepFiles
     host = defaultHost
     port = defaultPort
     isServer = False
@@ -360,11 +389,13 @@ def run(name, args):
     vlevel = 1
     limit = 100
 
-    optlist, args = getopt.getopt(args, 'hP:H:Rt:c:p:l:v:')
+    optlist, args = getopt.getopt(args, 'hkP:H:Rt:c:p:l:v:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
+        if opt == '-k':
+            keepFiles = True
         elif opt == '-P':
             isServer = True
             port = int(val)
