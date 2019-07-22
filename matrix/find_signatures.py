@@ -31,9 +31,9 @@ subDirectory = "mm-solutions"
 
 candidatePath = subDirectory + "/heule-candidates.txt"
 reportPath = subDirectory + "/signatures.txt"
-signatureDirectory = subDirectory + "/signatures"
+signatureDirectory = subDirectory + "/unique-signatures"
 solutionDirectory =  subDirectory + "/unique-signatures"
-sourceDirectory = subDirectory + "/heule-online"
+sourceDirectory = subDirectory + "/heule-canonical"
 
 generatedSourceDirectory = subDirectory + "/generated"
 generatedSolutionCount = 0
@@ -58,7 +58,8 @@ def checkSolution(subPath):
         hashDict[sig] = sc.kernelTerms.sign()
         schemeDict[sig] = sc
     else:
-        print("File %s has same signature as %d other downloaded files" % (subPath, len(list)))        
+        pass
+#        print("File %s has same signature as %d other downloaded files" % (subPath, len(list)))        
     list.append(path)
     signatureDict[sig] = list
 
@@ -87,7 +88,8 @@ def checkGeneratedSolution(subPath):
             signatureDict[sig] = [path]
             schemeDict[sig] = sc
     else:
-        print("File %s has same signature as %d other generated files" % (subPath, len(list)))        
+        pass
+#        print("File %s has same signature as %d other generated files" % (subPath, len(list)))        
     list.append(path)
     generatedSignatureDict[sig] = list
 
