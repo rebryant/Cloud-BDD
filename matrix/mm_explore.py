@@ -81,6 +81,9 @@ defaultPort = 6616
 
 ckt = circuit.Circuit()
 
+# Good choices for probabilities
+abcList = ["20:55:70", "25:50:70",  "30:45:70", "15:45:80", "20:40:80", "25:35:80", "15:25:90", "20:25:90", "10:30:90"]
+
 def report(level, s):
     if level <= verbLevel:
         print(s)
@@ -166,9 +169,12 @@ class Server:
         self.server.register_function(self.next, "next")
         self.server.register_function(self.record, "record")
         self.recordedCount = 0
-        self.startTime = datetime.datetime.now()
+        self.startTime = None
     
     def next(self):
+        # Don't start timing until first request received
+        if self.startTime is None:
+            self.startTime = datetime.datetime.now()
         s = self.generator.select()
         if s is None:
             return False
@@ -176,6 +182,9 @@ class Server:
             return s.bundle()
 
     def record(self, schemeBundle, metadata):
+        # In case server gets restarted while client is executing
+        if self.startTime is None:
+            self.startTime = datetime.datetime.now()
         scheme = brent.MScheme(dim, auxCount, ckt).unbundle(schemeBundle).canonize()
         hash = scheme.sign()
         report(3, "Received bundle from client giving scheme %s" % hash)
@@ -374,6 +383,33 @@ def runStandalone(generator):
             errorCount += 1
     report(0, "%d schemes generated.  %d errors" % (generateCount, errorCount))
 
+def findABC():
+    return random.choice(abcList)
+
+# Parse probabilities given in form P or Pa:Pb:Pc
+# Return True or False
+def parseABC(abc):
+    global categoryProbabilities
+    fields = abc.split(":")
+    if len(fields) == 1:
+        try:
+            pct = int(fields[0])
+        except:
+            report(0, "Cannot find percentage of fixed assignments from '%s'" % abc)
+            return False
+        prob = pct / 100.0
+        categoryProbabilities = {'alpha':prob, 'beta':prob, 'gamma':prob}
+    elif len(fields) == 3:
+        try:
+            plist = [int(f)/100.0 for f in fields]
+        except:
+            report(0, "Cannot find 3 percentages of fixed assignments from '%s'" % abc)
+            return False
+        categoryProbabilities = {'alpha':plist[0], 'beta':plist[1], 'gamma':plist[2]}
+        return True
+    else:
+        report(0, "Cannot find 3 percentages of fixed assignments from '%s'" % abc)
+        return False
 
 #    [-h] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB]
 def run(name, args):
@@ -388,6 +424,7 @@ def run(name, args):
     isClient = False
     vlevel = 1
     limit = 100
+    abc = findABC()
 
     optlist, args = getopt.getopt(args, 'hkP:H:Rt:c:p:l:v:')
     for (opt, val) in optlist:
@@ -411,26 +448,7 @@ def run(name, args):
         elif opt == '-t':
             timeLimit = int(val)
         elif opt == '-c':
-            fields = val.split(":")
-            if len(fields) == 1:
-                # Single probability for all categories
-                try:
-                    pct = int(fields[0])
-                except:
-                    print("Cannot find percentage of fixed assignments from '%s'" % val)
-                    usage(name)
-                prob = pct / 100.0
-                categoryProbabilities = {'alpha':prob, 'beta':prob, 'gamma':prob}
-            elif len(fields) == 3:
-                try:
-                    plist = [int(f)/100.0 for f in fields]
-                except:
-                    print("Cannot find 3 percentages of fixed assignments from '%s'" % val)
-                    usage(name)
-                categoryProbabilities = {'alpha':plist[0], 'beta':plist[1], 'gamma':plist[2]}
-            else:
-                print("Cannot find 3 percentages of fixed assignments from '%s'" % val)
-                usage(name)
+            abc = val
         elif opt == '-R':
             restrictSolutions = False
         elif opt == '-p':
@@ -440,6 +458,9 @@ def run(name, args):
         elif opt == '-v':
             vlevel = int(val)
     setVerbLevel(vlevel)
+    if not parseABC(abc):
+        usage(name)
+        return
     mm_parse.loadDatabase(mm_parse.heuleDatabaseDict, mm_parse.heuleDatabasePathFields, mm_parse.quietMode)
     mm_parse.loadDatabase(mm_parse.generatedDatabaseDict, mm_parse.generatedDatabasePathFields, mm_parse.quietMode)
     if isClient:
