@@ -66,6 +66,7 @@ processingList = ['URN']
 timeLimit = 1800
 levelList = [2,3,6]
 
+fixedProbabilities = False
 categoryProbabilities = {'alpha':0.0, 'beta':0.0, 'gamma':1.0}
 seedLimit = 100
 errorLimit = 1000
@@ -168,6 +169,7 @@ class Server:
         self.server = SimpleXMLRPCServer((host, port))
         self.server.register_function(self.next, "next")
         self.server.register_function(self.record, "record")
+        self.server.register_function(self.notify, "notify")
         self.recordedCount = 0
         self.startTime = None
     
@@ -204,6 +206,11 @@ class Server:
             report(1, "New solution %s recorded.  Session total = %d (Avg %.1f solutions/hour).  Now have %d candidates" % (hash, self.recordedCount, prate, ccount))
             return True
 
+    def notify(self, abc, secs, scount, gcount):
+        crate = 100.0 * float(gcount)/(scount-1) if scount > 1 else 0.0
+        grate = float(gcount) * 3600.0 / secs if secs > 0 else 0.0
+        report(1, "Generation with probs %s.  Time = %.2f secs. Solutions = %d.  New Schemes = %d (%.1f%% of solutions).  Generation rate = %.1f schemes/hour"% (abc, secs, scount, gcount, crate, grate))
+        return True
 
     def run(self):
         self.server.serve_forever()
@@ -213,12 +220,14 @@ class Client:
     port = ""
     startTime = None
     generatedCount = 0
+    lastGeneratedCount = 0
 
     def __init__(self, host, port):
         self.host = host
         self.port = port
         self.startTime = datetime.datetime.now()
         self.generatedCount = 0
+        self.lastGeneratedCount = 0
 
     def connect(self):
         try:
@@ -254,6 +263,14 @@ class Client:
         else:
             report(3, "Retrieved scheme %s" % scheme.sign())
         return scheme
+
+    def notify(self, abc, secs, scount):
+        gcount = self.generatedCount - self.lastGeneratedCount
+        self.lastGeneratedCount = self.generatedCount
+        c =  self.connect()
+        if c is None:
+            return
+        c.notify(abc, secs, scount, gcount)
 
     def record(self, scheme, metadata):
         c =  self.connect()
@@ -307,7 +324,7 @@ def generateCommandFile(scheme, seed):
     outf.close()
     return froot
 
-# Run command file and process results
+# Run command file and process results.  Return number of solutions generated (or -1 if error)
 def runCommand(scheme, froot, method, recordFunction):
     fname = froot + ".cmd"
     lname = froot + "-" + method + ".log"
@@ -324,15 +341,15 @@ def runCommand(scheme, froot, method, recordFunction):
     p.wait()
     if p.returncode != 0:
         report(0, "Returning command '%s' failed.  Return code = %d" % (cmdLine, p.returncode))
-        return False
-    mm_parse.generateSolutions(lname, scheme, recordFunction)
+        return -1
+    scount = mm_parse.generateSolutions(lname, scheme, recordFunction)
     if not keepFiles:
         try:
             os.remove(fname)
             os.remove(lname)
         except Exception as ex:
             report(0, "Could not remove files %s and %s (%s)" % (fname, lname, str(ex)))
-    return True
+    return scount
 
 def runScheme(scheme, recordFunction):
     seed = random.randrange(seedLimit)
@@ -356,17 +373,22 @@ def runClient(host, port):
     startTime = datetime.datetime.now()
     while errorCount < errorLimit:
         schemeStart = datetime.datetime.now()
+        if not fixedProbabilities:
+            # Get a new set of probabilities
+            parseABC(findABC())
         s = cli.next()
         if s is None:
             break
         runCount += 1
-        if not runScheme(s, cli.record):
+        scount = runScheme(s, cli.record)
+        if scount < 0:
             errorCount += 1
         now = datetime.datetime.now()
         overallSeconds = deltaSeconds(now-startTime)
         currentSeconds = deltaSeconds(now-schemeStart)
         avg = runCount * 3600.0 / overallSeconds
-        report(1, "%.1f seconds (Average = %1.f runs/hour)" % (currentSeconds, avg))
+        cli.notify(abcString(categoryProbabilities), currentSeconds, scount)
+        report(1, "%.1f seconds (Average = %1.f runs/hour).  Generated %d solutions" % (currentSeconds, avg, scount))
     report(0, "%d schemes tested.  %d errors" % (runCount, errorCount))
     report(0, "%d new schemes recorded.  Average = %.1f secs/scheme" % (cli.generatedCount, cli.incrCount(0)))
     
@@ -379,7 +401,7 @@ def runStandalone(generator):
         if s is None:
             break
         generateCount += 1
-        if not runScheme(s, mm_parse.recordSolution):
+        if runScheme(s, mm_parse.recordSolution) < 0:
             errorCount += 1
     report(0, "%d schemes generated.  %d errors" % (generateCount, errorCount))
 
@@ -411,11 +433,17 @@ def parseABC(abc):
         report(0, "Cannot find 3 percentages of fixed assignments from '%s'" % abc)
         return False
 
+def abcString(categoryProbabilities):
+    plist = [categoryProbabilities[cat] for cat in ('alpha', 'beta', 'gamma')]
+    pctlist = [str(int(p*100)) for p in plist]
+    return ':'.join(pctlist)
+
 #    [-h] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB]
 def run(name, args):
     global timeLimit
     global processingList
     global categoryProbabilities
+    global fixedProbabilities
     global restrictSolutions
     global keepFiles
     host = defaultHost
@@ -449,6 +477,7 @@ def run(name, args):
             timeLimit = int(val)
         elif opt == '-c':
             abc = val
+            fixedProbabilities = True
         elif opt == '-R':
             restrictSolutions = False
         elif opt == '-p':

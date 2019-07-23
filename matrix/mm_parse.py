@@ -4,6 +4,7 @@
 # http://www.algebra.uni-linz.ac.at/research/matrix-multiplication/
 
 import os.path
+import os
 import sys
 import re
 import getopt
@@ -55,6 +56,8 @@ nonHeuleCount = 0
 # How many of the solutions have never been encountered?
 freshCount = 0
 
+# Prefix for subdirectories in generated directory
+directoryPrefix = 'D'
 
 def loadDatabase(databaseDict, databasePathFields, quiet):
     dbname = '/'.join(homePathFields + databasePathFields)
@@ -193,11 +196,29 @@ def generateSignature(scheme):
     signature = "\n".join(sigList)
     return signature
     
+# Pick off characters of file name to use as directory name
+def directoryName(fname):
+    first = 1
+    length = 3
+    if len(fname) < first+length:
+        print("Cannot get directory name from '%s'" % fname)
+        return ""
+    return directoryPrefix + fname[first:length+first]
+
 def recordSolution(scheme, metadata = []):
     fname = scheme.sign() + '.exp'
-    pathFields = generatedPathFields + [fname]
-    path = "/".join(pathFields)
-    fpath = "/".join(homePathFields + pathFields)
+    dirName = directoryName(fname)
+    dirFields = generatedPathFields + [dirName]
+    pathFields = dirFields + [fname]
+    path =  '/'.join(pathFields)
+    dpath = '/'.join(homePathFields + dirFields)
+    fpath = '/'.join(homePathFields + pathFields)
+    if not os.path.exists(dpath):
+        try:
+            os.mkdir(dpath)
+        except Exception as ex:
+            print("Could not create directory '%s' (%s)" % (dpath, str(ex)))
+            return
     try:
         outf = open(fpath, 'w')
     except Exception as ex:
@@ -271,6 +292,7 @@ def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
     if quietMode:
         fields = [iname, str(len(slist)), str(newCount), str(nonHeuleCount), str(freshCount)]
         print("\t".join(fields))
+    return len(slist)
         
 def run(name, args):
     global solutionDict, quietMode

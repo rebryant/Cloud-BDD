@@ -66,7 +66,7 @@ def process(checkCanonicity = False, checkValidity = False):
         dbEntryFields = [sig, str(s.addCount()), s.kernelTerms.sign(), sp]
         dbFile.write("\t".join(dbEntryFields) + "\n")
         count += 1
-        if (count % 100 == 1):
+        if (count % 100 == 0):
             print("Generated %d entries" % count)
     dbFile.close()
     print("Found %d solutions" % count)
