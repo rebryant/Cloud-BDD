@@ -452,7 +452,7 @@ class Circuit:
     # Create counting network for values from 0 up to k
     # Generates destV[l] encodes case where count = l
     # where k = len(destV)-1
-    def countGenerator(self, destV, v, nv):
+    def countGeneratorVector(self, destV, v, nv):
         k = len(destV) - 1
         n = len(v.nodes)
         t = self.tmpVec(k+1)
@@ -474,8 +474,27 @@ class Circuit:
 
     def atMostK(self, dest, v, nv, k):
         t = self.tmpVec(k+1)
-        self.countGenerator(t, v, nv)
+        self.countGeneratorVector(t, v, nv)
         self.orN(dest, t)
+        self.decRefs([t])
+
+    # Create counting network for value k
+    # Generates dest encodes case where count = k
+    def exactlyK(self, dest, v, nv, k):
+        n = len(v.nodes)
+        t = self.tmpVec(k+1)
+        self.assignConstant(t[0], 1)
+        for l in range(1,k+1):
+            self.assignConstant(t[l], 0)
+        for i in range(n-1):
+            # Some of these could be optimized out
+            name = v.nodes[i]
+            nname = nv.nodes[i]        
+            for l in range(k+1,0,-1):
+                self.iteN(t[l], [name, t[l-1], t[l]])
+            self.andN(t[0], [t[0], nname])
+        name = v.nodes[n-1]
+        self.iteN(dest, [name, t[l-1], t[l]])
         self.decRefs([t])
 
     def getBit(self, v, i):

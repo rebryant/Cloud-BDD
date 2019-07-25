@@ -391,6 +391,10 @@ class KernelTerm:
         lstring = "[%.2d]" % self.level if showLevel else ""
         return "%s*%s*%s%s" % (astring, bstring, cstring, lstring)
 
+    # Name for use in symbolic constraint generation
+    def symbol(self):
+        return "kernel-i-%d.j-%d.k-%d.l-%.2d" % (self.i, self.j, self.k, self.level)
+
     def __str__(self):
         return self.generateString()
 
@@ -590,8 +594,6 @@ class MProblem:
             self.ckt.cmdLine("zconvert", circuit.Vec([bn, bn]))
         if check:
             self.ckt.checkConstant(bn, 1)
-        
-
 
     # Helper routines to build up formula encoding all Brent constraints
 
@@ -746,7 +748,109 @@ class MProblem:
         else:
             self.dfGenerator(streamlineNode, check)
 
+    # Define kernel terms symbolically.  Return list of kernel term names for later dereferencing
+    def generateKernels(self):
+        klist = []
+        ijkList = self.iexpand(self.dim)
+        for l in unitRange(self.auxCount):
+            for (i,j,k) in ijkList:
+                klist.append(KernelTerm(i, j, k, l))
+        for k in klist:
+            kname = k.symbol()
+            aname = str(k.alpha())
+            bname = str(k.beta())
+            cname = str(k.gamma())
+            self.ckt.andN(kname, [aname, bname, cname])
+        return klist
 
+    def derefKernels(self, klist):
+        self.ckt.deref(klist)
+
+    def generateUniqueUsage(self, dest):
+        self.ckt.comment("Ensure that each kernel term appears in only one product")
+        ijkList = self.iexpand(self.dim)
+        unodes = { (i,j,k) : "unique-i%d.j%d.k%d" % (i,j,k) for (i,j,k) in ijkList }
+        uvec = circuit.Vec([unodes[(i,j,k)] for (i,j,k) in ijkList])
+        for (i,j,k) in ijkList:
+            klist = [KernelTerm(i,j,k,l).symbol() for l in unitRange(self.auxCount)]
+            nklist = ["!" + kt for kt in klist]
+            self.ckt.exactly1(unodes[(i,j,k)], circuit.Vec(klist), circuit.Vec(nklist))
+        self.ckt.andN(dest, uvec)
+        self.ckt.decRefs([uvec])
+
+    def generateMaxDouble(self, dest):
+        dcount = self.dim[0] * self.dim[1] * self.dim[2] - self.auxCount
+        self.ckt.comment("Ensure that first %d products have two kernel terms, and the remaining have one" % dcount)
+        ijkList = self.iexpand(self.dim)
+        drange = unitRange(dcount)
+        srange = [l+dcount for l in range(self.auxCount - dcount)]
+        dnodes = { l : "double-%.2d" % (l) for l in drange}
+        dvec = [dnodes[l] for l in drange]
+        snodes = { l : "single-%.2d" % l for l in srange }
+        svec = [snodes[l] for l in srange ]
+        uvec = circuit.Vec(dvec + svec)
+        for l in drange:
+            klist = [KernelTerm(i, j, k, l).symbol() for (i,j,k) in ijkList]
+            kvec = circuit.Vec(klist)
+            nklist = ["!" + k for k in klist]
+            nkvec = circuit.Vec(nklist)
+            self.ckt.exactlyK(dnodes[l], kvec, nkvec, 2)
+        for l in srange:
+            klist = [KernelTerm(i, j, k, l).symbol() for (i,j,k) in ijkList]
+            kvec = circuit.Vec(klist)
+            nklist = ["!" + k for k in klist]
+            nkvec = circuit.Vec(nklist)
+            self.ckt.exactly1(snodes[l], klist, nklist, 2)
+        self.ckt.andN(dest, uvec)
+        self.ckt.decRefs([uvec])
+
+    def generateSingletonExclusion(self, dest):
+        self.ckt.comment("Enforce singleton exclusion property")
+        ijkList = self.iexpand(self.dim)
+        xNodes = { l : "exclude-%.2d" for l in unitRange(self.auxCount)}
+        xvec = circuit.Vec([xNodes[l] for l in unitRange(self.auxCount)])
+        for l in self.auxCount:
+            xlNodes = { (i,j,k) : "exclude-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
+            xlaNodes = { (i,j,k) : "exclude-alpha-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
+            xlbNodes = { (i,j,k) : "exclude-beta-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
+            xlcNodes = { (i,j,k) : "exclude-gamma-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
+            xlvec = circuit.Vec([xlNodes[(i,j,k)] for (i,j,k) in ijkList])
+            for (i,j,k) in ijkList:
+                kernel = KernelTerm(i, j, k, l)
+                kname = kernel.symbol()
+                xijlist = [(i1,i2) for (i1,i2) in self.iexpand([self.dim[0], self.dim[1]])  if (i1 != i or i2 != j)]
+                xjklist = [(j1,j2) for (j1,j2) in self.iexpand([self.dim[1], self.dim[2]])  if (j1 != j or j2 != k)]
+                xiklist = [(k1,k2) for (k1,k2) in self.iexpand([self.dim[0], self.dim[2]])  if (k1 != i or k2 != k)]
+                alist = [str(BrentVariable('alpha', i1, i2, l)) for (i1,i2) in xijlist]
+                anode = circuit.Node(xlaNodes[(i,j,k)])
+                self.ckt.orN(anode, alist)
+                blist = [str(BrentVariable('beta', j1, j2, l)) for (j1,j2) in xjklist]                
+                bnode = circuit.Node(xlbNodes[(i,j,k)])
+                self.ckt.orN(bnode, blist)
+                clist = [str(BrentVariable('gamma', k1, k2, l)) for (k1,k2) in xiklist]
+                cnode = circuit.Node(xlcNodes[(i,j,k)])
+                self.ckt.orN(cnode, clist)
+                nargs = [kname, str(anode), str(bnode), str(cnode)]
+                args = ['!' + arg for arg in nargs]
+                self.self.ckt.orN(xlNodes[(i,j,k)], args)
+                self.ckt.decRefs([anode, bnode, cnode])
+            self.ckt.andN(xNodes[l], xlvec)
+            self.ckt.decRefs([xlvec])
+        self.ckt.andN(dest, xvec)
+        self.ckt.decRefs([xvec])
+                
+    def symbolicStreamline(self):
+        streamline = circuit.Node("streamline")
+        uniqueUsage = circuit.Node("unique-usage")
+        maxDouble = circuit.Node("max-double")
+        singleton = circuit.Node("singleton-exclusion")
+        self.generateKernels()
+        self.generateUnique(uniqueUsage)
+        self.generateMaxDouble(maxDouble)
+        self.generateSingletonExclusion(singleton)
+        self.andN(streamline, [uniqueUsage, maxDouble, singleton])
+        self.ckt.decRefs([uniqueUsage, maxDouble, singleton])
+        self.derefKernels()
 
 # Describe encoding of matrix multiplication
 class MScheme(MProblem):
