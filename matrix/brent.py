@@ -750,6 +750,7 @@ class MProblem:
 
     # Define kernel terms symbolically.  Return list of kernel term names for later dereferencing
     def generateKernels(self):
+        self.ckt.comment("Define kernel terms")
         klist = []
         ijkList = self.iexpand(self.dim)
         for l in unitRange(self.auxCount):
@@ -844,13 +845,16 @@ class MProblem:
         uniqueUsage = circuit.Node("unique-usage")
         maxDouble = circuit.Node("max-double")
         singleton = circuit.Node("singleton-exclusion")
-        self.generateKernels()
+        self.ckt.comment("Generate symbolic streamline formula constraining form of solution")
+        klist = self.generateKernels()
         self.generateUnique(uniqueUsage)
         self.generateMaxDouble(maxDouble)
         self.generateSingletonExclusion(singleton)
+        self.ckt.comment("Complete symbolic streamline formula")
         self.andN(streamline, [uniqueUsage, maxDouble, singleton])
         self.ckt.decRefs([uniqueUsage, maxDouble, singleton])
-        self.derefKernels()
+        self.derefKernels(klist)
+        return streamline
 
 # Describe encoding of matrix multiplication
 class MScheme(MProblem):
@@ -1128,7 +1132,7 @@ class MScheme(MProblem):
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False, breadthFirst = False, levelList = None, useZdd = False):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False, breadthFirst = False, levelList = None, useZdd = False, symbolicStreamline = False):
         plist = list(categoryProbabilities.values())
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
@@ -1145,6 +1149,11 @@ class MScheme(MProblem):
         streamlineNode = None
         if excludeSingleton:
             streamlineNode = self.generateStreamline()
+        if symbolicStreamline:
+            if excludeSingleton:
+                print("WARNING: Can't enforce both fixed streamline and symbolic streamline")
+            else:
+                streamlineNode = self.generateSymbolicStreamline()
         kset = self.kernelTerms if fixKV else None
         self.generateBrentConstraints(kset, streamlineNode = streamlineNode, check=isFixed, breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd)
         bv = circuit.Vec([BrentTerm()])

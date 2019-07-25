@@ -11,10 +11,11 @@ import circuit
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-k] [-e] [(-b|-B LLIST)] [-z] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
+    print "Usage %s [-h] [-k] [-e|-E] [(-b|-B LLIST)] [-z] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
     print " -e               Generate streamline constraints based on singleton exclusion property"
+    print " -E               Generate symbolic streamline formula constraining solution form"
     print " -b               Combine products in breadth-first order"
     print " -B LLIST         Use breadth-first order, combining at levels specified as comma-separated list"
     print " -z               Use a ZDD representation"
@@ -37,6 +38,7 @@ def run(name, args):
     pname = None
     fixKV = False
     excludeSingleton = False
+    symbolicStreamline = False
     breadthFirst = False
     levelList = brent.unitRange(6)
     useZdd = False
@@ -44,7 +46,7 @@ def run(name, args):
     seed = 0
 
     
-    optlist, args = getopt.getopt(args, 'hkebB:zS:t:c:s:p:n:o:')
+    optlist, args = getopt.getopt(args, 'hkeEbB:zS:t:c:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -53,6 +55,8 @@ def run(name, args):
             fixKV = True
         elif opt == '-e':
             excludeSingleton = True
+        elif opt == '-E':
+            symbolicStreamline = True
         elif opt == '-b':
             breadthFirst = True
         elif opt == '-B':
@@ -132,7 +136,12 @@ def run(name, args):
         except brent.MatrixException as ex:
             print "Parse of file '%s' failed: %s" % (pname, str(ex))
             return
-    s.generateProgram(categoryProbabilities, seed = seed, timeLimit = timeLimit, fixKV = fixKV, excludeSingleton = excludeSingleton, breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd)
+    if excludeSingleton and symbolicSingleton:
+        print("ERROR.  Cannot enforce both fixed and symbolic streamline constraints")
+    else:
+        s.generateProgram(categoryProbabilities, seed = seed, timeLimit = timeLimit, fixKV = fixKV, 
+                          excludeSingleton = excludeSingleton, 
+                          breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd, symbolicStreamline = symbolicStreamline)
     
     
             
