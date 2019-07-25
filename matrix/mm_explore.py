@@ -162,6 +162,7 @@ class Server:
     server = None
     recordedCount = 0
     startTime = None
+    solutionDict = {}
 
     def __init__(self, port, generator):
         host = ''
@@ -172,6 +173,7 @@ class Server:
         self.server.register_function(self.notify, "notify")
         self.recordedCount = 0
         self.startTime = None
+        self.solutionDict = {}
     
     def next(self):
         # Don't start timing until first request received
@@ -191,11 +193,12 @@ class Server:
         hash = scheme.sign()
         report(3, "Received bundle from client giving scheme %s" % hash)
         signature = scheme.signature()
-        found = signature in mm_parse.solutionDict or hash in mm_parse.heuleDatabaseDict or hash in mm_parse.generatedDatabaseDict
+        found = signature in self.solutionDict or hash in mm_parse.heuleDatabaseDict or hash in mm_parse.generatedDatabaseDict
         if found:
             report(2, "Solution %s duplicates existing one" % hash)
             return False
         else:
+            self.solutionDict[signature] = hash
             path = mm_parse.recordSolution(scheme, metadata)
             self.recordedCount += 1
             self.generator.addCandidate(path)

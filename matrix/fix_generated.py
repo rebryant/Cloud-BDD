@@ -36,6 +36,8 @@ def process(checkCanonicity = False, checkValidity = False):
         print("Couldn't open database file '%s' to write (%s)" % (dbPath, str(ex)))
         return
 
+    dbfile.write('\t'.join(mm_parse.fieldTitles) + '\n')
+
     fields = mm_parse.homePathFields + mm_parse.generatedPathFields
     path = "/".join(fields)
     template = path + "/*/*.exp"

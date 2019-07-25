@@ -31,6 +31,7 @@ quietMode = False
 
 # Fields in solution database
 fieldIndex = {'hash' : 0, 'additions' : 1, 'kernel hash' : 2, 'path' : 3}
+fieldTitles = ["Hash", "Adds", "K Hash", "Path"]
 databaseConverters = [str, int, str, str]
 # Mapping from hash to list of fields
 heuleDatabaseDict = {}
@@ -68,6 +69,7 @@ def loadDatabase(databaseDict, databasePathFields, quiet):
         return
     first = True
     lineNumber = 0
+    dups = 0
     for line in dbfile:
         lineNumber += 1
         if first:
@@ -86,11 +88,34 @@ def loadDatabase(databaseDict, databasePathFields, quiet):
         except Exception as ex:
             print("Bad database format.  Couldn't convert entry (%s)" % str(ex))
             break
-        databaseDict[entry[0]] = entry
+        if entry[0] in databaseDict:
+            dups += 1
+        else:
+            databaseDict[entry[0]] = entry
     dbfile.close()
+    dbname = databasePathFields[-1]
     if not quiet:
-        print("Database %s contains %d entries" % (databasePathFields[-1], len(databaseDict)))
+        print("Database %s contains %d entries" % (dbname, len(databaseDict)))
+    if dups > 0:
+        print("WARNING.  Database %s contains %d duplicate entries" % (dbname, dups))
         
+def restoreDatabase(databaseDict, databasePathFields):
+    dbname = '/'.join(homePathFields + databasePathFields)
+    try:
+        dbfile = open(dbname, 'w')
+    except Exception as ex:
+        print("Couldn't open database file '%s' (%s)" % (dbname, str(ex)))
+        return
+    dbfile.write('\t'.join(fieldTitles) + '\n')
+    count = 0
+    for hash in databaseDict.keys():
+        entry = databaseDict[hash]
+        fields = [str(e) for e in entry]
+        dbfile.write('\t'.join(fields) + '\n')
+        count += 1
+    dbfile.close()
+    print("Wrote %d entries to database %s" % (count, dbname))
+
 
 # Extract the support information from file:
 def getSupport(fname):
