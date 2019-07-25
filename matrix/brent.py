@@ -748,7 +748,8 @@ class MProblem:
         else:
             self.dfGenerator(streamlineNode, check)
 
-    # Define kernel terms symbolically.  Return list of kernel term names for later dereferencing
+    # Define kernel terms symbolically.
+    # Return list of kernel term names for later dereferencing
     def generateKernels(self):
         self.ckt.comment("Define kernel terms")
         klist = []
@@ -771,7 +772,7 @@ class MProblem:
         self.ckt.comment("Ensure that each kernel term appears in only one product")
         ijkList = self.iexpand(self.dim)
         unodes = { (i,j,k) : "unique-i%d.j%d.k%d" % (i,j,k) for (i,j,k) in ijkList }
-        uvec = circuit.Vec([unodes[(i,j,k)] for (i,j,k) in ijkList])
+        uvec = self.ckt.vec([unodes[(i,j,k)] for (i,j,k) in ijkList])
         for (i,j,k) in ijkList:
             klist = [KernelTerm(i,j,k,l).symbol() for l in unitRange(self.auxCount)]
             nklist = ["!" + kt for kt in klist]
@@ -784,16 +785,16 @@ class MProblem:
         self.ckt.comment("Ensure that first %d products have two kernel terms, and the remaining have one" % dcount)
         ijkList = self.iexpand(self.dim)
         drange = unitRange(dcount)
-        srange = [l+dcount for l in range(self.auxCount - dcount)]
+        srange = [l+dcount+1 for l in range(self.auxCount - dcount)]
         dnodes = { l : "double-%.2d" % (l) for l in drange}
         dvec = [dnodes[l] for l in drange]
         snodes = { l : "single-%.2d" % l for l in srange }
         svec = [snodes[l] for l in srange ]
-        uvec = circuit.Vec(dvec + svec)
+        uvec = self.ckt.vec(dvec + svec)
         for l in drange:
             klist = [KernelTerm(i, j, k, l).symbol() for (i,j,k) in ijkList]
             kvec = circuit.Vec(klist)
-            nklist = ["!" + k for k in klist]
+            nklist = ["!" + kt for kt in klist]
             nkvec = circuit.Vec(nklist)
             self.ckt.exactlyK(dnodes[l], kvec, nkvec, 2)
         for l in srange:
@@ -801,21 +802,24 @@ class MProblem:
             kvec = circuit.Vec(klist)
             nklist = ["!" + k for k in klist]
             nkvec = circuit.Vec(nklist)
-            self.ckt.exactly1(snodes[l], klist, nklist, 2)
+            self.ckt.exactly1(snodes[l], kvec, nkvec)
         self.ckt.andN(dest, uvec)
         self.ckt.decRefs([uvec])
 
     def generateSingletonExclusion(self, dest):
         self.ckt.comment("Enforce singleton exclusion property")
         ijkList = self.iexpand(self.dim)
-        xNodes = { l : "exclude-%.2d" for l in unitRange(self.auxCount)}
-        xvec = circuit.Vec([xNodes[l] for l in unitRange(self.auxCount)])
-        for l in self.auxCount:
+        xNodes = { l : "exclude-%.2d" % (l) for l in unitRange(self.auxCount)}
+        xvec = self.ckt.vec([xNodes[l] for l in unitRange(self.auxCount)])
+        for l in unitRange(self.auxCount):
             xlNodes = { (i,j,k) : "exclude-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
             xlaNodes = { (i,j,k) : "exclude-alpha-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
             xlbNodes = { (i,j,k) : "exclude-beta-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
             xlcNodes = { (i,j,k) : "exclude-gamma-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
-            xlvec = circuit.Vec([xlNodes[(i,j,k)] for (i,j,k) in ijkList])
+            xlVec = self.ckt.vec([xlNodes[(i,j,k)] for (i,j,k) in ijkList])
+            xlaVec = self.ckt.vec([xlaNodes[(i,j,k)] for (i,j,k) in ijkList])
+            xlbVec = self.ckt.vec([xlbNodes[(i,j,k)] for (i,j,k) in ijkList])
+            xlcVec = self.ckt.vec([xlcNodes[(i,j,k)] for (i,j,k) in ijkList])
             for (i,j,k) in ijkList:
                 kernel = KernelTerm(i, j, k, l)
                 kname = kernel.symbol()
@@ -833,10 +837,10 @@ class MProblem:
                 self.ckt.orN(cnode, clist)
                 nargs = [kname, str(anode), str(bnode), str(cnode)]
                 args = ['!' + arg for arg in nargs]
-                self.self.ckt.orN(xlNodes[(i,j,k)], args)
+                self.ckt.orN(xlNodes[(i,j,k)], args)
                 self.ckt.decRefs([anode, bnode, cnode])
-            self.ckt.andN(xNodes[l], xlvec)
-            self.ckt.decRefs([xlvec])
+            self.ckt.andN(xNodes[l], xlVec)
+            self.ckt.decRefs([xlVec, xlaVec, xlbVec, xlcVec])
         self.ckt.andN(dest, xvec)
         self.ckt.decRefs([xvec])
                 
@@ -1086,7 +1090,7 @@ class MScheme(MProblem):
     # Generate streamline constraints based on singleton exclusion
     def generateStreamline(self):
         self.ckt.comment("Generate streamline conditions based on singleton exclusion property")
-        snode = self.ckt.addNode(circuit.Node("streamline"))
+        snode = self.ckt.node("streamline")
         allLiterals = self.assignment.literals()
         sk = self.kernelTerms.groupings(minCount = 1, maxCount = 1)
         scount = len(sk)

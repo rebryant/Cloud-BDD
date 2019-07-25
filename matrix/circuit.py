@@ -62,7 +62,6 @@ class Vec:
     def __init__(self, nodeList = []):
         self.nodes = [str(n) for n in nodeList]
         self.refCnt = 1
-        
 
     def addRef(self):
         self.refCnt += 1
@@ -185,6 +184,10 @@ class Circuit:
         nd = Node(name)
         self.addNode(nd)
         return nd
+
+    def vec(self, nodeList):
+        v = Vec(nodeList)
+        return self.addVec(v)
 
     def tmpNode(self):
         name = self.uniq.new()
@@ -490,7 +493,7 @@ class Circuit:
             # Some of these could be optimized out
             name = v.nodes[i]
             nname = nv.nodes[i]        
-            for l in range(k+1,0,-1):
+            for l in range(k,0,-1):
                 self.iteN(t[l], [name, t[l-1], t[l]])
             self.andN(t[0], [t[0], nname])
         name = v.nodes[n-1]
