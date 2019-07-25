@@ -497,7 +497,7 @@ class Circuit:
                 self.iteN(t[l], [name, t[l-1], t[l]])
             self.andN(t[0], [t[0], nname])
         name = v.nodes[n-1]
-        self.iteN(dest, [name, t[l-1], t[l]])
+        self.iteN(dest, [name, t[k-1], t[k]])
         self.decRefs([t])
 
     def getBit(self, v, i):

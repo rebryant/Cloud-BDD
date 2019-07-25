@@ -763,10 +763,11 @@ class MProblem:
             bname = str(k.beta())
             cname = str(k.gamma())
             self.ckt.andN(kname, [aname, bname, cname])
-        return klist
+        kvec = self.ckt.vec([k.symbol() for k in klist])
+        return kvec
 
-    def derefKernels(self, klist):
-        self.ckt.deref(klist)
+    def derefKernels(self, kvec):
+        self.ckt.decRefs([kvec])
 
     def generateUniqueUsage(self, dest):
         self.ckt.comment("Ensure that each kernel term appears in only one product")
@@ -808,10 +809,12 @@ class MProblem:
 
     def generateSingletonExclusion(self, dest):
         self.ckt.comment("Enforce singleton exclusion property")
+        dcount = self.dim[0] * self.dim[1] * self.dim[2] - self.auxCount
+        srange = [l+dcount+1 for l in range(self.auxCount - dcount)]
         ijkList = self.iexpand(self.dim)
-        xNodes = { l : "exclude-%.2d" % (l) for l in unitRange(self.auxCount)}
-        xvec = self.ckt.vec([xNodes[l] for l in unitRange(self.auxCount)])
-        for l in unitRange(self.auxCount):
+        xNodes = { l : "exclude-%.2d" % (l) for l in srange}
+        xvec = self.ckt.vec([xNodes[l] for l in srange])
+        for l in srange:
             xlNodes = { (i,j,k) : "exclude-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
             xlaNodes = { (i,j,k) : "exclude-alpha-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
             xlbNodes = { (i,j,k) : "exclude-beta-%.2d.i-%d.j-%d.k-%d" % (l, i, j, k) for (i,j,k) in ijkList}
@@ -845,17 +848,17 @@ class MProblem:
         self.ckt.decRefs([xvec])
                 
     def symbolicStreamline(self):
-        streamline = circuit.Node("streamline")
-        uniqueUsage = circuit.Node("unique-usage")
-        maxDouble = circuit.Node("max-double")
-        singleton = circuit.Node("singleton-exclusion")
+        streamline = self.ckt.node("streamline")
+        uniqueUsage = self.ckt.node("unique-usage")
+        maxDouble = self.ckt.node("max-double")
+        singleton = self.ckt.node("singleton-exclusion")
         self.ckt.comment("Generate symbolic streamline formula constraining form of solution")
         klist = self.generateKernels()
-        self.generateUnique(uniqueUsage)
+        self.generateUniqueUsage(uniqueUsage)
         self.generateMaxDouble(maxDouble)
         self.generateSingletonExclusion(singleton)
         self.ckt.comment("Complete symbolic streamline formula")
-        self.andN(streamline, [uniqueUsage, maxDouble, singleton])
+        self.ckt.andN(streamline, [uniqueUsage, maxDouble, singleton])
         self.ckt.decRefs([uniqueUsage, maxDouble, singleton])
         self.derefKernels(klist)
         return streamline
@@ -1157,7 +1160,7 @@ class MScheme(MProblem):
             if excludeSingleton:
                 print("WARNING: Can't enforce both fixed streamline and symbolic streamline")
             else:
-                streamlineNode = self.generateSymbolicStreamline()
+                streamlineNode = self.symbolicStreamline()
         kset = self.kernelTerms if fixKV else None
         self.generateBrentConstraints(kset, streamlineNode = streamlineNode, check=isFixed, breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd)
         bv = circuit.Vec([BrentTerm()])
