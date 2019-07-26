@@ -27,7 +27,7 @@ import mm_parse
 import circuit
 
 def usage(name):
-    print("Usage %s [-h] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB] [-l LIMIT]")
+    print("Usage %s [-h] [-k] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB] [-l LIMIT]")
     print("   -h               Print this message")
     print("  Server options")
     print("   -P PORT          Set up server on specified port")
@@ -36,11 +36,11 @@ def usage(name):
     print("  Local & server options")
     print("   -R               Allow unrestricted solution types")
     print("   -l LIMIT         Set limit on number of schemes generated")
+    print("   -k               Put more weight on underrepresented kernels")
     print("  Local & client options")
     print("   -t SECS          Set runtime limit (in seconds)")
     print("   -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class")
     print("   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)N")
-    print("   -k               Don't delete command and log files")
     print("   -v VERB          Set verbosity level")
     sys.exit(0)
 
@@ -74,6 +74,8 @@ errorLimit = 1000
 restrictSolutions = True
 keepFiles = False
 
+balanceKernels = False
+
 dim = (3, 3, 3)
 auxCount = 27
 
@@ -101,7 +103,11 @@ def setVerbLevel(level):
 # Generate schemes for further processing
 class SchemeGenerator:
 
+    balanceKernels = False
+    # Flat weighting mode: List of all solutions.
+    # Kernel balancing mode.  Index candidates by kernel
     candidates = []
+    
     dim = (3,3,3)
     auxCount = 23
     permute = True
@@ -110,20 +116,55 @@ class SchemeGenerator:
     limit = 100
     count = 0
 
-    def __init__(self, dim, auxCount, permute = True, limit = 100):
+    def __init__(self, dim, auxCount, permute = True, balanceKernels = False, limit = 10000000):
         self.dim = dim
         self.auxCount = auxCount
         self.permute = permute
         self.tryLimit = limit
         self.count = 0
         self.limit = limit
+        self.balanceKernels = balanceKernels
         db = {}
         mm_parse.loadDatabase(db, mm_parse.generatedDatabasePathFields, True)
         mm_parse.loadDatabase(db, mm_parse.heuleDatabasePathFields, True)
-        report(1, "Loaded %d entries into database" % len(db))
-        self.candidates = [v[mm_parse.fieldIndex['path']] for v in db.values()]
+        if self.balanceKernels:
+            kcount = {}
+            tcount = 0
+            self.candidates = {}
+            for v in db.values():
+                hash = v[mm_parse.fieldIndex['kernel hash']]
+                path = v[mm_parse.fieldIndex['path']]
+                if hash in self.candidates:
+                    self.candidates[hash].append(path)
+                    kcount[hash] += 1
+                else:
+                    self.candidates[hash] = [path]
+                    kcount[hash] = 1
+            report(1, "%d candidates, %d kernels in database." % (len(db), len(kcount)))
+            for hash in kcount.keys():
+                report(2, "\t%s\t%d" % (hash, kcount[hash]))
+        else:
+            self.candidates = [v[mm_parse.fieldIndex['path']] for v in db.values()]
+            report(1, "%d candidates in database." % len(db))
         self.vpList = [brent.ijk2var(p) for p in brent.allPermuters(list(range(3)))]
         
+    def chooseCandidate(self):
+        if self.balanceKernels:
+            weights = [(hash, 1.0/(1+len(self.candidates[hash]))) for hash in self.candidates.keys()]
+            total = sum([wt[1] for wt in weights])
+            cval = random.random() * total
+            accum = 0.0
+            for i in range(len(self.candidates)):
+                hash = weights[i][0]
+                wt = weights[i][1]
+                accum += wt
+                if cval <= accum:
+                    report(3, "Choosing candidate with hash %s, weight %f/%f" % (hash, wt, total))
+                    return random.choice(self.candidates[hash])
+            report(0, "Selection error.  Reach accumulated value %f looking for total %f" % (accum, total))
+        else:
+            return random.choice(self.candidates)
+
     def select(self):
         if self.count >= self.limit:
             if self.count == self.limit:
@@ -131,7 +172,7 @@ class SchemeGenerator:
             return None
         self.count += 1
         for t in range(self.tryLimit):
-            p = random.choice(self.candidates)
+            p = self.chooseCandidate()
             fields = homePathFields + p.split('/')
             path = "/".join(fields)
             s = brent.MScheme(self.dim, self.auxCount, None)
@@ -449,13 +490,16 @@ def run(name, args):
     global fixedProbabilities
     global restrictSolutions
     global keepFiles
+    global balanceKernels
     host = defaultHost
     port = defaultPort
     isServer = False
     isClient = False
     vlevel = 1
-    limit = 100
+    limit = 100000000
     abc = findABC()
+
+         
 
     optlist, args = getopt.getopt(args, 'hkP:H:Rt:c:p:l:v:')
     for (opt, val) in optlist:
@@ -463,7 +507,7 @@ def run(name, args):
             usage(name)
             return
         if opt == '-k':
-            keepFiles = True
+            balanceKernels = True
         elif opt == '-P':
             isServer = True
             port = int(val)
@@ -498,7 +542,7 @@ def run(name, args):
     if isClient:
         runClient(host, port)
     else:
-        generator = SchemeGenerator(3, 23, permute = True, limit = limit)
+        generator = SchemeGenerator(3, 23, permute = True, balanceKernels = balanceKernels, limit = limit)
         if isServer:
             runServer(port, generator)
         else:
