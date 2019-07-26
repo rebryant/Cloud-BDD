@@ -71,6 +71,9 @@ categoryProbabilities = {'alpha':0.0, 'beta':0.0, 'gamma':1.0}
 seedLimit = 100
 errorLimit = 1000
 
+# Maximum number of entries in server history list
+historyLimit = 250
+
 restrictSolutions = True
 keepFiles = False
 
@@ -192,8 +195,16 @@ class SchemeGenerator:
         report(0, "Couldn't find any candidates after %d tries" % self.tryLimit)
         return None
 
-    def addCandidate(self, path):
-        self.candidates.append(path)
+    def addCandidate(self, scheme, path):
+        if self.balanceKernels:
+            khash = scheme.kernelTerms.sign()
+            if khash in self.candidates:
+                self.candidates[khash].append(path)
+            else:
+                report(1, "New kernel encountered.  Hash = %s" % khash)
+                self.candidates[khash] = [hash]
+        else:
+            self.candidates.append(path)
 
     def countCandidates(self):
         return len(self.candidates)
@@ -204,6 +215,13 @@ class Server:
     recordedCount = 0
     startTime = None
     solutionDict = {}
+    # List with entries of form (time, solutionCount, newSchemeCount)
+    # Limited to length of historyLimit
+    solutionHistory = []
+    # Total number of solutions in history
+    epochSolutions = 0
+    # Total number of generated schemes in history
+    epochGenerated = 0
 
     def __init__(self, port, generator):
         host = ''
@@ -215,6 +233,10 @@ class Server:
         self.recordedCount = 0
         self.startTime = None
         self.solutionDict = {}
+        self.solutionHistory = []
+        self.epochSolutions = 0
+        self.epochGenerated = 0
+
     
     def next(self):
         # Don't start timing until first request received
@@ -242,7 +264,7 @@ class Server:
             self.solutionDict[signature] = hash
             path = mm_parse.recordSolution(scheme, metadata)
             self.recordedCount += 1
-            self.generator.addCandidate(path)
+            self.generator.addCandidate(scheme, path)
             dt = datetime.datetime.now() - self.startTime
             secs = deltaSeconds(dt)
             prate = self.recordedCount * 3600.0 / secs
@@ -251,9 +273,21 @@ class Server:
             return True
 
     def notify(self, abc, secs, scount, gcount):
-        crate = 100.0 * float(gcount)/(scount-1) if scount > 1 else 0.0
-        grate = float(gcount) * 3600.0 / secs if secs > 0 else 0.0
-        report(1, "Generation with probs %s.  Time = %.2f secs. Solutions = %d.  New Schemes = %d (%.1f%% of solutions).  Generation rate = %.1f schemes/hour"% (abc, secs, scount, gcount, crate, grate))
+        t = datetime.datetime.now()
+        self.solutionHistory.append((t, scount, gcount))
+        self.epochSolutions += max(0, scount-1)
+        self.epochGenerated += gcount
+        if len(self.solutionHistory) > historyLimit:
+            fentry = self.solutionHistory[0]
+            self.epochSolutions -= fentry[1]
+            self.epochGenerated -= fentry[2]
+            self.solutionHistory = self.solutionHistory[1:]
+        elapsed = deltaSeconds(t - self.solutionHistory[0][0]) / 3600.0
+        if elapsed > 0 and self.epochSolutions > 0:
+            gpct = 100.0 * float(self.epochGenerated)/self.epochSolutions
+            srate = self.epochSolutions / elapsed
+            grate = self.epochGenerated / elapsed
+            report(2, "Averages: %.1f solutions / hour.  %.1f new schemes / hour.  Success rate = %.1f%%" % (srate, grate, gpct))
         return True
 
     def run(self):

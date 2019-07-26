@@ -98,8 +98,17 @@ def loadDatabase(databaseDict, databasePathFields, quiet):
         print("Database %s contains %d entries" % (dbname, len(databaseDict)))
     if dups > 0:
         print("WARNING.  Database %s contains %d duplicate entries" % (dbname, dups))
+
+def subtractFromDatabase(db, dbr):
+    count = 0
+    for hash in dbr.keys():
+        if hash in db:
+            count += 1
+            del db[hash]
+    print("%d entries removed" % count)
+    
         
-def restoreDatabase(databaseDict, databasePathFields):
+def restoreDatabase(databaseDict, databasePathFields, rehash = False, dim = (3,3,3), auxCount = 23):
     dbname = '/'.join(homePathFields + databasePathFields)
     try:
         dbfile = open(dbname, 'w')
@@ -108,8 +117,18 @@ def restoreDatabase(databaseDict, databasePathFields):
         return
     dbfile.write('\t'.join(fieldTitles) + '\n')
     count = 0
+    if rehash:
+        ckt = circuit.Circuit()
     for hash in databaseDict.keys():
         entry = databaseDict[hash]
+        if rehash:
+            path = entry[fieldIndex['path']]
+            try:
+                scheme = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
+            except Exception as ex:
+                print("Couldn't recover scheme from file %s (%s)" % (path, str(ex)))
+                continue
+            entry[fieldIndex['hash']] = scheme.sign()
         fields = [str(e) for e in entry]
         dbfile.write('\t'.join(fields) + '\n')
         count += 1
