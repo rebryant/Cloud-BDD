@@ -85,15 +85,17 @@ def processEntry(e):
     hash = sc.sign()
     if hash in hdb:
         if not quietMode:
-            print("Old scheme %s maps to Heule scheme %s" % (ohash, hash))
+            print("Scheme %s isomorphic to Heule scheme %s" % (ohash, hash))
         recordTranslation(ohash, hash)
         return False
     if hash in ndb:
         if not quietMode:
-            print("Old scheme %s maps to generated scheme %s" % (ohash, hash))
+            print("Scheme %s isomorphic to generated scheme %s" % (ohash, hash))
         recordTranslation(ohash, hash)
         return False
-    mm_parse.recordSolution(sc, metadata = ["Updated version of scheme with hash %s" % ohash])
+    npath = mm_parse.recordSolution(sc, metadata = ["Updated version of scheme with hash %s" % ohash])
+    ne = [sc.sign(), str(sc.addCount()), sc.kernelTerms.sign(), npath]
+    ndb[hash] = ne
     recordTranslation(ohash, hash)
     if not quietMode:
         if ohash == hash:
