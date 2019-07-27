@@ -187,7 +187,7 @@ class SchemeGenerator:
                 continue
             if restrictSolutions and not (s.obeysUniqueUsage() and s.obeysMaxDouble() and s.obeysSingletonExclusion()):
                 continue
-            report(2, "Returning scheme from file '%s'" % p)
+            report(2, "Returning scheme %s from file '%s'" % (s.sign(), p))
             if self.permute:
                 vp = random.choice(self.vpList)
                 s = s.permute(variablePermuter = vp)
@@ -493,7 +493,7 @@ def runStandalone(generator):
         generateCount += 1
         if runScheme(s, mm_parse.recordSolution) < 0:
             errorCount += 1
-    report(0, "%d schemes generated.  %d errors" % (generateCount, errorCount))
+    report(0, "%d command files generated.  %d errors" % (generateCount, errorCount))
 
 def findABC():
     return random.choice(abcList)
