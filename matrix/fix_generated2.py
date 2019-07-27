@@ -45,12 +45,15 @@ mm_parse.loadDatabase(db, oldGeneratedDatabasePathFields, False)
 tname = '/'.join(mm_parse.homePathFields + translationPathFields)
 if os.path.exists(tname):
     tfile = open(tname, 'r')
+    tcount = 0
     for line in tfile:
         line = brent.trim(line)
         fields = line.split()
         if len(fields) == 2:
             translationDict[fields[0]] = fields[1]
+        tcount += 1
     tfile.close()
+    print("Already have processed %d entries" % tcount)
 
 ndbname = '/'.join(mm_parse.homePathFields + mm_parse.generatedDatabasePathFields)
 if os.path.exists(ndbname):
@@ -93,7 +96,10 @@ def processEntry(e):
     mm_parse.recordSolution(sc, metadata = ["Updated version of scheme with hash %s" % ohash])
     recordTranslation(ohash, hash)
     if not quietMode:
-        print("Scheme %s mapped to fresh scheme %s" % (ohash, hash))
+        if ohash == hash:
+            print("Scheme %s copied over" % (hash))
+        else:
+            print("Scheme %s mapped to fresh scheme %s" % (ohash, hash))
     return True
 
 def process(limit):
