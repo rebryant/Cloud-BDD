@@ -75,6 +75,7 @@ errorLimit = 1000
 historyLimit = 250
 
 restrictSolutions = True
+
 keepFiles = False
 
 balanceKernels = False
@@ -421,7 +422,18 @@ def runCommand(scheme, froot, method, recordFunction):
         report(0, "Returning command '%s' failed.  Return code = %d" % (cmdLine, p.returncode))
         return -1
     scount = mm_parse.generateSolutions(lname, scheme, recordFunction)
-    if not keepFiles:
+    if keepFiles:
+        # Save copy of source solution
+        sname = scheme.sign() + ".exp"
+        try:
+            outf = open(sname, 'w')
+        except Exception:
+            report(0, "Couldn't save scheme file %s" % sname)
+            outf = None
+        if outf is not None:
+            scheme.printPolynomial(outf, metadata = ["Used in the generation of %s" % fname])
+            outf.close()
+    else:
         try:
             os.remove(fname)
             os.remove(lname)

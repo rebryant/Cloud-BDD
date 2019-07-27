@@ -958,13 +958,36 @@ class MScheme(MProblem):
         return ok
 
     # Return scheme with levels reordered to canonize kernels
-    def canonize(self):
+    def oldCanonize(self):
         if self.hasBeenCanonized:
             return self
         (k, variablePermuter, indexPermuter, levelPermuter) = self.kernelTerms.canonize()
         result = self.permute(variablePermuter, indexPermuter, levelPermuter)
         result.hasBeenCanonized = True
         return result
+
+    def canonize(self):
+        if self.hasBeenCanonized:
+            return self
+        variablePermuterList = allPermuters(['alpha', 'beta', 'gamma'])
+        indexPermuterList = allPermuters(unitRange(self.dim[0]))
+        ksigbest = None
+        sbest = None
+        ssigbest = None
+        for vp in variablePermuterList:
+            for ip in indexPermuterList:
+                sp = self.permute(variablePermuter = vp, indexPermuter = ip).levelCanonize()
+                ssig = sp.signature()
+                k = sp.kernelTerms
+                ksig = k.signature()
+                if sbest is not None:
+                    if ksig > ksigbest or (ksig == ksigbest and ssig > ssigbest): 
+                        continue
+                ksigbest = ksig
+                sbest = sp
+                ssigbest = ssig
+        return sbest
+        
 
     def levelCanonize(self):
         (k, levelPermuter) = self.kernelTerms.levelCanonize()
