@@ -84,13 +84,11 @@ def processEntry(e):
     sc = s.canonize()
     hash = sc.sign()
     if hash in hdb:
-        if not quietMode:
-            print("Scheme %s isomorphic to Heule scheme %s" % (ohash, hash))
+        print("Scheme %s isomorphic to Heule scheme %s" % (ohash, hash))
         recordTranslation(ohash, hash)
         return False
     if hash in ndb:
-        if not quietMode:
-            print("Scheme %s isomorphic to generated scheme %s" % (ohash, hash))
+        print("Scheme %s isomorphic to generated scheme %s" % (ohash, hash))
         recordTranslation(ohash, hash)
         return False
     npath = mm_parse.recordSolution(sc, metadata = ["Updated version of scheme with hash %s" % ohash])
@@ -120,6 +118,9 @@ def process(limit):
         if pcount >= limit:
             print("Processed %d entries.  %d added to database" % (pcount, ecount))
             return
+        if pcount % 100 == 0:
+            pct = 100.0 * ecount/pcount
+            print("Processed %d entries.  %d added to database (%.2f%%)" % (pcount, ecount, pct))
     
 def run(name, args):
     global quietMode
