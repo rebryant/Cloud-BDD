@@ -123,19 +123,21 @@ class SchemeGenerator:
     tryLimit = 50
     vpList = []
     limit = 100
-    count = 0
+    generatedCount = 0
+    candidateCount = 0
 
     def __init__(self, dim, auxCount, permute = True, balanceKernels = False, limit = 10000000):
         self.dim = dim
         self.auxCount = auxCount
         self.permute = permute
         self.tryLimit = limit
-        self.count = 0
+        self.generatedCount = 0
         self.limit = limit
         self.balanceKernels = balanceKernels
         db = {}
         mm_parse.loadDatabase(db, mm_parse.generatedDatabasePathFields, True)
         mm_parse.loadDatabase(db, mm_parse.heuleDatabasePathFields, True)
+        self.candidateCount = len(db)
         if self.balanceKernels:
             kcount = {}
             tcount = 0
@@ -175,11 +177,11 @@ class SchemeGenerator:
             return random.choice(self.candidates)
 
     def select(self):
-        if self.count >= self.limit:
-            if self.count == self.limit:
-                report(1, "Generated %d schemes" % self.count)
+        if self.generatedCount >= self.limit:
+            if self.generatedCount == self.limit:
+                report(1, "Generated %d schemes" % self.generatedCount)
             return None
-        self.count += 1
+        self.generatedCount += 1
         for t in range(self.tryLimit):
             p = self.chooseCandidate()
             fields = homePathFields + p.split('/')
@@ -202,6 +204,7 @@ class SchemeGenerator:
         return None
 
     def addCandidate(self, scheme, path):
+        self.candidateCount += 1
         if self.balanceKernels:
             khash = scheme.kernelTerms.sign()
             if khash in self.candidates:
@@ -213,7 +216,7 @@ class SchemeGenerator:
             self.candidates.append(path)
 
     def countCandidates(self):
-        return len(self.candidates)
+        return self.candidateCount
 
 class Server:
     generator = None
