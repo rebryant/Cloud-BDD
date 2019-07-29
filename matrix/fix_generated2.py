@@ -7,7 +7,7 @@
 import os.path
 import sys
 import getopt
-
+import datetime
 
 import circuit
 import brent
@@ -25,6 +25,9 @@ auxCount = 23
 ckt = circuit.Circuit()
 
 quietMode = False
+
+# How often should statistics be printed
+reportPeriod = 100
    
 # Heule database
 hdb = {}
@@ -53,7 +56,7 @@ if os.path.exists(tname):
             translationDict[fields[0]] = fields[1]
         tcount += 1
     tfile.close()
-    print("Already have processed %d entries" % tcount)
+#    print("Already have processed %d entries" % tcount)
 
 ndbname = '/'.join(mm_parse.homePathFields + mm_parse.generatedDatabasePathFields)
 if os.path.exists(ndbname):
@@ -62,6 +65,9 @@ else:
     dbfile = open(ndbname, 'w')
     dbfile.write('\t'.join(mm_parse.fieldTitles) + '\n')
     dbfile.close()
+
+def deltaSeconds(dt):
+    return dt.days*(24.0 * 3600) + dt.seconds + dt.microseconds * 1.0e-6
 
 # Record translation
 def recordTranslation(ohash, nhash):
@@ -103,24 +109,32 @@ def processEntry(e):
     return True
 
 def process(limit):
+    startTime = datetime.datetime.now()
     pcount = 0
     ecount = 0
     for e in db.values():
         ohash = e[mm_parse.fieldIndex['hash']]
         if ohash in translationDict:
             # This one has already been processed
-            if not quietMode:
-                print("Entry %s already mapped to entry %s" % (ohash, translationDict[ohash]))
+#            if not quietMode:
+#                print("Entry %s already mapped to entry %s" % (ohash, translationDict[ohash]))
             continue
         if processEntry(e):
             ecount += 1
         pcount += 1
-        if pcount >= limit:
-            print("Processed %d entries.  %d added to database" % (pcount, ecount))
-            return
-        if pcount % 100 == 0:
+        if pcount % reportPeriod == 0:
             pct = 100.0 * ecount/pcount
-            print("Processed %d entries.  %d added to database (%.2f%%)" % (pcount, ecount, pct))
+            secs = deltaSeconds(datetime.datetime.now() - startTime)
+            eph = pcount * 3600/secs
+            print("Processed %d entries.  %d added to database (%.2f%%).  Rate = %d entries/hour" % (pcount, ecount, pct, eph))
+        if pcount >= limit:
+            if pcount % reportPeriod != 0:
+                pct = 100.0 * ecount/pcount
+                secs = deltaSeconds(datetime.datetime.now() - startTime)
+                eph = pcount * 3600/secs
+                print("Processed %d entries.  %d added to database (%.2f%%).  Rate = %d entries/hour" % (pcount, ecount, pct, eph))
+            return
+
     
 def run(name, args):
     global quietMode
