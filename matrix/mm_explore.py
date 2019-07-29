@@ -27,7 +27,7 @@ import mm_parse
 import circuit
 
 def usage(name):
-    print("Usage %s [-h] [-k] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB] [-l LIMIT]")
+    print("Usage %s [-h] [-K] [-k] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB] [-l LIMIT]")
     print("   -h               Print this message")
     print("  Server options")
     print("   -P PORT          Set up server on specified port")
@@ -36,6 +36,7 @@ def usage(name):
     print("  Local & server options")
     print("   -R               Allow unrestricted solution types")
     print("   -l LIMIT         Set limit on number of schemes generated")
+    print("   -K               Try to generate new kernels")
     print("   -k               Put more weight on underrepresented kernels")
     print("  Local & client options")
     print("   -t SECS          Set runtime limit (in seconds)")
@@ -79,6 +80,7 @@ restrictSolutions = True
 keepFiles = False
 
 balanceKernels = False
+huntKernels = False
 
 dim = (3, 3, 3)
 auxCount = 27
@@ -88,8 +90,11 @@ defaultPort = 6616
 
 ckt = circuit.Circuit()
 
-# Good choices for probabilities
-abcList = ["20:55:70", "25:50:70",  "30:45:70", "15:45:80", "20:40:80", "25:35:80", "15:25:90", "20:25:90", "10:30:90"]
+# Good choices for probabilities.  Normal mode
+normalAbcList = ["20:55:70", "25:50:70",  "30:45:70", "15:45:80", "20:40:80", "25:35:80", "15:25:90", "20:25:90", "10:30:90"]
+
+# Good choices for probabilities.  Kernel hunting mode
+huntAbcList = ["20:50:70", "25:45:70",  "30:40:70", "20:45:80", "15:40:80", "20:35:80", "15:25:85", "15:20:90", "10:25:90"]
 
 def report(level, s):
     if level <= verbLevel:
@@ -386,6 +391,8 @@ def fileRoot(scheme, categoryProbabilities, seed):
     fields += [sc]
     sseed = "S%.2d" % seed
     fields += [sseed]
+    if huntKernels:
+        fields += ['symbolic']
     return "-".join(fields)
 
 
@@ -399,7 +406,7 @@ def generateCommandFile(scheme, seed):
         report(0, "Couldn't open '%s' to write" % fname)
         return ""
     scheme.ckt = circuit.Circuit(outf)
-    scheme.generateProgram(categoryProbabilities, seed, timeLimit, fixKV = True, excludeSingleton = restrictSolutions, breadthFirst = True, levelList = levelList, useZdd = False)
+    scheme.generateProgram(categoryProbabilities, seed, timeLimit, fixKV = True, excludeSingleton = restrictSolutions and not huntKernels, breadthFirst = True, levelList = levelList, useZdd = False, symbolicStreamline = huntKernels)
     outf.close()
     return froot
 
@@ -488,6 +495,9 @@ def runStandalone(generator):
     generateCount = 0
     while errorCount < errorLimit:
         s = generator.select()
+        if not fixedProbabilities:
+            # Get a new set of probabilities
+            parseABC(findABC())
         if s is None:
             break
         generateCount += 1
@@ -496,7 +506,10 @@ def runStandalone(generator):
     report(0, "%d command files generated.  %d errors" % (generateCount, errorCount))
 
 def findABC():
-    return random.choice(abcList)
+    if huntKernels:
+        return random.choice(huntAbcList)
+    else:
+        return random.choice(normalAbcList)
 
 # Parse probabilities given in form P or Pa:Pb:Pc
 # Return True or False
@@ -537,23 +550,25 @@ def run(name, args):
     global restrictSolutions
     global keepFiles
     global balanceKernels
+    global huntKernels
     host = defaultHost
     port = defaultPort
     isServer = False
     isClient = False
     vlevel = 1
     limit = 100000000
-    abc = findABC()
 
-         
+    abc = None
 
-    optlist, args = getopt.getopt(args, 'hkP:H:Rt:c:p:l:v:')
+    optlist, args = getopt.getopt(args, 'hkKP:H:Rt:c:p:l:v:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         if opt == '-k':
             balanceKernels = True
+        if opt == '-K':
+            huntKernels = True
         elif opt == '-P':
             isServer = True
             port = int(val)
@@ -579,6 +594,8 @@ def run(name, args):
             limit = int(val)
         elif opt == '-v':
             vlevel = int(val)
+    if abc is None:
+        abc = findABC()
     setVerbLevel(vlevel)
     if not parseABC(abc):
         usage(name)

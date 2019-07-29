@@ -48,6 +48,9 @@ generatedDatabasePathFields = [databaseDirectory, "generated-database.txt"]
 
 generatedPathFields = [databaseDirectory, "generated"]
 
+# Don't record in main database
+localMode = False
+
 cmdPrefix = "cmd>"
 
 # Mapping from canonized polynomial to solution name
@@ -253,10 +256,19 @@ def directoryName(fname):
     return directoryPrefix + fname[first:length+first]
 
 def recordSolution(scheme, metadata = []):
+    global homePathFields
+    global generatedPathFields, generatedDatabasePathFields
     fname = scheme.sign() + '.exp'
-    dirName = directoryName(fname)
-    dirFields = generatedPathFields + [dirName]
-    pathFields = dirFields + [fname]
+    if localMode:
+        dirName = '.'
+        homePathFields = [dirName]
+        dirFields = []
+        generatedDatabasePathFields = ["generated-database.txt"]
+        pathFields = dirFields + ['generated', fname]
+    else:
+        dirName = directoryName(fname)
+        dirFields = generatedPathFields + [dirName]
+        pathFields = dirFields + [fname]
     path =  '/'.join(pathFields)
     dpath = '/'.join(homePathFields + dirFields)
     fpath = '/'.join(homePathFields + pathFields)
@@ -343,6 +355,7 @@ def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
         
 def run(name, args):
     global solutionDict, quietMode
+    global localMode
     n1, n2, n3 = 3, 3, 3
     auxCount = 23
     solve = True
@@ -369,8 +382,10 @@ def run(name, args):
         elif opt == '-s':
             pname = val
         elif opt == '-p':
+            localMode = True
             auxCount = int(val)
         elif opt == '-n':
+            localMode = True
             fields = val.split(':')
             if len(fields) == 1:
                 n1 = n2 = n3 = int(fields[0])
@@ -424,8 +439,9 @@ def run(name, args):
     except brent.MatrixException as ex:
         print("Parse of file '%s' failed: %s" % (pname, str(ex)))
         return
-    loadDatabase(heuleDatabaseDict, heuleDatabasePathFields, quietMode)
-    loadDatabase(generatedDatabaseDict, generatedDatabasePathFields, quietMode)
+    if not localMode:
+        loadDatabase(heuleDatabaseDict, heuleDatabasePathFields, quietMode)
+        loadDatabase(generatedDatabaseDict, generatedDatabasePathFields, quietMode)
 
 
     signature = generateSignature(fileScheme)
