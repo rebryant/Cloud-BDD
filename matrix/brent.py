@@ -476,15 +476,17 @@ class KernelSet:
             olevel = llist[0].level
             levelPermuter[olevel] = nlevel
             nlevel += 1
-        return (self.permute(levelPermuter = levelPermuter), levelPermuter)
+        pkset = self.permute(levelPermuter = levelPermuter)
+        return (pkset, levelPermuter)
 
     # Find form that is unique among following transformations:
     #  Permutation of matrices A, B, and C
     #  Permutations of row and column indices
     #  Permutation of product terms (levels)
+    #  Return resulting form + the permuters that generate it
     def canonize(self):
         if self.dim[0] != self.dim[1] or self.dim[1] != self.dim[2]:
-            return self.levelCanonize()
+            return (self, None, None, self.levelCanonize())
         indexPermuterList = allPermuters(unitRange(self.dim[0]))
         ijkPermuterList = allPermuters(list(range(3)))
         bestSet = None
@@ -505,6 +507,34 @@ class KernelSet:
                     bestSignature = signature
         variablePermuter = ijk2var(bestIjkPermuter)
         return (bestSet, variablePermuter, bestIndexPermuter, bestLevelPermuter)
+
+    # Find form that is unique among following transformations:
+    #  Permutation of matrices A, B, and C
+    #  Permutations of row and column indices
+    #  Permutation of product terms (levels)
+    #  Return resulting form + list of triples, each being one of the permuters that generate it
+    def listCanonize(self):
+        if self.dim[0] != self.dim[1] or self.dim[1] != self.dim[2]:
+            return (self, [(None, None, self.levelCanonize())])
+        indexPermuterList = allPermuters(unitRange(self.dim[0]))
+        ijkPermuterList = allPermuters(list(range(3)))
+        bestSet = None
+        bestSignature = None
+        bestPermuterList = []
+        for ijkPermuter in ijkPermuterList:
+            for indexPermuter in indexPermuterList:
+                kset = self.permute(ijkPermuter = ijkPermuter, indexPermuter = indexPermuter)
+                nkset, levelPermuter = kset.levelCanonize()
+                signature = nkset.signature()
+                if bestSignature is not None and signature == bestSignature:
+                    bestPermuterList.append((ijk2var(ijkPermuter), indexPermuter, levelPermuter))
+                if bestSignature is None or signature < bestSignature:
+                    bestSet = nkset
+                    bestSignature = signature
+                    # Start with fresh list
+                    bestPermuterList = [(ijk2var(ijkPermuter), indexPermuter, levelPermuter)]
+        return (bestSet, bestPermuterList)
+
 
     # See if there is a matching Kernel term and return its level
     # Return -1 if none found
@@ -957,16 +987,9 @@ class MScheme(MProblem):
                                 ok = ok and self.brentCheck(i1, i2, j1, j2, k1, k2)
         return ok
 
-    # Return scheme with levels reordered to canonize kernels
-    def oldCanonize(self):
-        if self.hasBeenCanonized:
-            return self
-        (k, variablePermuter, indexPermuter, levelPermuter) = self.kernelTerms.canonize()
-        result = self.permute(variablePermuter, indexPermuter, levelPermuter)
-        result.hasBeenCanonized = True
-        return result
-
-    def canonize(self):
+    # Put into canonical form by testing all permutations and finding which is best
+    # Slow, but reliable
+    def searchCanonize(self):
         if self.hasBeenCanonized:
             return self
         variablePermuterList = allPermuters(['alpha', 'beta', 'gamma'])
@@ -986,8 +1009,25 @@ class MScheme(MProblem):
                 ksigbest = ksig
                 sbest = sp
                 ssigbest = ssig
+        sbest.hasBeenCanonized = True
         return sbest
         
+    # Put into canonical form by canonizing kernel and trying all compatible permutations
+    # 20x faster
+    def canonize(self):
+        if self.hasBeenCanonized:
+            return self
+        (k, permuterList) = self.kernelTerms.listCanonize()
+        sbest = None
+        ssigbest = None
+        for (vp, ip, lp) in permuterList:
+            sp = self.permute(variablePermuter = vp, indexPermuter = ip, levelPermuter = lp)
+            ssig = sp.signature()
+            if sbest is None or ssig < ssigbest:
+                sbest = sp
+                ssigbest = ssig
+        sbest.hasBeenCanonized = True
+        return sbest
 
     def levelCanonize(self):
         (k, levelPermuter) = self.kernelTerms.levelCanonize()
