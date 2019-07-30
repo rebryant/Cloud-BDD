@@ -1185,13 +1185,15 @@ class MScheme(MProblem):
         self.ckt.decRefs([av, bv, gv, pv])
         return snode
 
-    def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, fixKV = False):
+    def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, fixKV = False, varKV = False):
         fixedAssignment = Assignment()
         vlist = []
         if fixKV:
             vlist = self.kernelTerms.variables()
             ka = self.assignment.subset(lambda v: v in vlist)
             fixedAssignment.overWrite(ka)
+        elif varKV:
+            vlist = self.kernelTerms.variables()
         for cat in categoryProbabilities.keys():
             prob = categoryProbabilities[cat]
             ca = self.assignment.subset(lambda v: v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
@@ -1202,7 +1204,7 @@ class MScheme(MProblem):
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables)
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, excludeSingleton = False, breadthFirst = False, levelList = None, useZdd = False, symbolicStreamline = False):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, varKV = False, excludeSingleton = False, breadthFirst = False, levelList = None, useZdd = False, symbolicStreamline = False):
         plist = list(categoryProbabilities.values())
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
@@ -1215,7 +1217,7 @@ class MScheme(MProblem):
         for k in categoryProbabilities.keys():
             prob = categoryProbabilities[k]
             self.ckt.comment("Category %s has %.1f%% of its variables fixed" % (k, prob * 100.0))
-        self.generateMixedConstraints(categoryProbabilities, seed, fixKV)
+        self.generateMixedConstraints(categoryProbabilities, seed, fixKV, varKV)
         streamlineNode = None
         if excludeSingleton:
             streamlineNode = self.generateStreamline()

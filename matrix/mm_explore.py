@@ -36,9 +36,9 @@ def usage(name):
     print("  Local & server options")
     print("   -R               Allow unrestricted solution types")
     print("   -l LIMIT         Set limit on number of schemes generated")
-    print("   -K               Try to generate new kernels")
     print("   -k               Put more weight on underrepresented kernels")
     print("  Local & client options")
+    print("   -K               Try to generate new kernels")
     print("   -t SECS          Set runtime limit (in seconds)")
     print("   -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class")
     print("   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)N")
@@ -94,7 +94,7 @@ ckt = circuit.Circuit()
 normalAbcList = ["20:55:70", "25:50:70",  "30:45:70", "15:45:80", "20:40:80", "25:35:80", "15:25:90", "20:25:90", "10:30:90"]
 
 # Good choices for probabilities.  Kernel hunting mode
-huntAbcList = ["20:50:70", "25:45:70",  "30:40:70", "20:45:80", "15:40:80", "20:35:80", "15:25:85", "15:20:90", "10:25:90"]
+huntAbcList = ["55:60:80", "40:60:90", "30:60:100"]
 
 def report(level, s):
     if level <= verbLevel:
@@ -409,7 +409,7 @@ def generateCommandFile(scheme, seed):
         report(0, "Couldn't open '%s' to write" % fname)
         return ""
     scheme.ckt = circuit.Circuit(outf)
-    scheme.generateProgram(categoryProbabilities, seed, timeLimit, fixKV = True, excludeSingleton = restrictSolutions and not huntKernels, breadthFirst = True, levelList = levelList, useZdd = False, symbolicStreamline = huntKernels)
+    scheme.generateProgram(categoryProbabilities, seed, timeLimit, fixKV = not huntKernels, varKV = False, excludeSingleton = restrictSolutions and not huntKernels, breadthFirst = True, levelList = levelList, useZdd = False, symbolicStreamline = huntKernels)
     outf.close()
     return froot
 
