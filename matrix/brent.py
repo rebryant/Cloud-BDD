@@ -1152,7 +1152,6 @@ class MScheme(MProblem):
         self.kernelTerms = self.findKernels()
         return self
 
-
     # Generate streamline constraints based on singleton exclusion
     def generateStreamline(self):
         self.ckt.comment("Generate streamline conditions based on singleton exclusion property")
