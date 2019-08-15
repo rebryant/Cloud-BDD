@@ -11,51 +11,55 @@ def usage(name):
 
 # Matrix in Z2
 class Matrix:
-    n = 3
+    rows = 3
+    cols = 3
     elements = [0] * 3 * 3 # Matrix elements in row-major order
 
     # Signature is bit vector of length n * n
-    def __init__(self, n, elements = None, signature = None):
-        self.n = n
+    def __init__(self, rows = None, cols = None, elements = None, signature = None):
+        self.rows = 3 if rows is None else rows
+        self.cols = self.rows if cols is None else cols
         if elements is not None:
-            if len(elements) != n * n:
-                print("Matrix must have %d elements.  Only %d provided" % (n * n, len(elements)))
+            if len(elements) != self.rows * self.cols:
+                print("Matrix must have %d elements.  Only %d provided" % (self.rows * self.cols, len(elements)))
                 return
             self.elements = elements
         else:
-            self.elements = [0] * n * n
+            self.elements = [0] * self.rows * self.cols
             if signature is not None:
-                for i in range(n*n):
+                for i in range(self.rows * self.cols):
                     b = (signature >> i) & 0x1
                     self.elements[i] = b
 
     def index(self, r, c):
-        return r*self.n + c
+        return r*self.cols + c
 
     def row(self, idx):
-        return idx // self.n
+        return idx // self.cols
 
     def col(self, idx):
-        return idx % self.n
+        return idx % self.cols
 
     def val(self, r, c):
         return self.elements[self.index(r, c)]
 
     def rowString(self, r):
         line = "|"
-        for c in range(self.n):
+        for c in range(self.cols):
             line += " %d" % self.val(r,c)
         line += " |"
         return line
 
     def show(self, outf = sys.stdout):
-        for r in range(self.n):
+        for r in range(self.rows):
             outf.write(self.rowString(r) + '\n')
 
     def isIdentity(self):
+        if self.rows != self.cols:
+            return False
         ok = True
-        for r in range(self.n):
-            for c in range(self.n):
+        for r in range(self.rows):
+            for c in range(self.cols):
                 v = self.val(r, c)
                 if r == c:
                     ok = ok and v == 1
@@ -64,9 +68,11 @@ class Matrix:
         return ok
 
     def isPermutation(self):
-        for r in range(self.n):
+        if self.rows != self.cols:
+            return False
+        for r in range(self.rows):
             rcount = 0
-            for c in range(self.n):
+            for c in range(self.cols):
                 v = self.val(r, c)
                 rcount += v
             if rcount != 1:
@@ -74,15 +80,18 @@ class Matrix:
         return True
 
     def mult(self, other):
-        ielements = [0] * self.n * self.n
-        for i in range(self.n):
-            for j in range(self.n):
+        if other.rows != self.cols:
+            print("Cannot multiply %dx%d matrix times %dx%d matrix" % (self.rows, self.cols, other.rows, other.cols))
+            return None
+        ielements = [0] * self.rows * other.cols
+        for i in range(self.rows):
+            for j in range(self.cols):
                 a = self.val(i, j)
-                for k in range(self.n):
+                for k in range(other.cols):
                     b = other.val(j, k)
-                    ielements[self.index(i,k)] += a * b
+                    ielements[other.index(i,k)] += a * b
         elements = [val % 2 for val in ielements]
-        return Matrix(self.n, elements)
+        return Matrix(self.rows, other.cols, elements)
 
     def compress(self):
         val = 0
@@ -94,9 +103,9 @@ class Matrix:
     # Sort matrices so that diagonal matrix is preferable
     def sortKey(self):
         s = ""
-        for idx in range(self.n):
-            for r in range(self.n):
-                c  = (r + idx) % self.n
+        for idx in range(self.cols):
+            for r in range(self.rows):
+                c  = (r + idx) % self.cols
                 b = self.val(r,c)
                 if r == c:
                     b = 1-b
@@ -104,17 +113,17 @@ class Matrix:
         return s
     
 def generate(n, sig):
-    return Matrix(n, signature=sig)
+    return Matrix(rows = n, signature=sig)
 
 def pairTest(m1, m2):
     m = m1.mult(m2)
     return m.isIdentity()
 
 def showPair(m1, m2, outf = sys.stdout):
-    for r in range(m1.n):
+    for r in range(m1.rows):
         s1 = m1.rowString(r)
         s2 = m2.rowString(r)
-        sep = " * " if r == m1.n//2 else "   "
+        sep = " * " if r == m1.rows//2 else "   "
         outf.write("#   " + s1 + sep + s2 + '\n')
                 
 def showPairs(n, plist, outf = sys.stdout):
