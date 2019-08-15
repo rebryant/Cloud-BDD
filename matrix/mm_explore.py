@@ -27,7 +27,7 @@ import mm_parse
 import circuit
 
 def usage(name):
-    print("Usage %s [-h] [-k] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB] [-l LIMIT]")
+    print("Usage %s [-h] [-K] [-k] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB] [-l LIMIT]")
     print("   -h               Print this message")
     print("  Server options")
     print("   -P PORT          Set up server on specified port")
@@ -38,6 +38,7 @@ def usage(name):
     print("   -l LIMIT         Set limit on number of schemes generated")
     print("   -k               Put more weight on underrepresented kernels")
     print("  Local & client options")
+    print("   -K               Try to generate new kernels")
     print("   -t SECS          Set runtime limit (in seconds)")
     print("   -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class")
     print("   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)N")
@@ -75,9 +76,11 @@ errorLimit = 1000
 historyLimit = 250
 
 restrictSolutions = True
+
 keepFiles = False
 
 balanceKernels = False
+huntKernels = False
 
 dim = (3, 3, 3)
 auxCount = 27
@@ -87,8 +90,11 @@ defaultPort = 6616
 
 ckt = circuit.Circuit()
 
-# Good choices for probabilities
-abcList = ["20:55:70", "25:50:70",  "30:45:70", "15:45:80", "20:40:80", "25:35:80", "15:25:90", "20:25:90", "10:30:90"]
+# Good choices for probabilities.  Normal mode
+normalAbcList = ["20:55:70", "25:50:70",  "30:45:70", "15:45:80", "20:40:80", "25:35:80", "15:25:90", "20:25:90", "10:30:90"]
+
+# Good choices for probabilities.  Kernel hunting mode
+huntAbcList = ["55:60:80", "40:60:90", "30:60:100"]
 
 def report(level, s):
     if level <= verbLevel:
@@ -117,19 +123,21 @@ class SchemeGenerator:
     tryLimit = 50
     vpList = []
     limit = 100
-    count = 0
+    generatedCount = 0
+    candidateCount = 0
 
     def __init__(self, dim, auxCount, permute = True, balanceKernels = False, limit = 10000000):
         self.dim = dim
         self.auxCount = auxCount
         self.permute = permute
         self.tryLimit = limit
-        self.count = 0
+        self.generatedCount = 0
         self.limit = limit
         self.balanceKernels = balanceKernels
         db = {}
         mm_parse.loadDatabase(db, mm_parse.generatedDatabasePathFields, True)
         mm_parse.loadDatabase(db, mm_parse.heuleDatabasePathFields, True)
+        self.candidateCount = len(db)
         if self.balanceKernels:
             kcount = {}
             tcount = 0
@@ -169,11 +177,11 @@ class SchemeGenerator:
             return random.choice(self.candidates)
 
     def select(self):
-        if self.count >= self.limit:
-            if self.count == self.limit:
-                report(1, "Generated %d schemes" % self.count)
+        if self.generatedCount >= self.limit:
+            if self.generatedCount == self.limit:
+                report(1, "Generated %d schemes" % self.generatedCount)
             return None
-        self.count += 1
+        self.generatedCount += 1
         for t in range(self.tryLimit):
             p = self.chooseCandidate()
             fields = homePathFields + p.split('/')
@@ -186,7 +194,7 @@ class SchemeGenerator:
                 continue
             if restrictSolutions and not (s.obeysUniqueUsage() and s.obeysMaxDouble() and s.obeysSingletonExclusion()):
                 continue
-            report(2, "Returning scheme from file '%s'" % p)
+            report(2, "Returning scheme %s from file '%s'" % (s.sign(), p))
             if self.permute:
                 vp = random.choice(self.vpList)
                 s = s.permute(variablePermuter = vp)
@@ -196,6 +204,7 @@ class SchemeGenerator:
         return None
 
     def addCandidate(self, scheme, path):
+        self.candidateCount += 1
         if self.balanceKernels:
             khash = scheme.kernelTerms.sign()
             if khash in self.candidates:
@@ -207,7 +216,7 @@ class SchemeGenerator:
             self.candidates.append(path)
 
     def countCandidates(self):
-        return len(self.candidates)
+        return self.candidateCount
 
 class Server:
     generator = None
@@ -385,6 +394,8 @@ def fileRoot(scheme, categoryProbabilities, seed):
     fields += [sc]
     sseed = "S%.2d" % seed
     fields += [sseed]
+    if huntKernels:
+        fields += ['symbolic']
     return "-".join(fields)
 
 
@@ -398,7 +409,7 @@ def generateCommandFile(scheme, seed):
         report(0, "Couldn't open '%s' to write" % fname)
         return ""
     scheme.ckt = circuit.Circuit(outf)
-    scheme.generateProgram(categoryProbabilities, seed, timeLimit, fixKV = True, excludeSingleton = restrictSolutions, breadthFirst = True, levelList = levelList, useZdd = False)
+    scheme.generateProgram(categoryProbabilities, seed, timeLimit, fixKV = not huntKernels, varKV = False, excludeSingleton = restrictSolutions and not huntKernels, breadthFirst = True, levelList = levelList, useZdd = False, symbolicStreamline = huntKernels)
     outf.close()
     return froot
 
@@ -421,7 +432,18 @@ def runCommand(scheme, froot, method, recordFunction):
         report(0, "Returning command '%s' failed.  Return code = %d" % (cmdLine, p.returncode))
         return -1
     scount = mm_parse.generateSolutions(lname, scheme, recordFunction)
-    if not keepFiles:
+    if keepFiles:
+        # Save copy of source solution
+        sname = scheme.sign() + ".exp"
+        try:
+            outf = open(sname, 'w')
+        except Exception:
+            report(0, "Couldn't save scheme file %s" % sname)
+            outf = None
+        if outf is not None:
+            scheme.printPolynomial(outf, metadata = ["Used in the generation of %s" % fname])
+            outf.close()
+    else:
         try:
             os.remove(fname)
             os.remove(lname)
@@ -476,15 +498,21 @@ def runStandalone(generator):
     generateCount = 0
     while errorCount < errorLimit:
         s = generator.select()
+        if not fixedProbabilities:
+            # Get a new set of probabilities
+            parseABC(findABC())
         if s is None:
             break
         generateCount += 1
         if runScheme(s, mm_parse.recordSolution) < 0:
             errorCount += 1
-    report(0, "%d schemes generated.  %d errors" % (generateCount, errorCount))
+    report(0, "%d command files generated.  %d errors" % (generateCount, errorCount))
 
 def findABC():
-    return random.choice(abcList)
+    if huntKernels:
+        return random.choice(huntAbcList)
+    else:
+        return random.choice(normalAbcList)
 
 # Parse probabilities given in form P or Pa:Pb:Pc
 # Return True or False
@@ -525,23 +553,25 @@ def run(name, args):
     global restrictSolutions
     global keepFiles
     global balanceKernels
+    global huntKernels
     host = defaultHost
     port = defaultPort
     isServer = False
     isClient = False
     vlevel = 1
     limit = 100000000
-    abc = findABC()
 
-         
+    abc = None
 
-    optlist, args = getopt.getopt(args, 'hkP:H:Rt:c:p:l:v:')
+    optlist, args = getopt.getopt(args, 'hkKP:H:Rt:c:p:l:v:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         if opt == '-k':
             balanceKernels = True
+        if opt == '-K':
+            huntKernels = True
         elif opt == '-P':
             isServer = True
             port = int(val)
@@ -567,6 +597,8 @@ def run(name, args):
             limit = int(val)
         elif opt == '-v':
             vlevel = int(val)
+    if abc is None:
+        abc = findABC()
     setVerbLevel(vlevel)
     if not parseABC(abc):
         usage(name)

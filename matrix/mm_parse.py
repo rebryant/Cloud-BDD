@@ -48,6 +48,9 @@ generatedDatabasePathFields = [databaseDirectory, "generated-database.txt"]
 
 generatedPathFields = [databaseDirectory, "generated"]
 
+# Don't record in main database
+localMode = False
+
 cmdPrefix = "cmd>"
 
 # Mapping from canonized polynomial to solution name
@@ -108,7 +111,7 @@ def subtractFromDatabase(db, dbr):
     print("%d entries removed" % count)
     
         
-def restoreDatabase(databaseDict, databasePathFields, rehash = False, dim = (3,3,3), auxCount = 23):
+def restoreDatabase(databaseDict, databasePathFields, rehash = False, checkCanonical = False, dim = (3,3,3), auxCount = 23):
     dbname = '/'.join(homePathFields + databasePathFields)
     try:
         dbfile = open(dbname, 'w')
@@ -121,14 +124,17 @@ def restoreDatabase(databaseDict, databasePathFields, rehash = False, dim = (3,3
         ckt = circuit.Circuit()
     for hash in databaseDict.keys():
         entry = databaseDict[hash]
-        if rehash:
+        if rehash or checkCanonical:
             path = entry[fieldIndex['path']]
             try:
                 scheme = brent.MScheme(dim, auxCount, ckt).parseFromFile(path)
             except Exception as ex:
                 print("Couldn't recover scheme from file %s (%s)" % (path, str(ex)))
                 continue
-            entry[fieldIndex['hash']] = scheme.sign()
+            if rehash:
+                entry[fieldIndex['hash']] = scheme.sign()
+            if checkCanonical and not scheme.isCanonical():
+                print("WARNING: Scheme in file %s is not canonical.  Has signature %s.  Should have signature %s.  Ignoring" % (path, scheme.sign(), scheme.canonize().sign()))
         fields = [str(e) for e in entry]
         dbfile.write('\t'.join(fields) + '\n')
         count += 1
@@ -250,10 +256,19 @@ def directoryName(fname):
     return directoryPrefix + fname[first:length+first]
 
 def recordSolution(scheme, metadata = []):
+    global homePathFields
+    global generatedPathFields, generatedDatabasePathFields
     fname = scheme.sign() + '.exp'
-    dirName = directoryName(fname)
-    dirFields = generatedPathFields + [dirName]
-    pathFields = dirFields + [fname]
+    if localMode:
+        dirName = '.'
+        homePathFields = [dirName]
+        dirFields = []
+        generatedDatabasePathFields = ["generated-database.txt"]
+        pathFields = dirFields + ['generated', fname]
+    else:
+        dirName = directoryName(fname)
+        dirFields = generatedPathFields + [dirName]
+        pathFields = dirFields + [fname]
     path =  '/'.join(pathFields)
     dpath = '/'.join(homePathFields + dirFields)
     fpath = '/'.join(homePathFields + pathFields)
@@ -332,7 +347,7 @@ def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
             newCount += 1
         index += 1
         if not quietMode:
-            ss.printPolynomial(metadata = metadata)
+            sc.printPolynomial(metadata = metadata)
     if quietMode:
         fields = [iname, str(len(slist)), str(newCount), str(nonHeuleCount), str(freshCount)]
         print("\t".join(fields))
@@ -340,6 +355,7 @@ def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
         
 def run(name, args):
     global solutionDict, quietMode
+    global localMode
     n1, n2, n3 = 3, 3, 3
     auxCount = 23
     solve = True
@@ -366,8 +382,10 @@ def run(name, args):
         elif opt == '-s':
             pname = val
         elif opt == '-p':
+            localMode = True
             auxCount = int(val)
         elif opt == '-n':
+            localMode = True
             fields = val.split(':')
             if len(fields) == 1:
                 n1 = n2 = n3 = int(fields[0])
@@ -421,8 +439,9 @@ def run(name, args):
     except brent.MatrixException as ex:
         print("Parse of file '%s' failed: %s" % (pname, str(ex)))
         return
-    loadDatabase(heuleDatabaseDict, heuleDatabasePathFields, quietMode)
-    loadDatabase(generatedDatabaseDict, generatedDatabasePathFields, quietMode)
+    if not localMode:
+        loadDatabase(heuleDatabaseDict, heuleDatabasePathFields, quietMode)
+        loadDatabase(generatedDatabaseDict, generatedDatabasePathFields, quietMode)
 
 
     signature = generateSignature(fileScheme)

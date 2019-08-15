@@ -11,9 +11,10 @@ import circuit
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-k] [-e|-E] [(-b|-B LLIST)] [-z] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
+    print "Usage %s [-h] [-k|-K] [-e|-E] [(-b|-B LLIST)] [-z] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
+    print " -K               Don't constrain any of the variables in the provided set of kernel terms"
     print " -e               Generate streamline constraints based on singleton exclusion property"
     print " -E               Generate symbolic streamline formula constraining solution form"
     print " -b               Combine products in breadth-first order"
@@ -37,6 +38,7 @@ def run(name, args):
     someFixed = False
     pname = None
     fixKV = False
+    varKV = False
     excludeSingleton = False
     symbolicStreamline = False
     breadthFirst = False
@@ -46,13 +48,15 @@ def run(name, args):
     seed = 0
 
     
-    optlist, args = getopt.getopt(args, 'hkeEbB:zS:t:c:s:p:n:o:')
+    optlist, args = getopt.getopt(args, 'hkKeEbB:zS:t:c:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         elif opt == '-k':
             fixKV = True
+        elif opt == '-K':
+            varKV = True
         elif opt == '-e':
             excludeSingleton = True
         elif opt == '-E':
@@ -125,6 +129,10 @@ def run(name, args):
             print "Unknown option '%s'" % opt
             usage(name)
             return
+    if fixKV and varKV:
+        print("Cannot have both fixed and variable kernel terms")
+        usage(name)
+        return
     ckt = circuit.Circuit(outf)
     s = brent.MScheme((n1, n2, n3), auxCount, ckt)
     if someFixed and pname is None:
