@@ -74,7 +74,7 @@ class Matrix:
                 return False
         return True
 
-    def mult(self, other):
+    def multiply(self, other):
         if other.rows != self.cols:
             print("Cannot multiply %dx%d matrix times %dx%d matrix" % (self.rows, self.cols, other.rows, other.cols))
             return None
@@ -140,7 +140,7 @@ class SuperScheme(brent.MScheme):
     def generateMatrixTriple(self, level):
         matrices = {}
         for cat in ['alpha', 'beta', 'gamma']:
-            matrix = inversions.Matrix(self.nrow(cat), self.ncol(cat))
+            matrix = Matrix(self.nrow(cat), self.ncol(cat))
             matrices[cat] = matrix
             for r in brent.unitRange(self.nrow(cat)):
                 for c in brent.unitRange(self.ncol(cat)):
@@ -179,6 +179,7 @@ class SuperScheme(brent.MScheme):
             newA = matrixA.multiply(um)
             newB = umi.multiply(matrixB)
             scheme.loadMatrixTriple(level, (newA, newB, matrixC))
+        scheme.kernelTerms = scheme.findKernels()
         return scheme
 
         
