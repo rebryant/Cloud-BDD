@@ -79,7 +79,8 @@ def process(idx):
         newCount += 1
     if checkBrent:
         obeysBrent = 'Y' if s.obeysBrent() else 'N'
-        brentCount += 1
+        if obeysBrent == 'Y':
+            brentCount += 1
     else:
         obeysBrent = '-'
     obeysUnique = 'Y' if s.obeysUniqueUsage() else 'N'
@@ -96,7 +97,7 @@ def process(idx):
     format(ls)
     
 def run(name, args):
-    global brentCheck, pairList, verbose
+    global checkBrent, pairList, verbose
     pathList = []
     optlist, args = getopt.getopt(args, 'hbapf:d:v')
     for (opt, val) in optlist:
@@ -108,7 +109,7 @@ def run(name, args):
         elif opt == '-p':
             pairList = inverse_pairs3.permutationPairList
         elif opt == '-b':
-            brentCheck = True
+            checkBrent = True
         elif opt == '-v':
             verbose = True
         elif opt == '-f':
@@ -131,8 +132,3 @@ def run(name, args):
 
 if __name__ == "__main__":
     run(sys.argv[0], sys.argv[1:])
-
-
-
-    
-    
