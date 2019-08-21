@@ -32,9 +32,12 @@ def processEntryFirst(e):
     except Exception as ex:
         print("Couldn't open file %s" % path)
         return False
-    sc = s.canonize()
+    sc = s
+#    sc = s.canonize()
     hash = sc.sign()
     ohash = e[mm_parse.fieldIndex['hash']]
+    khash = sc.kernelTerms.sign()
+    e[mm_parse.fieldIndex['kernel hash']] = khash
     if hash != ohash:
         try:
             outf = open(path, 'w')
@@ -44,6 +47,9 @@ def processEntryFirst(e):
         sc.printPolynomial(outf)
         outf.close()
         e[mm_parse.fieldIndex['hash']] = hash
+        print("%s --> %s" % (ohash, hash))
+    else:
+        print("%s unchanged" % (hash))
     return hash != ohash
 
 # Fix database entry.  This one assumes files have been canonized
@@ -69,7 +75,7 @@ def process():
     dcount = 0
     for e in db.values():
         tcount += 1
-        if processEntry(e):
+        if processEntryFirst(e):
             ccount += 1
         hash = e[mm_parse.fieldIndex['hash']]
         if hash in ndb:
