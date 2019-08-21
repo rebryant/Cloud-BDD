@@ -360,6 +360,9 @@ class KernelTerm:
         self.k = k
         self.level = level
 
+    def clone(self):
+        return KernelTerm(self.i, self.j, self.k, self.level)
+
     def alpha(self):
         return BrentVariable('alpha', self.i, self.j, self.level)
 
@@ -434,6 +437,9 @@ class KernelTerm:
     def symbol(self):
         return "kernel-i-%d.j-%d.k-%d.l-%.2d" % (self.i, self.j, self.k, self.level)
 
+    def shortString(self):
+        return "K%d%d%d" % (self.i, self.j, self.k)
+
     def __str__(self):
         return self.generateString()
 
@@ -470,6 +476,21 @@ class KernelSet:
     def generateString(self, showLevel = True):
         tstrings = [kt.generateString(showLevel) for kt in self.kdlist]
         return " ".join(tstrings)
+
+    def shortString(self):
+        levelList = self.levelize()
+        tstrings = []
+        for ls in levelList:
+            slist = [k.shortString() for k in ls]
+            sform = '[' + ' '.join(slist) + ']' if len(ls) > 1 else slist[0]
+            tstrings.append(sform)
+        return " ".join(tstrings)
+
+    def printPolynomial(self, outf = sys.stdout):
+        levelList = self.levelize()
+        for ls in levelList:
+            tstrings = [kt.generateString(showLevel = False) for kt in ls]
+            outf.write(" + ".join(tstrings) + '\n')
 
     # Convert into lists, ordered by level
     def levelize(self):
