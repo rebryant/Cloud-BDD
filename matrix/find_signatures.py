@@ -49,7 +49,8 @@ def checkSolution(subPath):
         print("ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex)))
         return
     solutionCount += 1
-    sc = s.canonize()
+#    sc = s.canonize()
+    sc = s
     sig = sc.kernelTerms.signature()
     list = signatureDict[sig] if sig in signatureDict else []
     if len(list) == 0:
@@ -108,7 +109,7 @@ def processHeule():
     cfile.close()
 
 def processGenerated():
-    template = generatedSourceDirectory + "/*.exp"
+    template = generatedSourceDirectory + "/*/*.exp"
     fpaths = glob.glob(template)
     for fpath in fpaths:
         path = fpath[len(generatedSourceDirectory) + 1:]
