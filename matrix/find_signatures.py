@@ -1,7 +1,8 @@
 #!/usr/bin/python
 
 # Scan through existing solutions
-# Convert to canonical form and generate signature
+# (Optionally) convert to canonical form 
+# and generate signature
 # See how many unique signatures there are, and analyze their properties
 # For each unique signature, store copy of one solution with this signature.
 
@@ -49,6 +50,7 @@ def checkSolution(subPath):
         print("ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex)))
         return
     solutionCount += 1
+# Assume already in canonical form
 #    sc = s.canonize()
     sc = s
     sig = sc.kernelTerms.signature()
@@ -75,7 +77,9 @@ def checkGeneratedSolution(subPath):
         print("ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex)))
         return
     generatedSolutionCount += 1
-    sc = s.canonize()
+# Assume already in canonical form
+#    sc = s.canonize()
+    sc = s
     sig = sc.kernelTerms.signature()
     list = generatedSignatureDict[sig] if sig in generatedSignatureDict else []
     if len(list) == 0:
