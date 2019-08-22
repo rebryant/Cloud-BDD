@@ -479,6 +479,7 @@ Ma95373e8065b2a9adeeb	94	K559946bfc2	mm-solutions/heule-canonical/21x2+48x+4y6+9
 M2c7c9d146b7e82779004	81	K559946bfc2	mm-solutions/heule-canonical/3x3+19x2+47x+4y6+4y5+5y4+10y3+z32+2z31/i113w199c347g-000.exp
 M90941b2c4a716271f1b4	90	K559946bfc2	mm-solutions/heule-canonical/20x2+49x+4y6+8y4+11y3+z31+z30+z28/i44w217c23ci-000.exp
 M861169908fc72888286c	94	K559946bfc2	mm-solutions/heule-canonical/18x2+51x+4y6+6y4+13y3+z32+z28+z27/i19w229c23ci-001.exp
+M42149572bd0a8d96a9bd	94	K559946bfc2	mm-solutions/heule-canonical/18x2+51x+4y6+6y4+13y3+z32+z28+z27/i19w229c23ci-002.exp
 M203c6b530b3becad5a1a	90	K559946bfc2	mm-solutions/heule-canonical/21x2+48x+4y6+y5+7y4+11y3+z32+z30+z28/i70w213c23ci-001.exp
 Mc0e13c5ddbf8ef9bd837	85	K559946bfc2	mm-solutions/heule-canonical/20x2+49x+4y6+8y4+11y3+2z30+z29/i41w205c28aj-000.exp
 M46bfac9368729002ef45	74	K559946bfc2	mm-solutions/heule-canonical/20x2+49x+4y6+8y4+11y3+2z30+z29/i41w171c34dj-000.exp
