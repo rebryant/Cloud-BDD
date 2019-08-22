@@ -15,7 +15,7 @@ ckt = circuit.Circuit()
 sourceKernel = None
 
 testCount = 0
-saveFiles = False
+saveFiles = True
 
 # Mapping from generated kernel signatures to unique kernels
 kernelDict = {}
