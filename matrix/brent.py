@@ -31,6 +31,19 @@ def trim(s):
         s = s[:-1]
     return s
 
+# Given list of form [n1, n2, ..., nk],
+# generate list of all indices of the form [i1, i2, .., ik]
+# such that ij <= nj for all j
+def indexExpand(rlist, sofar = [[]]):
+    if len(rlist) == 0:
+        return sofar
+    n = rlist[-1]
+    nsofar = []
+    for idx in unitRange(n):
+        for l in sofar:
+            nsofar.append([idx] + l)
+    return indexExpand(rlist[:-1], nsofar)
+
 # Helper function for permutation generation
 def permutationBuilder(n):
     if n == 1:
@@ -345,35 +358,39 @@ class BrentTerm:
     def __str__(self):
         return self.prefix + '-' + '.'.join(self.indices) + self.suffix
 
-# Representation of a triple a_i,j * b_j,k --> c_i,k
-@total_ordering
-class KernelTerm:
-
-    i = 1
-    j = 1
-    k = 1
+# Representation of triple of brent variables a_i1,i2 * b_j1,j2 --> c_k1,k2
+class GeneralTerm:
+    i1 = 1
+    i2 = 1
+    j1 = 1
+    j2 = 1
+    k1 = 1
+    k2 = 1
     level = 1
 
-    def __init__(self, i, j, k, level):
-        self.i = i
-        self.j = j
-        self.k = k
+    def __init(self, i1, i2, j1, j2, k1, k2, level):
+        self.i1 = i1
+        self.i2 = i2
+        self.j1 = j1
+        self.j2 = j2
+        self.k1 = k1
+        self.k2 = k2
         self.level = level
 
-    def clone(self):
-        return KernelTerm(self.i, self.j, self.k, self.level)
-
     def alpha(self):
-        return BrentVariable('alpha', self.i, self.j, self.level)
+        return BrentVariable('alpha', self.i1, self.i2, self.level)
 
     def beta(self):
-        return BrentVariable('beta', self.j, self.k, self.level)
+        return BrentVariable('beta', self.j1, self.j2, self.level)
 
     def gamma(self):
-        return BrentVariable('gamma', self.i, self.k, self.level)
+        return BrentVariable('gamma', self.k1, self.k2, self.level)
 
     def variables(self):
         return [self.alpha(), self.beta(), self.gamma()]
+
+    def indices(self):
+        return (self.i1, self.i2, self.j1, self.j2, self.k1, self.k2)
 
     def inAssignment(self, asst):
         avar = self.alpha()
@@ -386,6 +403,55 @@ class KernelTerm:
         if gvar not in asst or asst[gvar] == 0:
             return False
         return True
+    
+    def generateString(self, showLevel = True):
+        astring = self.alpha().generateTerm()
+        bstring = self.beta().generateTerm()
+        cstring = self.gamma().generateTerm(True)
+        lstring = "[%.2d]" % self.level if showLevel else ""
+        return "%s*%s*%s%s" % (astring, bstring, cstring, lstring)
+
+    # Name for use in symbolic constraint generation
+    def symbol(self):
+        return "term-%d%d%d%d%d%d-.2d" % (self.i1, self.i2, self.j1, self.j2, self.k1, self.k2, self.level)
+
+    def degree(self):
+        cnt = 0
+        if self.i1 == self.k1:
+            cnt += 1
+        if self.i2 == self.j1:
+            cnt += 1
+        if self.j2 == self.k2:
+            cnt += 1
+        return cnt
+
+    def isKernel(self):
+        return self.degree() == 3
+
+    def __str__(self):
+        return self.generateString()
+
+# Representation of a triple a_i,j * b_j,k --> c_i,k
+# Special case of general term where:
+# i1 = k1 = i
+# i2 = j1 = j
+# j2 = k2 = k
+@total_ordering
+class KernelTerm(GeneralTerm):
+
+    i = 1
+    j = 1
+    k = 1
+    level = 1
+
+    def __init__(self, i, j, k, level):
+        GeneralTerm.__init__(self, i, j, j, k, i, k, level)
+        self.i = i
+        self.j = j
+        self.k = k
+
+    def clone(self):
+        return KernelTerm(self.i, self.j, self.k, self.level)
 
     # Apply dictionary of permutations
     # Possible dictionary keys: 'i', 'j', 'k', 'ijk', 'level'
@@ -426,22 +492,12 @@ class KernelTerm:
     def __eq__(self, other):
         return self.level == other.level and self.i == other.i and self.j == other.j and self.k == other.k
 
-    def generateString(self, showLevel = True):
-        astring = self.alpha().generateTerm()
-        bstring = self.beta().generateTerm()
-        cstring = self.gamma().generateTerm(True)
-        lstring = "[%.2d]" % self.level if showLevel else ""
-        return "%s*%s*%s%s" % (astring, bstring, cstring, lstring)
-
     # Name for use in symbolic constraint generation
     def symbol(self):
-        return "kernel-i-%d.j-%d.k-%d.l-%.2d" % (self.i, self.j, self.k, self.level)
+        return "kernel-i%dj%dk%d.l-%.2d" % (self.i, self.j, self.k, self.level)
 
     def shortString(self):
         return "K%d%d%d" % (self.i, self.j, self.k)
-
-    def __str__(self):
-        return self.generateString()
 
 # Function to translate from permutation of ijk elements in kernel term to variables in Brent term
 def ijk2var(ijkp):
@@ -701,19 +757,6 @@ class MProblem:
 
     # Helper routines to build up formula encoding all Brent constraints
 
-    # Given list of form [n1, n2, ..., nk],
-    # generate list of all indices of the form [i1, i2, .., ik]
-    # such that ij <= nj for all j
-    def iexpand(self, rlist, sofar = [[]]):
-        if len(rlist) == 0:
-            return sofar
-        n = rlist[-1]
-        nsofar = []
-        for idx in unitRange(n):
-            for l in sofar:
-                nsofar.append([idx] + l)
-        return self.iexpand(rlist[:-1], nsofar)
-
     # Declare (subset of) variables
     def declareVariables(self, fixedList = []):
         for level in unitRange(self.auxCount):
@@ -770,7 +813,7 @@ class MProblem:
             self.ckt.comment("Combining terms at level %d" % level)
             gcount = ranges[-1]
             ranges = ranges[:-1]
-            indices = self.iexpand(ranges)
+            indices = indexExpand(ranges)
             first = True
             for idx in indices:
                 tlist = [BrentTerm(idx + [x]) for x in unitRange(gcount)]
@@ -805,9 +848,9 @@ class MProblem:
             self.ckt.comment("Combining terms at level %d" % level)
             gcounts = ranges[6-level:6-lastLevel]
             ranges = ranges[:6-level]
-            indices = self.iexpand(ranges)
+            indices = indexExpand(ranges)
             for idx in indices:
-                tlist = [BrentTerm(idx + ls) for ls in self.iexpand(gcounts)]
+                tlist = [BrentTerm(idx + ls) for ls in indexExpand(gcounts)]
                 terms = self.ckt.addVec(circuit.Vec(tlist))
                 args = terms
                 if level >= self.streamlineLevel and lastLevel < self.streamlineLevel and streamlineNode is not None:
@@ -832,7 +875,7 @@ class MProblem:
     # Generate Brent equations
     def generateBrentConstraints(self, kset = None, streamlineNode = None, check = False, breadthFirst = False, levelList = None, useZdd = False):
         ranges = self.fullRanges()
-        indices = self.iexpand(ranges)
+        indices = indexExpand(ranges)
         self.ckt.comment("Generate all Brent equations")
         first = True
         for idx in indices:
@@ -853,11 +896,11 @@ class MProblem:
             self.dfGenerator(streamlineNode, check)
 
     # Define kernel terms symbolically.
-    # Return list of kernel term names for later dereferencing
+    # Return vector for later dereferencing
     def generateKernels(self):
         self.ckt.comment("Define kernel terms")
         klist = []
-        ijkList = self.iexpand(self.dim)
+        ijkList = indexExpand(self.dim)
         for l in unitRange(self.auxCount):
             for (i,j,k) in ijkList:
                 klist.append(KernelTerm(i, j, k, l))
@@ -870,12 +913,9 @@ class MProblem:
         kvec = self.ckt.vec([k.symbol() for k in klist])
         return kvec
 
-    def derefKernels(self, kvec):
-        self.ckt.decRefs([kvec])
-
     def generateUniqueUsage(self, dest):
         self.ckt.comment("Ensure that each kernel term appears in only one product")
-        ijkList = self.iexpand(self.dim)
+        ijkList = indexExpand(self.dim)
         unodes = { (i,j,k) : "unique-i%d.j%d.k%d" % (i,j,k) for (i,j,k) in ijkList }
         uvec = self.ckt.vec([unodes[(i,j,k)] for (i,j,k) in ijkList])
         for (i,j,k) in ijkList:
@@ -885,10 +925,47 @@ class MProblem:
         self.ckt.andN(dest, uvec)
         self.ckt.decRefs([uvec])
 
+
+    # Define terms that are NOT kernels symbolically.
+    # Return list of terms
+    def generateNonKernels(self):
+        self.ckt.comment("Generate nonkernel terms")
+        nklist = []
+        indexList = indexExpand(self.fullRanges())
+        for l in unitRange(self.auxCount):
+            for i1, i2, j1, j2, k1, k2 in indexList:
+                nkt = GeneralTerm(i1, i2, j1, j2, k1, k2, level)
+                if not nkt.isKernel():
+                    nklist.append(nkt)
+        for nk in nklist:
+            name = nk.symbol()
+            aname = str(nk.alpha())
+            bname = str(nk.beta())
+            cname = str(nk.gamma())
+            self.ckt.andN(name, [aname, bname, cname])
+        return nklist
+
+    # Limit usage of nonkernel terms to 0 or 2
+    def generateBoundNonKernels(self):
+        nklist = self.generateNonKernels()
+        nkvec = self.ckt.vec(nklist)
+        self.ckt.comment("Ensure that each nonkernel term appears in either 0 or 2 products")
+        indexList = [nk.indices() for nk in nklist if nk.level == 1]
+        cnodes = { idx : "limit0or2-%d%d%d%d%d%d" % idx for idx in indexList }
+        cvec = self.ckt.vec([cnodes[idx] for idx in indexList])
+        for idx in indexList:
+            tlist = [nk for nk in nklist if nk.indices() == idx]
+            tlist.sort(key = lambda nk : nl.level)
+            slist = [nk.symbol() for nk in tlist]
+            nslist = ['!' + s for s in slist]
+            self.ckt.okList(cnodes[idx], circuit.Vec(slist), circuit.Vec(nslist), [True, False, True])
+        self.ckt.andN(dest, cvec)
+        self.ckt.decRefs([cvec, nkvec])
+
     def generateMaxDouble(self, dest):
         dcount = self.dim[0] * self.dim[1] * self.dim[2] - self.auxCount
         self.ckt.comment("Ensure that first %d products have two kernel terms, and the remaining have one" % dcount)
-        ijkList = self.iexpand(self.dim)
+        ijkList = indexExpand(self.dim)
         drange = unitRange(dcount)
         srange = [l+dcount+1 for l in range(self.auxCount - dcount)]
         dnodes = { l : "double-%.2d" % (l) for l in drange}
@@ -915,7 +992,7 @@ class MProblem:
         self.ckt.comment("Enforce singleton exclusion property")
         dcount = self.dim[0] * self.dim[1] * self.dim[2] - self.auxCount
         srange = [l+dcount+1 for l in range(self.auxCount - dcount)]
-        ijkList = self.iexpand(self.dim)
+        ijkList = indexExpand(self.dim)
         xNodes = { l : "exclude-%.2d" % (l) for l in srange}
         xvec = self.ckt.vec([xNodes[l] for l in srange])
         for l in srange:
@@ -930,9 +1007,9 @@ class MProblem:
             for (i,j,k) in ijkList:
                 kernel = KernelTerm(i, j, k, l)
                 kname = kernel.symbol()
-                xijlist = [(i1,i2) for (i1,i2) in self.iexpand([self.dim[0], self.dim[1]])  if (i1 != i or i2 != j)]
-                xjklist = [(j1,j2) for (j1,j2) in self.iexpand([self.dim[1], self.dim[2]])  if (j1 != j or j2 != k)]
-                xiklist = [(k1,k2) for (k1,k2) in self.iexpand([self.dim[0], self.dim[2]])  if (k1 != i or k2 != k)]
+                xijlist = [(i1,i2) for (i1,i2) in indexExpand([self.dim[0], self.dim[1]])  if (i1 != i or i2 != j)]
+                xjklist = [(j1,j2) for (j1,j2) in indexExpand([self.dim[1], self.dim[2]])  if (j1 != j or j2 != k)]
+                xiklist = [(k1,k2) for (k1,k2) in indexExpand([self.dim[0], self.dim[2]])  if (k1 != i or k2 != k)]
                 alist = [str(BrentVariable('alpha', i1, i2, l)) for (i1,i2) in xijlist]
                 anode = circuit.Node(xlaNodes[(i,j,k)])
                 self.ckt.orN(anode, alist)
@@ -951,20 +1028,25 @@ class MProblem:
         self.ckt.andN(dest, xvec)
         self.ckt.decRefs([xvec])
                 
-    def symbolicStreamline(self):
+    def symbolicStreamline(self, boundNonKernels = True):
         streamline = self.ckt.node("streamline")
         uniqueUsage = self.ckt.node("unique-usage")
         maxDouble = self.ckt.node("max-double")
         singleton = self.ckt.node("singleton-exclusion")
         self.ckt.comment("Generate symbolic streamline formula constraining form of solution")
-        klist = self.generateKernels()
+        kvec = self.generateKernels()
         self.generateUniqueUsage(uniqueUsage)
         self.generateMaxDouble(maxDouble)
         self.generateSingletonExclusion(singleton)
-        self.ckt.comment("Complete symbolic streamline formula")
-        self.ckt.andN(streamline, [uniqueUsage, maxDouble, singleton])
-        self.ckt.decRefs([uniqueUsage, maxDouble, singleton])
-        self.derefKernels(klist)
+        snodes = [uniqueUsage, maxDouble, singleton]
+        if boundNonKernels:
+            nonKernels = self.ckt.node("bound-nonkernels")
+            self.ckt.comment("Complete symbolic streamline formula")
+            self.generateBoundKernels(nonKernels)
+            snodes += nonKernels
+        self.ckt.andN(streamline, snodes)
+        self.ckt.decRefs(snodes)
+        self.ckt.decRefs(kvec)
         return streamline
 
 # Describe encoding of matrix multiplication

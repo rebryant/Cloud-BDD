@@ -451,7 +451,6 @@ class Circuit:
         self.orN(dest, [c0, c1])
         self.decRefs([c0, c1])
 
-
     # Create counting network for values from 0 up to k
     # Generates destV[l] encodes case where count = l
     # where k = len(destV)-1
@@ -480,6 +479,16 @@ class Circuit:
         self.countGeneratorVector(t, v, nv)
         self.orN(dest, t)
         self.decRefs([t])
+
+    # Count must match True case in True/False list
+    def okList(self, dest, v, nv, list):
+        n = len(list)
+        t = self.tmpVec(n)
+        self.countGeneratorVector(t, v, nv)
+        tlist = [t.nodes[i] for i in range(n) if list[i]]
+        st = self.vec(tlist)
+        self.orN(dest, st)
+        self.decRefs([st])
 
     # Create counting network for value k
     # Generates dest encodes case where count = k
