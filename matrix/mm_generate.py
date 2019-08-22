@@ -14,7 +14,7 @@ def usage(name):
     print "Usage %s [-h] [-k|-K] [-e|-E] [(-b|-B LLIST)] [-z] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
-    print " -K               Don't constrain any of the variables in the provided set of kernel terms"
+    print " -K KFILE         Read kernel structure from KFILE"
     print " -e               Generate streamline constraints based on singleton exclusion property"
     print " -E               Generate symbolic streamline formula constraining solution form"
     print " -b               Combine products in breadth-first order"
@@ -37,6 +37,7 @@ def run(name, args):
     categoryProbabilities = {'alpha':0.0, 'beta':0.0, 'gamma':0.0}
     someFixed = False
     pname = None
+    kname = None
     fixKV = False
     varKV = False
     excludeSingleton = False
@@ -48,7 +49,7 @@ def run(name, args):
     seed = 0
 
     
-    optlist, args = getopt.getopt(args, 'hkKeEbB:zS:t:c:s:p:n:o:')
+    optlist, args = getopt.getopt(args, 'hkK:eEbB:zS:t:c:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -56,7 +57,8 @@ def run(name, args):
         elif opt == '-k':
             fixKV = True
         elif opt == '-K':
-            varKV = True
+            kname = val
+            fixKV = True
         elif opt == '-e':
             excludeSingleton = True
         elif opt == '-E':
@@ -144,6 +146,13 @@ def run(name, args):
         except brent.MatrixException as ex:
             print "Parse of file '%s' failed: %s" % (pname, str(ex))
             return
+    if kname is not None:
+        try:
+            kt = brent.KernelSet((n1, n2, n3), auxCount).parseFromFile(kname)
+        except brent.MatrixException as ex:
+            print "Parse of kernel file '%s' failed: %s" % (kname, str(ex))
+            return
+        s.loadKernels(kt)
     if excludeSingleton and symbolicSingleton:
         print("ERROR.  Cannot enforce both fixed and symbolic streamline constraints")
     else:

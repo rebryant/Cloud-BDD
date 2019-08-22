@@ -492,6 +492,36 @@ class KernelSet:
             tstrings = [kt.generateString(showLevel = False) for kt in ls]
             outf.write(" + ".join(tstrings) + '\n')
 
+    def parsePolynomialLine(self, line, level):
+        kdlist = []
+        line = trim(line)
+        fields = line.split(" + ")
+        for poly in fields:
+            terms = poly.split("*")
+            i = int(terms[0][1])
+            j = int(terms[0][2])
+            k = int(terms[1][2])
+            kdlist.append(KernelTerm(i, j, k, level))
+        return kdlist
+
+    def parseFromFile(self, fname):
+        kdlist = []
+        try:
+            f = open(fname, 'r')
+        except:
+            raise MatrixException("Couldn't open file '%s'" % fname)
+        level = 1
+        for line in f:
+            line = trim(line)
+            if len(line) > 0 and line[0] != '#':
+                kdlist += self.parsePolynomialLine(line, level)
+                level += 1
+        f.close()
+        if level != self.auxCount + 1:
+            raise MatrixException("Expected %d equations in polynomial file, got %d" %  (self.auxCount, level))
+        self.kdlist = kdlist
+        return self
+
     # Convert into lists, ordered by level
     def levelize(self):
         levelList = [[] for l in range(self.auxCount)]
@@ -975,6 +1005,14 @@ class MScheme(MProblem):
                         if kt.inAssignment(self.assignment):
                             kset.addTerm(kt)
         return kset
+
+    def loadKernels(self, k):
+        self.kernelTerms = k
+        for kt in k.kdlist:
+            vars = kt.variables()
+            for v in vars:
+                self.assignment[v] = 1
+            
 
     # How many additions would be required to do the multiplication?
     def addCount(self):
