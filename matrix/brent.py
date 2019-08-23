@@ -368,7 +368,7 @@ class GeneralTerm:
     k2 = 1
     level = 1
 
-    def __init(self, i1, i2, j1, j2, k1, k2, level):
+    def __init__(self, i1, i2, j1, j2, k1, k2, level):
         self.i1 = i1
         self.i2 = i2
         self.j1 = j1
@@ -413,7 +413,7 @@ class GeneralTerm:
 
     # Name for use in symbolic constraint generation
     def symbol(self):
-        return "term-%d%d%d%d%d%d-.2d" % (self.i1, self.i2, self.j1, self.j2, self.k1, self.k2, self.level)
+        return "term-%d%d%d%d%d%d-%.2d" % (self.i1, self.i2, self.j1, self.j2, self.k1, self.k2, self.level)
 
     def degree(self):
         cnt = 0
@@ -934,7 +934,7 @@ class MProblem:
         indexList = indexExpand(self.fullRanges())
         for l in unitRange(self.auxCount):
             for i1, i2, j1, j2, k1, k2 in indexList:
-                nkt = GeneralTerm(i1, i2, j1, j2, k1, k2, level)
+                nkt = GeneralTerm(i1, i2, j1, j2, k1, k2, l)
                 if not nkt.isKernel():
                     nklist.append(nkt)
         for nk in nklist:
@@ -946,21 +946,34 @@ class MProblem:
         return nklist
 
     # Limit usage of nonkernel terms to 0 or 2
-    def generateBoundNonKernels(self):
+    def generateBoundNonKernels(self, dest):
         nklist = self.generateNonKernels()
-        nkvec = self.ckt.vec(nklist)
+        slist = [nk.symbol() for nk in nklist]
+        nkvec = self.ckt.vec(slist)
         self.ckt.comment("Ensure that each nonkernel term appears in either 0 or 2 products")
         indexList = [nk.indices() for nk in nklist if nk.level == 1]
         cnodes = { idx : "limit0or2-%d%d%d%d%d%d" % idx for idx in indexList }
-        cvec = self.ckt.vec([cnodes[idx] for idx in indexList])
+        cvec = self.ckt.vec(cnodes.values())
         for idx in indexList:
             tlist = [nk for nk in nklist if nk.indices() == idx]
-            tlist.sort(key = lambda nk : nl.level)
+            tlist.sort(key = lambda nk : nk.level)
             slist = [nk.symbol() for nk in tlist]
             nslist = ['!' + s for s in slist]
             self.ckt.okList(cnodes[idx], circuit.Vec(slist), circuit.Vec(nslist), [True, False, True])
-        self.ckt.andN(dest, cvec)
-        self.ckt.decRefs([cvec, nkvec])
+        self.ckt.decRefs([nkvec])
+        # Aggregate into smaller groups
+        range = self.fullRanges()
+        subrange = range[:3]
+        indices = [tuple(idx) for idx in indexExpand(subrange)]
+        agnodes = { idx : "limit0or2-%d%d%d***" % idx for idx in indices }
+        agvec = self.ckt.vec(agnodes.values())
+        for idx in indices:
+            subnodes = [cnodes[sidx] for sidx in indexList if sidx[:3] == idx]
+            self.ckt.andN(agnodes[idx], circuit.Vec(subnodes))
+        self.ckt.decRefs([cvec])
+        # Conjunct across these nodes
+        self.ckt.conjunctN(dest, agvec)
+        self.ckt.decRefs([agvec])
 
     def generateMaxDouble(self, dest):
         dcount = self.dim[0] * self.dim[1] * self.dim[2] - self.auxCount
@@ -1042,11 +1055,11 @@ class MProblem:
         if boundNonKernels:
             nonKernels = self.ckt.node("bound-nonkernels")
             self.ckt.comment("Complete symbolic streamline formula")
-            self.generateBoundKernels(nonKernels)
-            snodes += nonKernels
+            self.generateBoundNonKernels(nonKernels)
+            snodes.append(nonKernels)
         self.ckt.andN(streamline, snodes)
         self.ckt.decRefs(snodes)
-        self.ckt.decRefs(kvec)
+        self.ckt.decRefs([kvec])
         return streamline
 
 # Describe encoding of matrix multiplication

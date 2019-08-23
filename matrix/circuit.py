@@ -464,12 +464,12 @@ class Circuit:
         for i in range(n-1):
             name = v.nodes[i]
             nname = nv.nodes[i]        
-            for l in range(k+1,0,-1):
+            for l in range(k,0,-1):
                 self.iteN(t[l], [name, t[l-1], t[l]])
             self.andN(t[0], [t[0], nname])
         name = v.nodes[n-1]
         nname = nv.nodes[n-1]
-        for l in range(k+1,0,-1):
+        for l in range(k,0,-1):
             self.iteN(destV[l], [name, t[l-1], t[l]])
         self.andN(destV[0], [t[0], nname])
         self.decRefs([t])
