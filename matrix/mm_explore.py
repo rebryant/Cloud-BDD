@@ -197,7 +197,7 @@ class SchemeGenerator:
             report(2, "Returning scheme %s from file '%s'" % (s.sign(), p))
             if self.permute:
                 vp = random.choice(self.vpList)
-                s = s.permute(variablePermuter = vp)
+                s = s.permute(permutationSet = {'variable': vp})
                 report(2, "   Permuted as: %s (Hash = %s)" % (brent.showPerm(vp), s.sign()))
             return s
         report(0, "Couldn't find any candidates after %d tries" % self.tryLimit)
