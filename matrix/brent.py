@@ -636,7 +636,7 @@ class KernelSet:
         permList = []
         if square:
             keyList.append('ijk')
-            permList.append(allPermuters(list(range(self.dim[1]))))
+            permList.append(allPermuters(list(range(3))))
         keyList.append('i')
         permList.append(allPermuters(unitRange(self.dim[0])))
         keyList.append('j')
