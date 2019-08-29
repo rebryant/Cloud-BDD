@@ -73,6 +73,8 @@ typedef struct RELE {
     ref_t fun;
     double sat_count;
     size_t size;
+    int support_count;
+    int *support_indices;
     struct RELE *next;
 } rset_ele;
 
@@ -135,6 +137,8 @@ void rset_free(rset *set) {
     rset_ele *ptr = set->head;
     while (ptr) {
 	root_deref(ptr->fun);
+	if (ptr->support_indices != NULL)
+	    free(ptr->support_indices);
 	rset_ele *nptr = ptr->next;
 	free_block((void *) ptr, sizeof(rset_ele));
 	ptr = nptr;
@@ -149,6 +153,8 @@ void rset_add_term(rset *set, ref_t fun) {
     ele->fun = fun;
     ele->sat_count = -1.0;
     ele->size = 0;
+    ele->support_count = -1;
+    ele->support_indices = NULL;
     if (set->tail) {
 	set->tail->next = ele;
 	set->tail = ele;
@@ -165,6 +171,8 @@ void rset_add_term_first(rset *set, ref_t fun) {
     ele->fun = fun;
     ele->sat_count = -1.0;
     ele->size = 0;
+    ele->support_count = -1;
+    ele->support_indices = NULL;
     set->head = ele;
     if (!set->tail)
 	set->tail = ele;
@@ -220,6 +228,24 @@ static double get_sat_count(rset_ele *ptr) {
     if (ptr->sat_count <= 0.0)
 	ptr->sat_count = cudd_single_count(smgr, ptr->fun);
     return ptr->sat_count;
+}
+
+static int get_support_count(rset_ele *ptr) {
+    if (ptr == NULL)
+	return 0;
+    if (ptr->support_count < 0) {
+	ptr->support_count = shadow_support_indices(smgr, ptr->fun, &ptr->support_indices);
+    }
+    return ptr->support_count;
+}
+
+static int *get_support_indices(rset_ele *ptr) {
+    if (ptr == NULL)
+	return 0;
+    if (ptr->support_count < 0) {
+	ptr->support_count = shadow_support_indices(smgr, ptr->fun, &ptr->support_indices);
+    }
+    return ptr->support_indices;
 }
 
 /* Comparison function for sorting */
@@ -525,7 +551,11 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 	int ccount = 0;
 	for (ptr1 = set->head; ptr1; ptr1 = ptr1->next) {
 	    for (ptr2 = ptr1->next; ptr2; ptr2 = ptr2->next) {
-		double sim = shadow_similarity(smgr, ptr1->fun, ptr2->fun, superset_factor);
+		int support_count1 = get_support_count(ptr1);
+		int *indices1 = get_support_indices(ptr1);
+		int support_count2 = get_support_count(ptr2);
+		int *indices2 = get_support_indices(ptr2);
+		double sim = index_similarity(support_count1, indices1, support_count2, indices2, superset_factor);
 		insert_candidate(candidates, ptr1, ptr2, sim);
 		if (ccount < abort_limit)
 		    ccount++;

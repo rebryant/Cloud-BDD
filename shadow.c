@@ -1506,26 +1506,14 @@ keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots,
 
 /* Compute similarity metric for support sets of two functions */
 /* Parameter superset_factor determines ratio between superset and similarity metrics */
-double shadow_similarity(shadow_mgr mgr, ref_t r1, ref_t r2, double superset_factor) {
-    int *indices1;
-    int *indices2;
-
-    if (!mgr->do_cudd)
-	return 0.0;
-
-    DdNode *n1 = ref2dd(mgr, r1);
-    DdNode *n2 = ref2dd(mgr, r2);
-
-    int scount1 = Cudd_SupportIndices(mgr->bdd_manager, n1, &indices1);
-    int scount2 = Cudd_SupportIndices(mgr->bdd_manager, n2, &indices2);
-
+double index_similarity(int support_count1, int *indices1, int support_count2, int *indices2, double superset_factor) {
     int intersection_count = 0;
     int r1_count = 0;
     int r2_count = 0;
     int idx1 = 0;
     int idx2 = 0;
 
-    while (idx1 < scount1 && idx2 < scount2) {
+    while (idx1 < support_count1 && idx2 < support_count2) {
 	int next1 = indices1[idx1];
 	int next2 = indices2[idx2];
 	if (next1 == next2) {
@@ -1542,19 +1530,43 @@ double shadow_similarity(shadow_mgr mgr, ref_t r1, ref_t r2, double superset_fac
 	    idx2++;
 	}
     }
-    r1_count += (scount1-idx1);
-    r2_count += (scount2-idx2);
+    r1_count += (support_count1-idx1);
+    r2_count += (support_count2-idx2);
     int union_count = r1_count + r2_count - intersection_count;
-    if (union_count == 0)
-	return 1.0;
 
     int min_count = r1_count < r2_count ? r1_count : r2_count;
+
+    double sim = union_count == 0 ? 1.0 : (double) intersection_count / union_count;
+    double cov = min_count == 0 ? 1.0 : (double) intersection_count / min_count;
+
+    return superset_factor * cov + (1-superset_factor) * sim;
+}
+
+int shadow_support_indices(shadow_mgr mgr, ref_t r, int **indicesp) {
+    if (!mgr->do_cudd) {
+	*indicesp = NULL;
+	return -1;
+    }
+    DdNode *n = ref2dd(mgr, r);
+    int support_count = Cudd_SupportIndices(mgr->bdd_manager, n, indicesp);
+    return support_count;
+}
+
+/* Compute similarity metric for support sets of two functions */
+/* Parameter superset_factor determines ratio between superset and similarity metrics */
+double shadow_similarity(shadow_mgr mgr, ref_t r1, ref_t r2, double superset_factor) {
+    int *indices1;
+    int *indices2;
+
+    if (!mgr->do_cudd)
+	return 0.0;
+    int support_count1 = shadow_support_indices(mgr, r1, &indices1);
+    int support_count2 = shadow_support_indices(mgr, r2, &indices2);
+
+    double result = index_similarity(support_count1, indices1, support_count2, indices2, superset_factor);
 
     free(indices1);
     free(indices2);
 
-    double sim = (double) intersection_count / union_count;
-    double cov = (double) intersection_count / min_count;
-
-    return superset_factor * cov + (1-superset_factor) * sim;
+    return result;
 }
