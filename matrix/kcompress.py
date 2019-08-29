@@ -41,7 +41,10 @@ def catalog(kdlist):
     kc, dlist = k.listCanonize()
     sig = kc.signature()
     if sig not in kernelDict:
+        print("Created new kernel %s" % kc.sign())
         kernelDict[sig] = kc
+    else:
+        print("Created kernel that duplicates %s" % kc.sign())
 
 def mergeSingles():
     levelList = sourceKernel.levelize()
@@ -66,6 +69,32 @@ def mergeSingles():
                 nextLevel += 1
             catalog(kdlist)
     
+def addToMulti():
+    levelList = sourceKernel.levelize()
+    # Split into levels with single kernels and ones with multiple kernels
+    singleList = [ls for ls in levelList if len(ls) == 1]
+    multiList =  [ls for ls in levelList if len(ls) > 1]
+    # Enumerate pairs from single lists
+    for idxm in range(len(multiList)):
+        ktlist = multiList[idxm]
+        newMultiList = [ls for ls in multiList if ls != ktlist]
+        for idxs in range(len(singleList)):
+            kt = singleList[idxs][0]
+            newSingleList = [ls for ls in singleList if ls[0] != kt]
+            newList = list(ktlist)
+            newList.append(kt)
+            # Now generate list of kernel terms with new levels
+            nextLevel = 1
+            kdlist = []
+            for ls in newMultiList + [newList] + newSingleList:
+                for kt in ls:
+                    nkt = kt.clone()
+                    nkt.level = nextLevel
+                    kdlist.append(nkt)
+                nextLevel += 1
+            catalog(kdlist)
+
+
 def save(k):
     khash = k.sign()
     outName = khash + ".exp"
@@ -84,6 +113,7 @@ def run(path):
     if sourceKernel is None:
         return
     mergeSingles()
+    addToMulti()
     print("%d kernels tested.  %d unique kernels generated" % (testCount, len(kernelDict)))
     print("Original Signature:")
     print("  " + sourceKernel.shortString())
