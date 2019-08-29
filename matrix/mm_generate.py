@@ -11,12 +11,13 @@ import circuit
 import brent
 
 def usage(name):
-    print "Usage %s [-h] [-k|-K] [-e|-E] [(-b|-B LLIST)] [-z] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
+    print "Usage %s [-h] [-k|-K] [-e|-E] [-2] [(-b|-B LLIST)] [-z] [-t SECS] [-S SEED] [-c APROB:BPROB:CPROB] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)] [-o OUTF]" % name
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
     print " -K KFILE         Read kernel structure from KFILE"
     print " -e               Generate streamline constraints based on singleton exclusion property"
     print " -E               Generate symbolic streamline formula constraining solution form"
+    print " -2               Constrain nonkernel terms to have at most 2 positive instances"
     print " -b               Combine products in breadth-first order"
     print " -B LLIST         Use breadth-first order, combining at levels specified as comma-separated list"
     print " -z               Use a ZDD representation"
@@ -42,14 +43,14 @@ def run(name, args):
     varKV = False
     excludeSingleton = False
     symbolicStreamline = False
+    boundNonKernels = False
     breadthFirst = False
     levelList = brent.unitRange(6)
     useZdd = False
     timeLimit = None
     seed = 0
-
     
-    optlist, args = getopt.getopt(args, 'hkK:eEbB:zS:t:c:s:p:n:o:')
+    optlist, args = getopt.getopt(args, 'hkK:eE2bB:zS:t:c:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -63,6 +64,8 @@ def run(name, args):
             excludeSingleton = True
         elif opt == '-E':
             symbolicStreamline = True
+        elif opt == '-2':
+            boundNonKernels = True
         elif opt == '-b':
             breadthFirst = True
         elif opt == '-B':
@@ -158,7 +161,9 @@ def run(name, args):
     else:
         s.generateProgram(categoryProbabilities, seed = seed, timeLimit = timeLimit, fixKV = fixKV, 
                           excludeSingleton = excludeSingleton, 
-                          breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd, symbolicStreamline = symbolicStreamline)
+                          breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd, symbolicStreamline = symbolicStreamline,
+                          boundNonKernels = boundNonKernels
+        )
     
     
             
