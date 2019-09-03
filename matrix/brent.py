@@ -668,7 +668,7 @@ class KernelSet:
         return (bestSet, bestPermuterList)
 
     def isSymmetric(self):
-        pset = { 'ijk' : {'i' : 'k', 'j' : 'j', 'k' : 'i'}}
+        pset = { 'ijk' : {0 : 2, 1 : 1, 2 : 0}}
         pkset, lp = self.levelCanonize()        
         mpkset, plp = pkset.permute(pset).levelCanonize()
         return pkset.signature() == mpkset.signature()
@@ -678,7 +678,7 @@ class KernelSet:
     #  Return list of kernels, plus list of dictionary lists
     #  Each dictionary list records all permutations leading to corresponding kernel
     #  In event that no permutation is symmetric, return two empty lists
-    def listCanonize(self):
+    def findSymmetries(self):
         # Computed results
         kernelList = []
         permDictList = []
@@ -1245,8 +1245,32 @@ class MScheme(MProblem):
 
     def levelCanonize(self):
         (k, levelPermuter) = self.kernelTerms.levelCanonize()
-        return self.permute({'level' : levelPermuter})
+        ps = self.permute({'level' : levelPermuter})
+        pslist = ps.generatePolynomial()
+        # Challenge: can have multiple levels with same kernel representation
+        # Need to canonize these
+        # Create short string labels for each level
+        klist = k.shortstring.split(' ')
+        kdict = {}
+        uklist = []
+        for kstring, pstring in zip(klist, pslist):
+            if kstring in kdict:
+                kdict[kstring].append(pstring)
+            else:
+                uklist.append(kstring)
+                kdict[kstring] = [pstring]
+        npslist = []
+        for kstring in uklist:
+            kdict[kstring].sort()
+            npslist += kdict[kstring]
+        # WORK HERE!
+        return None
 
+    def isSymmetric(self):
+        pset = { 'variable' : {'alpha' : 'beta', 'beta' : 'alpha', 'gamma' : 'gamma'}}
+        ls = self.levelCanonize()
+        lsp = ls.permute(pset).levelCanonize()
+        return ls.signature() == lsp.signature()
 
     # Apply permutations
     def permute(self, permutationSet):
