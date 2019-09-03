@@ -637,6 +637,9 @@ class KernelSet:
         if square:
             keyList.append('ijk')
             permList.append(allPermuters(list(range(3))))
+        else:
+            # This is overly conservative.  Could get permutations when i == j or j == k or i == k
+            pass
         keyList.append('i')
         permList.append(allPermuters(unitRange(self.dim[0])))
         keyList.append('j')
@@ -664,6 +667,54 @@ class KernelSet:
                     bestPermuterList.append(npset)
         return (bestSet, bestPermuterList)
 
+    def isSymmetric(self):
+        pset = { 'ijk' : {'i' : 'k', 'j' : 'j', 'k' : 'i'}}
+        pkset, lp = self.levelCanonize()        
+        mpkset, plp = pkset.permute(pset).levelCanonize()
+        return pkset.signature() == mpkset.signature()
+
+
+    #  Find all permutations that yield symmetric kernel
+    #  Return list of kernels, plus list of dictionary lists
+    #  Each dictionary list records all permutations leading to corresponding kernel
+    #  In event that no permutation is symmetric, return two empty lists
+    def listCanonize(self):
+        # Computed results
+        kernelList = []
+        permDictList = []
+        # Map from kernel signature to position in list
+        signatureDict = {}
+        square = self.dim[0] == self.dim[1] and self.dim[1] and self.dim[2]
+        if not square:
+            # Note: This is overly conservative.  Could get symmetry if i == k
+            return (kernelList, permDictList)
+        # List of permutations to attempt
+        permList = []
+        keyList = []
+        keyList.append('ijk')
+        permList.append(allPermuters(list(range(3))))
+        keyList.append('i')
+        permList.append(allPermuters(unitRange(self.dim[0])))
+        keyList.append('j')
+        permList.append(allPermuters(unitRange(self.dim[1])))
+        keyList.append('k')
+        permList.append(allPermuters(unitRange(self.dim[2])))
+
+        for pset in allPermuterSets(keyList, permList):
+            kset = self.permute(pset)
+            if not kset.isSymmetric():
+                continue
+            nkset, levelPermuter = kset.levelCanonize()
+            npset = { idx : pset[idx] for idx in ['i', 'j', 'k', 'ijk']}
+            npset['level'] = levelPermuter
+            signature = nkset.signature()
+            if signature in signatureDict:
+                permDictList[signatureDict[signature]].append(npset)
+            else:
+                signatureDict[signature] = len(kernelList)
+                kernelList.append(nkset)
+                permDictList.append([npset])
+        return (kernelList, permDictList)
 
     # See if there is a matching Kernel term and return its level
     # Return -1 if none found
