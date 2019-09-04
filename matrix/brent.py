@@ -93,6 +93,10 @@ def convertPermuter(p, rvals):
 def invertPermuter(p):
     return { p[k] : k for k in p.keys()}
 
+def composePermuters(p1, p2):
+    return { k : p2[p1[k]] for k in p1.keys() }
+
+
 # Create string representation of permutation
 def showPerm(p):
     slist = ["%s --> %s" % (k, p[k]) for k in sorted(p.keys())]
@@ -1293,22 +1297,11 @@ class MScheme(MProblem):
         lppermuter, lsp = ls.permute(pset).levelCanonize()
         if ls.signature() != lsp.signature():
             return None
+        # Reverse original permuter
+        rlpermuter = invertPermuter(lpermuter)
         # Map from original level, through level canonizing, permuting and level canonizing
-        forwardPermuter = { level : lppermuter[lpermuter[level]] for level in unitRange(self.auxCount) }
-        # Reverse it
-        reversePermuter = invertPermuter(forwardPermuter)
-        matcher = { level : lpermuter[reversePermuter[level]] for level in unitRange(self.auxCount) }
-
-        # Debugging code
-        pslist = self.generatePolynomial()
-        lplist = ls.generatePolynomial()
-        lpplist = ls.permute(pset).generatePolynomial()
-        lsplist = lsp.generatePolynomial()
-        for level in unitRange(self.auxCount):
-            mlevel = lpermuter[level]
-            print("Level %d.  Original term %s.  Maps to level %d (%s)" % (level, pslist[level-1], mlevel, lplist[mlevel-1]))
-            nlevel = lppermuter[mlevel]
-            print("   permutes to %s, which maps to level %d (%s)" % (lpplist[mlevel-1], nlevel, lsplist[nlevel-1]))
+        forwardPermuter = composePermuters(lpermuter, lppermuter)
+        matcher = composePermuters(forwardPermuter, rlpermuter)
         return matcher
 
     # Apply permutations
