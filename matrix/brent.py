@@ -533,14 +533,18 @@ class KernelSet:
         tstrings = [kt.generateString(showLevel) for kt in self.kdlist]
         return " ".join(tstrings)
 
-    def shortString(self):
+    def shortStringList(self):
         levelList = self.levelize()
         tstrings = []
         for ls in levelList:
             slist = [k.shortString() for k in ls]
             sform = '[' + ' '.join(slist) + ']' if len(ls) > 1 else slist[0]
             tstrings.append(sform)
-        return " ".join(tstrings)
+        return tstrings
+
+    def shortString(self):
+        tstrings = self.shortStringList()
+        return ' '.join(tstrings)
 
     def printPolynomial(self, outf = sys.stdout):
         levelList = self.levelize()
@@ -1243,34 +1247,69 @@ class MScheme(MProblem):
         sbest.hasBeenCanonized = True
         return sbest
 
+    # Organize levels into canonical form
+    # given that multiple levels can have same kernel term(s).
+    # Used for symmetry detection
+    # Return resulting scheme + permuter
     def levelCanonize(self):
         (k, levelPermuter) = self.kernelTerms.levelCanonize()
+        # Generate map from new level back to original
+        reversePermuter = invertPermuter(levelPermuter)
         ps = self.permute({'level' : levelPermuter})
         pslist = ps.generatePolynomial()
         # Challenge: can have multiple levels with same kernel representation
         # Need to canonize these
         # Create short string labels for each level
-        klist = k.shortstring.split(' ')
+        klist = k.shortStringList()
         kdict = {}
         uklist = []
-        for kstring, pstring in zip(klist, pslist):
+        for kstring, pstring, nlevel in zip(klist, pslist, unitRange(self.auxCount)):
+            # Where was this term in the original scheme
+            olevel = reversePermuter[nlevel]
             if kstring in kdict:
-                kdict[kstring].append(pstring)
+                kdict[kstring].append((pstring, olevel))
             else:
                 uklist.append(kstring)
-                kdict[kstring] = [pstring]
-        npslist = []
+                kdict[kstring] = [(pstring, olevel)]
+        nplist = []
         for kstring in uklist:
-            kdict[kstring].sort()
-            npslist += kdict[kstring]
-        # WORK HERE!
-        return None
+            plist = kdict[kstring]
+            plist.sort(key = lambda p: p[0])
+            nplist += plist
+        ns = MScheme(self.dim, self.auxCount,self.ckt)
+        npermuter = {}
+        for level in unitRange(self.auxCount):
+            pstring, olevel = nplist[level-1]
+            ns.parsePolynomialLine(pstring, level)
+            npermuter[olevel] = level
+        ns.kernelTerms = ns.findKernels()
+        return (npermuter, ns)
 
-    def isSymmetric(self):
+    # Detect whether scheme is symmetric.  If not, return None.
+    # Else, return mapping between symmetric levels
+    def findSymmetry(self):
         pset = { 'variable' : {'alpha' : 'beta', 'beta' : 'alpha', 'gamma' : 'gamma'}}
-        ls = self.levelCanonize()
-        lsp = ls.permute(pset).levelCanonize()
-        return ls.signature() == lsp.signature()
+        lpermuter, ls = self.levelCanonize()
+        lppermuter, lsp = ls.permute(pset).levelCanonize()
+        if ls.signature() != lsp.signature():
+            return None
+        # Map from original level, through level canonizing, permuting and level canonizing
+        forwardPermuter = { level : lppermuter[lpermuter[level]] for level in unitRange(self.auxCount) }
+        # Reverse it
+        reversePermuter = invertPermuter(forwardPermuter)
+        matcher = { level : lpermuter[reversePermuter[level]] for level in unitRange(self.auxCount) }
+
+        # Debugging code
+        pslist = self.generatePolynomial()
+        lplist = ls.generatePolynomial()
+        lpplist = ls.permute(pset).generatePolynomial()
+        lsplist = lsp.generatePolynomial()
+        for level in unitRange(self.auxCount):
+            mlevel = lpermuter[level]
+            print("Level %d.  Original term %s.  Maps to level %d (%s)" % (level, pslist[level-1], mlevel, lplist[mlevel-1]))
+            nlevel = lppermuter[mlevel]
+            print("   permutes to %s, which maps to level %d (%s)" % (lpplist[mlevel-1], nlevel, lsplist[nlevel-1]))
+        return matcher
 
     # Apply permutations
     def permute(self, permutationSet):
