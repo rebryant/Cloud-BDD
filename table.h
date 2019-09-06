@@ -58,7 +58,7 @@ void keyvalue_free(keyvalue_table_ptr kvt);
 void keyvalue_insert(keyvalue_table_ptr kvt, word_t key, word_t value);
 
 /* Look for element in key/value table.
-   If found, sets *valp to its value.
+   If found, and valp non-null, sets *valp to its value.
 */
 bool keyvalue_find(keyvalue_table_ptr kvt, word_t key, word_t *valp);
 
