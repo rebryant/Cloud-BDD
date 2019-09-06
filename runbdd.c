@@ -50,7 +50,11 @@ int superset_percent = 0;
 shadow_mgr smgr;
 
 /* Mapping from string names to shadow pointers */
+/* All names */
 keyvalue_table_ptr nametable;
+/* Variables only.  These aren't included in reference count */
+/* Have separate copy of strings */
+keyvalue_table_ptr varnametable;
 
 /*
   Maintain reference count for each ref reachable from nametable
@@ -93,7 +97,7 @@ chunk_ptr run_flush();
 void root_deref(ref_t r);
 ref_t get_ref(char *name);
 static set_ptr get_refs(int cnt, char *names[]);
-static void assign_ref(char *name, ref_t r, bool fresh);
+static void assign_ref(char *name, ref_t r, bool fresh, bool variable);
 
 static void client_gc_start();
 static void client_gc_finish();
@@ -102,11 +106,12 @@ static void client_gc_finish();
 static void bdd_init() {
     smgr = new_shadow_mgr(do_cudd, do_local, do_dist, chaining_type);
     nametable = keyvalue_new(string_hash, string_equal);
+    varnametable = keyvalue_new(string_hash, string_equal);
     reftable = word_keyvalue_new();
     ref_t rzero = shadow_zero(smgr);
     ref_t rone = shadow_one(smgr);
-    assign_ref("zero", rzero, true);
-    assign_ref("one", rone, true);
+    assign_ref("zero", rzero, true, false);
+    assign_ref("one", rone, true, false);
     set_gc_handlers(client_gc_start, client_gc_finish);
 }
 
@@ -168,6 +173,7 @@ static void console_init(bool do_dist, char *cstring) {
 
 static bool bdd_quit(int argc, char *argv[]) {
     word_t wk, wv;
+
     while (keyvalue_removenext(nametable, &wk, &wv)) {
 	char *s = (char *) wk;
 	ref_t rold = (ref_t) wv;
@@ -179,6 +185,19 @@ static bool bdd_quit(int argc, char *argv[]) {
 	free_string(s);
     }
     keyvalue_free(nametable);
+
+    while (keyvalue_removenext(varnametable, &wk, &wv)) {
+	char *s = (char *) wk;
+	ref_t rold = (ref_t) wv;
+	report(5, "Removing function %s from name table", s);
+	root_deref(rold);
+#if RPT >= 5
+	report(5, "Freeing string '%s' from name table", s);
+#endif
+	free_string(s);
+    }
+    keyvalue_free(varnametable);
+
     if (reftable->nelements > 0) {
 	report(2, "Still have references to %zd functions", reftable->nelements);
     } else {
@@ -390,13 +409,17 @@ void root_deref(ref_t r) {
 }
 
 /* Add reference to table.  Makes permanent copy of name */
-static void assign_ref(char *name, ref_t r, bool fresh) {
+static void assign_ref(char *name, ref_t r, bool fresh, bool variable) {
     ref_t rold;
     char *sname;
     /* Add reference to new value */
     root_addref(r, fresh);
     /* (Try to) remove old value */
     word_t wk, wv;
+    if (keyvalue_find(varnametable, (word_t) name, NULL)) {
+	err(false, "Attempt to redefine variable %s.  Ignored", name);
+	return;
+    }
     if (keyvalue_remove(nametable, (word_t) name, &wk, &wv)) {
 	sname = (char *) wk;
 	rold = (ref_t) wv;
@@ -427,11 +450,19 @@ static void assign_ref(char *name, ref_t r, bool fresh) {
 	sname = strsave_or_fail(name, "assign_ref");
     }
     keyvalue_insert(nametable, (word_t) sname, (word_t) r);
+    if (variable) {
+	root_addref(r, fresh);
+	sname = strsave_or_fail(name, "assign_ref");
+	keyvalue_insert(varnametable, (word_t) sname, (word_t) r);
+    }
     if (verblevel >= 5) {
 	char buf[24];
 	shadow_show(smgr, r, buf);
 #if RPT >= 5
-	report(5, "Added %s:%s to name table", name, buf);
+	if (variable)
+	    report(5, "Added %s:%s to name and variable table", name, buf);
+	else
+	    report(5, "Added %s:%s to name table", name, buf);
 #endif
     }
 }
@@ -457,7 +488,7 @@ ref_t get_ref(char *name) {
 	    ref_t nr = (ref_t) wv;
 	    r = shadow_negate(smgr, nr);
 	    // Create record of resulting value
-	    assign_ref(name, r, true);
+	    assign_ref(name, r, true, false);
 	    return r;
 	}
     }
@@ -487,9 +518,9 @@ static set_ptr get_refs(int cnt, char *names[]) {
     }
 }
 
-/* Inefficient way to do inverse lookup in nametable */
+/* Inefficient way to do inverse lookup of variable name */
 static char *name_find(ref_t r) {
-    keyvalue_iterstart(nametable);
+    keyvalue_iterstart(varnametable);
     char *name;
     ref_t tr;
     word_t wk, wv;
@@ -555,7 +586,7 @@ static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun
     rval = tree_reduce(argv, unit_ref, cfun, 2, argc-1);
     if (REF_IS_INVALID(rval))
 	return false;
-    assign_ref(argv[1], rval, false);
+    assign_ref(argv[1], rval, false, false);
     /* Remove double counting of refs */
     root_deref(rval);
 #if RPT >= 1
@@ -617,7 +648,7 @@ static bool do_reduce_monolithic(int argc, char *argv[], ref_t unit_ref, combine
 	if (do_dist)
 	    undefer();
     }
-    assign_ref(argv[1], rval, false);
+    assign_ref(argv[1], rval, false, false);
     /* Remove double counting of refs */
     if (argc > 2)
 	root_deref(rval);
@@ -646,7 +677,7 @@ static bool do_reduce_old(int argc, char *argv[], ref_t unit_ref, combine_fun_t 
 	ref_t nval = cfun(smgr, rval, rarg);
 	rval = nval;
     }
-    assign_ref(argv[1], rval, false);
+    assign_ref(argv[1], rval, false, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
 	do_collect(0, NULL);
@@ -685,7 +716,7 @@ bool do_not(int argc, char *argv[]) {
     ref_t rval = shadow_negate(smgr, rf);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    assign_ref(argv[1], rval, false);
+    assign_ref(argv[1], rval, false, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
 	do_collect(0, NULL);
@@ -715,7 +746,7 @@ bool do_ite(int argc, char *argv[]) {
     ref_t rval = shadow_ite(smgr, ri, rt, re);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    assign_ref(argv[1], rval, false);
+    assign_ref(argv[1], rval, false, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
 	do_collect(0, NULL);
@@ -848,7 +879,7 @@ bool do_restrict(int argc, char *argv[]) {
     ref_t rval = shadow_cm_restrict(smgr, rf, rc);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    assign_ref(argv[1], rval, false);
+    assign_ref(argv[1], rval, false, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
 	do_collect(0, NULL);
@@ -894,7 +925,7 @@ bool do_simplify(int argc, char *argv[]) {
 	return false;
     }
     // Assign to fnew
-    assign_ref(argv[1], rval, false);
+    assign_ref(argv[1], rval, false, false);
 
     // Correctness checking
     // And of f1 f2 ...
@@ -942,7 +973,7 @@ bool do_conjunct(int argc, char *argv[]) {
     if (REF_IS_INVALID(rval)) {
 	return false;
     }
-    assign_ref(argv[1], rval, false);
+    assign_ref(argv[1], rval, false, false);
     root_deref(rval);
     rset_free(set);
     return true;
@@ -973,7 +1004,7 @@ bool do_zconvert(int argc, char *argv[]) {
 	    free_string(olds);
 	}
 	rnew = shadow_zconvert(smgr, rold);
-	assign_ref(argv[1], rnew, false);
+	assign_ref(argv[1], rnew, false, false);
 #if RPT >= 2
 	shadow_show(smgr, rold, bufold);
 	shadow_show(smgr, rnew, bufnew);
@@ -1011,7 +1042,7 @@ bool do_aconvert(int argc, char *argv[]) {
 	    free_string(olds);
 	}
 	rnew = shadow_aconvert(smgr, rold);
-	assign_ref(argv[1], rnew, false);
+	assign_ref(argv[1], rnew, false, false);
 #if RPT >= 2
 	shadow_show(smgr, rold, bufold);
 	shadow_show(smgr, rnew, bufnew);
@@ -1137,7 +1168,7 @@ bool do_cofactor(int argc, char *argv[]) {
     bool ok = keyvalue_find(map, (word_t) rold, &wr);
     if (ok) {
 	ref_t rnew = (ref_t) wr;
-	assign_ref(argv[1], rnew, false);
+	assign_ref(argv[1], rnew, false, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
 	report(2, "RESULT.  %s = %s", argv[1], buf);
@@ -1174,7 +1205,7 @@ bool do_equant(int argc, char *argv[]) {
     bool ok = keyvalue_find(map, (word_t) rold, &wr);
     if (ok) {
 	ref_t rnew = (ref_t) wr;
-	assign_ref(argv[1], rnew, false);
+	assign_ref(argv[1], rnew, false, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
 	report(2, "RESULT.  %s = %s", argv[1], buf);
@@ -1214,7 +1245,7 @@ bool do_uquant(int argc, char *argv[]) {
     if (ok) {
 	ref_t rnew = (ref_t) wr;
 	rnew = REF_NEGATE(rnew);
-	assign_ref(argv[1], rnew, false);
+	assign_ref(argv[1], rnew, false, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
 	report(2, "RESULT.  %s = %s", argv[1], buf);
@@ -1287,7 +1318,7 @@ bool do_shift(int argc, char *argv[]) {
     ok = keyvalue_find(map, (word_t) rold, &wr);
     if (ok) {
 	ref_t rnew = (ref_t) wr;
-	assign_ref(argv[1], rnew, false);
+	assign_ref(argv[1], rnew, false, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
 	report(2, "RESULT.  %s = %s", argv[1], buf);
@@ -1374,7 +1405,7 @@ bool do_var(int argc, char *argv[]) {
 	rv = shadow_new_variable(smgr);
 	if (REF_IS_INVALID(rv))
 	    return false;
-	assign_ref(argv[i], rv, false);
+	assign_ref(argv[i], rv, false, true);
 	shadow_show(smgr, rv, buf);
 #if RPT >= 2
 	report(2, "VAR %s = %s", argv[i], buf);
