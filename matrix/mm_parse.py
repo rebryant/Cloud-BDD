@@ -164,6 +164,30 @@ def getSupport(fname):
     inf.close()
     return []
             
+def getDependencies(fname):
+    dependencyList = []
+    matcher = re.compile(cmdPrefix + "# Symmetry dependency")
+    try:
+        inf = open(fname, 'r')
+    except:
+        print("Couldn't open input file '%s'" % fname)
+        return []
+    lineCount = 0
+    for line in inf:
+        line = brent.trim(line)
+        if matcher.match(line):
+            fields = line.split()
+            dname = fields[-2]
+            sname = fields[-1]
+            dependencyList.append((dname, sname))
+            print("%s depends on %s" % (dname, sname))
+        elif len(line) > 0 and line[0] == '#':
+            print("Parsed comment '%s'" % line)
+        lineCount += 1
+    inf.close()
+    print("%d symmetry dependencies found in %d lines" % (len(dependencyList), lineCount))
+    return None if len(dependencyList) == 0 else dependencyList
+
 def getPeakNodes(fname):
     matcher = re.compile("Peak number of live nodes: ([0-9]+)")
     try:
@@ -329,6 +353,7 @@ def processSolution(scheme, sname, metadata = [], recordFunction = recordSolutio
 def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
     global nonHeuleCount, freshCount
     supportNames = getSupport(iname)
+    dependencyList = getDependencies(iname)
     slist = getBitSolutions(iname)
     index = 1
     newCount = 0
@@ -341,7 +366,17 @@ def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
         except Exception as ex:
             print("Couldn't process solution: %s" % str(ex))
             continue
+        try:
+            if dependencyList is not None:
+                ss = ss.parseDependencies(dependencyList)
+        except Exception as ex:
+            print("Couldn't process symmetry dependencies: %s" % str(ex))
+            continue
         sname = "%s #%d" % (iname, index)
+        if not ss.obeysBrent():
+            print("Oops.  Generated solution does not satisfy Brent constraints")
+            ss.printPolynomial(metadata = metadata)
+            continue
         sc = ss.canonize()
         if processSolution(sc, sname, metadata, recordFunction):
             newCount += 1
