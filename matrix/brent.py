@@ -542,7 +542,7 @@ class KernelSet:
         tstrings = []
         for ls in levelList:
             slist = [k.shortString() for k in ls]
-            sform = '[' + ' '.join(slist) + ']' if len(ls) > 1 else slist[0]
+            sform = '[' + ' '.join(slist) + ']' if len(ls) != 1 else slist[0]
             tstrings.append(sform)
         return tstrings
 
@@ -621,13 +621,14 @@ class KernelSet:
         # Only problem is that the levels should be sorted inversely by length
         # and secondarily by indices of first element
         levelList = self.levelize()
-        levelList.sort(key = lambda ls : "%d+%s" % (999-len(ls), ls[0].generateString(False)))
+        pairList = [(level, llist) for level, llist in zip(unitRange(self.auxCount), levelList)]
+        pairList.sort(key = lambda pair : "%d+%s" % (999-len(pair[1]), "" if len(pair[1]) == 0 else pair[1][0].generateString(False)))
 
         # Map from old level to new level
         levelPermuter = {}
         nlevel = 1
-        for llist in levelList:
-            olevel = llist[0].level
+        for pair in pairList:
+            olevel = pair[0]
             levelPermuter[olevel] = nlevel
             nlevel += 1
         pkset = self.permute({'level': levelPermuter})
@@ -829,7 +830,7 @@ class MProblem:
     # Helper routines to build up formula encoding all Brent constraints
 
     # Declare (subset of) variables
-    def declareVariables(self, fixedList = []):
+    def declareVariablesOld(self, fixedList = []):
         for level in unitRange(self.auxCount):
             generatedComment = False
             for cat in ['gamma', 'alpha', 'beta']:
@@ -844,6 +845,44 @@ class MProblem:
                         generatedComment = True
                     vec = circuit.Vec(vars)
                     self.ckt.declare(vec)
+
+    # Declare (subset of) variables
+    def declareVariables(self, fixedList = [], symmetryMap = None):
+        # For generating symmetries
+        if symmetryMap is None:
+            pset = None
+        else:
+            varPermuter = {'alpha':'beta', 'beta':'alpha', 'gamma':'gamma'}
+            pset = {'level' : symmetryMap, 'variable' : varPermuter}
+        for level in unitRange(self.auxCount):
+            allVars = []
+            for cat in ['gamma', 'alpha', 'beta']:
+                nrow = self.nrow(cat)
+                ncol = self.ncol(cat)
+                allVars += [BrentVariable(cat, i//ncol+1, (i%ncol)+1, level) for i in range(nrow*ncol)]
+            candidateVars = [v for v in allVars if v not in fixedList]
+            if symmetryMap is None:
+                trueVars = candidateVars
+                replicatedPairs = []
+            else:
+                trueVars = []
+                replicatedPairs = []
+                for v in candidateVars:
+                    mv = v.permute(pset)
+                    if mv in fixedList or mv < v:
+                        replicatedPairs.append((v, mv))
+                    else:
+                        trueVars.append(v)
+                
+            if len(trueVars) > 0:
+                self.ckt.comment("Variables for auxilliary term %d" % level)
+                vec = circuit.Vec(trueVars)
+                self.ckt.declare(vec)
+
+            if len(replicatedPairs) > 0:
+                self.ckt.comment("Variables defined by symmetry for auxilliary term %d" % level)
+                for v, mv in replicatedPairs:
+                    self.ckt.andN(v, [mv])
 
 
     def dfGenerator(self, streamlineNode = None, check = False, prefix = []):
@@ -1352,6 +1391,7 @@ class MScheme(MProblem):
         outfile.write("# Compute A (%d x %d) X B (%d x %d) = C (%d x %d)\n" % self.fullRanges())
         outfile.write("# Requires %d multiplications and %d additions\n" % (self.auxCount, self.addCount()))
         outfile.write("# Kernel signature %s\n" % self.kernelTerms.sign())
+        outfile.write("# Kernel: %s\n" % self.kernelTerms.shortString())
         outfile.write("# Own signature %s\n" % self.sign())
         if self.hasBeenCanonized:
             outfile.write("# This representation has been put into canonical form\n")
@@ -1454,7 +1494,8 @@ class MScheme(MProblem):
         self.ckt.decRefs([av, bv, gv, pv])
         return snode
 
-    def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, fixKV = False, varKV = False):
+    def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None,
+                                 fixKV = False, varKV = False, symmetryMap = None):
         fixedAssignment = Assignment()
         vlist = []
         if fixKV:
@@ -1471,10 +1512,12 @@ class MScheme(MProblem):
             self.ckt.comment("Fixed assignments, generated from scheme with signature %s" % self.sign())
             fixedAssignment.assign(self.ckt)
         fixedVariables = [v for v in fixedAssignment.variables()]
-        self.declareVariables(fixedVariables)
+        self.declareVariables(fixedVariables, symmetryMap)
 
 
-    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None, fixKV = False, varKV = False, excludeSingleton = False, breadthFirst = False, levelList = None, useZdd = False, symbolicStreamline = False, boundNonKernels = False):
+    def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None,
+                        fixKV = False, varKV = False, excludeSingleton = False, breadthFirst = False, levelList = None,
+                        useZdd = False, symbolicStreamline = False, boundNonKernels = False, checkSymmetry = False):
         plist = list(categoryProbabilities.values())
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
         self.ckt.cmdLine("option", ["echo", 1])
@@ -1497,7 +1540,13 @@ class MScheme(MProblem):
             self.ckt.comment("Enforcing singleton exclusion")
         if symbolicStreamline:
             self.ckt.comment("Enforcing kernel constraints unique usage, max double, and singleton exclusion")            
-        self.generateMixedConstraints(categoryProbabilities, seed, fixKV, varKV)
+        if checkSymmetry:
+            symmetryMap = self.findSymmetry()
+        else:
+            symmetryMap = None
+        if symmetryMap is not None:
+            self.ckt.comment("Exploiting symmetry constraints")
+        self.generateMixedConstraints(categoryProbabilities, seed, fixKV, varKV, symmetryMap)
         streamlineNode = None
         if excludeSingleton:
             streamlineNode = self.generateStreamline()
