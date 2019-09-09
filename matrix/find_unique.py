@@ -7,10 +7,27 @@
 import sys
 import os
 import os.path
+import getopt
 
 import circuit
 import brent
 
+def usage(name):
+    print("Usage: %s [-h] [-x]")
+    print " -h               Print this message"
+    print " -x               Process symmetric solutions"
+    sys.exit(0)
+
+doSymmetry = True
+name = sys.argv[0]
+args = sys.argv[1:]
+
+optlist, args = getopt.getopt(args, 'hx')
+for (opt, val) in optlist:
+    if opt == '-h':
+        usage(name)
+    if opt == '-x':
+        doSymmetry = True
 
 # Map from canonical polynomial to list of file paths
 signatureDict = {}
@@ -22,7 +39,7 @@ auxCount = 23
 
 ckt = circuit.Circuit()
 
-subDirectory = "mm-solutions"
+subDirectory = "mm-solutions-symmetric" if doSymmetry else "mm-solutions"
 
 candidatePath = subDirectory + "/heule-candidates.txt"
 sourceDirectory = subDirectory + "/heule-online"
@@ -63,16 +80,21 @@ def checkSolution(subPath):
     except Exception as ex:
         print "ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex))
         return
+    sc = s.symmetricCanonize() if doSymmetry else s.canonize()
+    if sc is None:
+        print("Warning.  Encountered non-symmetric solution in %s" % path)
+        return
     solutionCount += 1
-    sc = s.canonize()
     sig = sc.signature()
     list = signatureDict[sig] if sig in signatureDict else []
     if len(list) == 0:
-        print "File %s has unique solution" % (subPath)
+        print("File %s has unique solution" % (subPath))
         signatureCount += 1
         newCanonical(sc, subPath)
     else:
-        print "File %s has same solution as %d other files" % (subPath, len(list))
+        opath = list[0]
+        name = opath.split('/')[-1]
+        print("File %s has same solution as file %s" % (subPath, name))
     list.append(path)
     signatureDict[sig] = list
 
