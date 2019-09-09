@@ -74,6 +74,17 @@ class Matrix:
                 return False
         return True
 
+    def isSymmetric(self):
+        if self.rows != self.cols:
+            return False
+        for r in range(self.rows):
+            for c in range(self.cols):
+                v = self.val(r, c)
+                tv = self.val(c, r)
+                if v != tv:
+                    return False
+        return True
+
     def multiply(self, other):
         if other.rows != self.cols:
             print("Cannot multiply %dx%d matrix times %dx%d matrix" % (self.rows, self.cols, other.rows, other.cols))

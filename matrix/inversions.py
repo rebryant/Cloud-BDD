@@ -6,7 +6,7 @@ import superbrent
 # Enumerate invertible n X n matrices in Z2
 
 def usage(name):
-    print("Usage: %s [-h] [-n N]" % name)
+    print("Usage: %s [-h] [-x] [-n N]" % name)
     print("   -h    Print this information")
     print("   -n N  Specify matrix dimension")
 
@@ -35,34 +35,54 @@ def showPairs(fname, plist, outf = sys.stdout):
 def signatureRange(n):
     return (1 << (n*n))
 
-def allPairs(n):
+def allPairs(n, symmetricOnly = False):
     plist = []
     n2 = signatureRange(n)
     for sig1 in range(n2):
         m1 = generate(n, sig1)
+        if symmetricOnly and not m1.isSymmetric():
+            continue
         for sig2 in range(n2):
             m2 = generate(n, sig2)
+            if symmetricOnly and not m2.isSymmetric():
+                continue
             if pairTest(m1, m2):
                 plist.append((m1,m2))
     plist.sort(key = lambda p:p[0].sortKey())
     return plist
             
-def allPermutations(n):
+def selfInverses(n, symmetricOnly = False):
+    plist = []
+    n2 = signatureRange(n)
+    for sig in range(n2):
+        m = generate(n, sig)
+        if symmetricOnly and not m.isSymmetric():
+            continue
+        if pairTest(m, m):
+            plist.append((m, m))
+    plist.sort(key = lambda p:p[0].sortKey())
+    return plist
+
+def allPermutations(n, symmetricOnly = False):
     plist = []
     n2 = signatureRange(n)
     for sig1 in range(n2):
         m1 = generate(n, sig1)
         if not m1.isPermutation():
             continue
+        if symmetricOnly and not m1.isSymmetric():
+            continue
         for sig2 in range(n2):
             m2 = generate(n, sig2)
+            if symmetricOnly and not m2.isSymmetric():
+                continue
             if m2.isPermutation() and pairTest(m1, m2):
                 plist.append((m1,m2))
     plist.sort(key = lambda p:p[0].sortKey())
     return plist
 
-def uniquePairs(n):
-    pairList = allPairs(n)
+def uniquePairs(n, symmetricOnly = False):
+    pairList = allPairs(n, symmetricOnly = symmetricOnly)
     permList = allPermutations(n)
     ulist = []
     sigList = []
@@ -94,25 +114,70 @@ def run(name, args):
             print("Unknown option '%s'" % opt)
             usage(name)
             return
-    outf.write("# All pairs of %d x %d matrices A, A^{-1}\n" % (n, n))
+
+
+    symmetricOnly = False
+    qstring = " symmetric" if symmetricOnly else ""
+
+    outf.write("# All pairs of%s %d x %d matrices A, A^{-1}\n" % (qstring, n, n))
     outf.write("# Represented in compressed form\n")
     outf.write("# as integer with bits expanding to form matrix elements\n")
-    plist = allPairs(n)
+    plist = allPairs(n, symmetricOnly)
     showPairs("allPairList", plist)
     outf.write("\n")
 
-    outf.write("# Unique (up to permutation) pairs of %d x %d matrices A, A^{-1}\n" % (n, n))
+    outf.write("# All%s %d x %d matrices A, such that, A = A^{-1}\n" % (qstring, n, n))
     outf.write("# Represented in compressed form\n")
     outf.write("# as integer with bits expanding to form matrix elements\n")
-    plist = uniquePairs(n)
+    plist = selfInverses(n, symmetricOnly)
+    showPairs("selfInverseList", plist)
+    outf.write("\n")
+
+
+    outf.write("# Unique (up to permutation) pairs of %d x %d%s matrices A, A^{-1}\n" % (n, n, qstring))
+    outf.write("# Represented in compressed form\n")
+    outf.write("# as integer with bits expanding to form matrix elements\n")
+    plist = uniquePairs(n, symmetricOnly)
     showPairs("uniquePairList", plist)
     outf.write("\n")
-        
-    outf.write("# All pairs of %d x %d permutation matrices A, A^{-1}\n" % (n, n))
+       
+    outf.write("# All pairs of %d x %d%s permutation matrices A, A^{-1}\n" % (n, n, qstring))
     outf.write("# Represented in compressed form\n")
     outf.write("# as integer with bits expanding to form matrix elements\n")
-    plist = allPermutations(n)
+    plist = allPermutations(n, symmetricOnly)
     showPairs("permutationPairList", plist)
+
+    symmetricOnly = True
+    qstring = " symmetric" if symmetricOnly else ""
+
+
+    outf.write("# All pairs of%s %d x %d matrices A, A^{-1}\n" % (qstring, n, n))
+    outf.write("# Represented in compressed form\n")
+    outf.write("# as integer with bits expanding to form matrix elements\n")
+    plist = allPairs(n, symmetricOnly)
+    showPairs("allSymmetricPairList", plist)
+    outf.write("\n")
+
+    outf.write("# All%s %d x %d matrices A, such that, A = A^{-1}\n" % (qstring, n, n))
+    outf.write("# Represented in compressed form\n")
+    outf.write("# as integer with bits expanding to form matrix elements\n")
+    plist = selfInverses(n, symmetricOnly)
+    showPairs("symmetricSelfInverseList", plist)
+    outf.write("\n")
+
+
+    outf.write("# Unique (up to permutation) pairs of %d x %d%s matrices A, A^{-1}\n" % (n, n, qstring))
+    outf.write("# Represented in compressed form\n")
+    outf.write("# as integer with bits expanding to form matrix elements\n")
+    plist = uniquePairs(n, symmetricOnly)
+    showPairs("uniqueSymmetricPairList", plist)
+    outf.write("\n")
+        
+    outf.write("# All pairs of %d x %d%s permutation matrices A, A^{-1}\n" % (n, n, qstring))
+    outf.write("# Represented in compressed form\n")
+    outf.write("# as integer with bits expanding to form matrix elements\n")
+    plist = allPermutations(n, symmetricOnly)
+    showPairs("symmetricPermutationPairList", plist)
 
 
 
