@@ -52,9 +52,9 @@ shadow_mgr smgr;
 /* Mapping from string names to shadow pointers */
 /* All names */
 keyvalue_table_ptr nametable;
-/* Variables only.  These aren't included in reference count */
+/* Mapping from refs to variables names.  These are included in reference count */
 /* Have separate copy of strings */
-keyvalue_table_ptr varnametable;
+keyvalue_table_ptr inverse_varnametable;
 
 /*
   Maintain reference count for each ref reachable from nametable
@@ -106,7 +106,7 @@ static void client_gc_finish();
 static void bdd_init() {
     smgr = new_shadow_mgr(do_cudd, do_local, do_dist, chaining_type);
     nametable = keyvalue_new(string_hash, string_equal);
-    varnametable = keyvalue_new(string_hash, string_equal);
+    inverse_varnametable = keyvalue_new(word_hash, word_equal);
     reftable = word_keyvalue_new();
     ref_t rzero = shadow_zero(smgr);
     ref_t rone = shadow_one(smgr);
@@ -186,9 +186,9 @@ static bool bdd_quit(int argc, char *argv[]) {
     }
     keyvalue_free(nametable);
 
-    while (keyvalue_removenext(varnametable, &wk, &wv)) {
-	char *s = (char *) wk;
-	ref_t rold = (ref_t) wv;
+    while (keyvalue_removenext(inverse_varnametable, &wk, &wv)) {
+	ref_t rold = (ref_t) wk;
+	char *s = (char *) wv;
 	report(5, "Removing function %s from name table", s);
 	root_deref(rold);
 #if RPT >= 5
@@ -196,7 +196,7 @@ static bool bdd_quit(int argc, char *argv[]) {
 #endif
 	free_string(s);
     }
-    keyvalue_free(varnametable);
+    keyvalue_free(inverse_varnametable);
 
     if (reftable->nelements > 0) {
 	report(2, "Still have references to %zd functions", reftable->nelements);
@@ -416,9 +416,17 @@ static void assign_ref(char *name, ref_t r, bool fresh, bool variable) {
     root_addref(r, fresh);
     /* (Try to) remove old value */
     word_t wk, wv;
-    if (keyvalue_find(varnametable, (word_t) name, NULL)) {
-	err(false, "Attempt to redefine variable %s.  Ignored", name);
-	return;
+    /* See if name already defined */
+    if (keyvalue_find(nametable, (word_t) name, &wv)) {
+	word_t ws;
+	if (keyvalue_find(inverse_varnametable, wv, &ws)) {
+	    /* See if names match */
+	    char *found_name = (char *) ws;
+	    if (strcmp(found_name, name) == 0) {
+		err(false, "Attempt to redefine variable %s.  Ignored", name);
+		return;
+	    }
+	}
     }
     if (keyvalue_remove(nametable, (word_t) name, &wk, &wv)) {
 	sname = (char *) wk;
@@ -453,7 +461,7 @@ static void assign_ref(char *name, ref_t r, bool fresh, bool variable) {
     if (variable) {
 	root_addref(r, fresh);
 	sname = strsave_or_fail(name, "assign_ref");
-	keyvalue_insert(varnametable, (word_t) sname, (word_t) r);
+	keyvalue_insert(inverse_varnametable, (word_t) r, (word_t) sname);
     }
     if (verblevel >= 5) {
 	char buf[24];
@@ -518,19 +526,16 @@ static set_ptr get_refs(int cnt, char *names[]) {
     }
 }
 
-/* Inefficient way to do inverse lookup of variable name */
+/* Do inverse lookup of variable name */
 static char *name_find(ref_t r) {
-    keyvalue_iterstart(varnametable);
-    char *name;
-    ref_t tr;
-    word_t wk, wv;
-    while (keyvalue_iternext(nametable, &wk, &wv)) {
-	name = (char *) wk;
-	tr = (ref_t) wv;
-	if (tr == r)
-	    return name;
+    word_t ws;
+    if (keyvalue_find(inverse_varnametable, (word_t) r, &ws)) {
+	char *name = (char *) ws;
+	return name;
     }
-    return NULL;
+    char buf[24];
+    shadow_show(smgr, r, buf);
+    return strsave_or_fail(buf, "name_find");
 }
 
 /* Reduction operations */
