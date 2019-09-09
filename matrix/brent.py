@@ -96,6 +96,15 @@ def invertPermuter(p):
 def composePermuters(p1, p2):
     return { k : p2[p1[k]] for k in p1.keys() }
 
+def areInversePermuters(p1, p2):
+    cp = composePermuters(p1, p2)
+    mm = [1 if cp[i] != i else 0 for i in cp.keys()]
+    mmcount = functools.reduce(lambda x, y: x+y, mm)
+    return mmcount == 0
+
+def allSymmetricPermuters(vals):
+    allp = allPermuters(vals)
+    return [p for p in allp if areInversePermuters(p, p)]
 
 # Create string representation of permutation
 def showPerm(p):
@@ -591,6 +600,8 @@ class KernelSet:
         levelList = [[] for l in range(self.auxCount)]
         for kt in self.kdlist:
             levelList[kt.level-1].append(kt)
+        for ls in levelList:
+            ls.sort()
         return levelList
 
     # Create string that characterizes set in compressed form
@@ -616,14 +627,15 @@ class KernelSet:
     def levelCanonize(self):
         # Canonical form lists kernels ordered in levels, with the levels containing
         # the most terms first.  Within level, order kernel lexicographically
-        self.kdlist.sort()
-        # kdlist sorted by terms
         # Only problem is that the levels should be sorted inversely by length
-        # and secondarily by indices of first element
+        # and secondarily by indices of elements
         levelList = self.levelize()
-        pairList = [(level, llist) for level, llist in zip(unitRange(self.auxCount), levelList)]
-        pairList.sort(key = lambda pair : "%d+%s" % (999-len(pair[1]), "" if len(pair[1]) == 0 else pair[1][0].generateString(False)))
-
+        pairList = []
+        for level in unitRange(self.auxCount):
+            klist = [kt.generateString(False) for kt in levelList[level-1]]
+            key = str(999-len(klist)) + ' ' + ' '.join(klist)
+            pairList.append((level, key))
+        pairList.sort(key = lambda pair : pair[1])
         # Map from old level to new level
         levelPermuter = {}
         nlevel = 1
@@ -687,6 +699,10 @@ class KernelSet:
     #  Return list of kernels, plus list of dictionary lists
     #  Each dictionary list records all permutations leading to corresponding kernel
     #  In event that no permutation is symmetric, return two empty lists
+    
+    #  09/09/2019: Don't have any need for this code.  Will only
+    #  explore transformations that preserve symmetry
+
     def findSymmetries(self):
         # Computed results
         kernelList = []
@@ -1165,6 +1181,7 @@ class MScheme(MProblem):
     assignment = None
     kernelTerms = None
     hasBeenCanonized = False
+    hasBeenSymmetricallyCanonized = False
 
     expressionSplitter = re.compile('\s*[-+]\s*')
 
@@ -1176,6 +1193,7 @@ class MScheme(MProblem):
             self.assignment = assignment
         self.kernelTerms = self.findKernels()
         self.hasBeenCanonized = False
+        self.hasBeenSymmetricallyCanonized = False
 
     def generateZeroAssignment(self):
         self.assignment = Assignment()
@@ -1261,6 +1279,7 @@ class MScheme(MProblem):
         return ok
 
     # Put into canonical form by canonizing kernel and trying all compatible permutations
+    # Does not preserve symmetry properties
     def canonize(self):
         if self.hasBeenCanonized:
             return self
@@ -1276,11 +1295,12 @@ class MScheme(MProblem):
         sbest.hasBeenCanonized = True
         return sbest
 
+    # First step in symmetry detection
     # Organize levels into canonical form
     # given that multiple levels can have same kernel term(s).
     # Used for symmetry detection
     # Return resulting scheme + permuter
-    def levelCanonize(self):
+    def initialLevelCanonize(self):
         (k, levelPermuter) = self.kernelTerms.levelCanonize()
         # Generate map from new level back to original
         reversePermuter = invertPermuter(levelPermuter)
@@ -1318,8 +1338,8 @@ class MScheme(MProblem):
     # Else, return mapping between symmetric levels
     def findSymmetry(self):
         pset = { 'variable' : {'alpha' : 'beta', 'beta' : 'alpha', 'gamma' : 'gamma'}}
-        lpermuter, ls = self.levelCanonize()
-        lppermuter, lsp = ls.permute(pset).levelCanonize()
+        lpermuter, ls = self.initialLevelCanonize()
+        lppermuter, lsp = ls.permute(pset).initialLevelCanonize()
         if ls.signature() != lsp.signature():
             return None
         # Reverse original permuter
@@ -1329,21 +1349,89 @@ class MScheme(MProblem):
         matcher = composePermuters(forwardPermuter, rlpermuter)
         return matcher
 
+    # Canonize level for symmetric scheme.  Return None if not symmetric
+    def symmetricLevelCanonize(self):
+        if self.dim[0] != self.dim[1]:
+            return None
+        ignore, ls = self.initialLevelCanonize()
+        lslist = ls.generatePolynomial()
+        pset = { 'variable' : {'alpha' : 'beta', 'beta' : 'alpha', 'gamma' : 'gamma'}}
+        matcher, lsp = ls.permute(pset).initialLevelCanonize()
+        if ls.signature() != lsp.signature():
+            return None
+        # Map from original level, through level canonizing, permuting and level canonizing
+        nlevel = 1
+        ns = MScheme(self.dim, self.auxCount,self.ckt)
+        # First pass: Find all symmetric pairs
+        for level in unitRange(self.auxCount):
+            plevel = matcher[level]
+            if plevel <= level:
+                continue
+            pstring = lslist[level-1]
+            ppstring = lslist[plevel-1]
+            ns.parsePolynomialLine(pstring, nlevel)
+            ns.parsePolynomialLine(ppstring, nlevel+1)
+            nlevel += 2
+
+        # Second pass: Find all self-symmetric cases
+        for level in unitRange(self.auxCount):
+            plevel = matcher[level]
+            if level != plevel:
+                continue
+            pstring = lslist[level-1]                
+            ns.parsePolynomialLine(pstring, nlevel)
+            nlevel += 1
+        ns.kernelTerms = ns.findKernels()
+        return ns
+
+    # For canonical scheme: Put into a canonical form that preserves symmetry
+    # If not canonical, return None
+    def symmetricCanonize(self):
+        ss = self.symmetricLevelCanonize()
+        if ss is None:
+            return None
+        bestScheme = ss
+        bestSignature = ss.signature()
+        plist = allSymmetricPermuters(unitRange(self.dim[0]))
+        qlist = allSymmetricPermuters(unitRange(self.dim[1]))
+        for p in plist:
+            for q in qlist:
+                pset = { 'i' : p, 'j' : q, 'k' : p }
+                ssp = ss.permute(pset).symmetricLevelCanonize()
+                if ssp is None:
+                    print("Initial:")
+                    ss.printPolynomial()
+                    print("Permuter p = %s" % showPerm(p))
+                    print("Permuter q = %s" % showPerm(q))
+                    print("Generated scheme:")
+                    ss.permute(pset).printPolynomial()
+                    raise MatrixException("Transformation gave non-symmetric matrix")
+                sig = ssp.signature()
+                if sig < bestSignature:
+                    bestScheme = ssp
+                    bestSignature = sig
+        bestScheme.hasBeenSymmetricallyCanonized = True
+        return bestScheme
+
     # Apply permutations
     def permute(self, permutationSet):
         nassignment = self.assignment.permute(permutationSet)
         return MScheme(self.dim, self.auxCount, self.ckt, nassignment)
 
-    def isCanonical(self):
-        if self.hasBeenCanonized:
-            return True
-        sc = self.canonize()
-        return sc.signature() == self.signature()
+    def isCanonical(self, symmetric = False):
+        if symmetric:
+            if self.hasBeenSymmetricallyCanonized:
+                return True
+            sc = self.symmetricCanonize()
+            return sc.signature() == self.signature()
+        else:
+            if self.hasBeenCanonized:
+                return True
+            sc = self.canonize()
+            return sc.signature() == self.signature()
 
     # Parse the output generated by a solver
     def parseFromSolver(self, supportNames, bitString):
-        print("Parsing bit string %s" % bitString)
-        print("Support %s" % ", ".join(supportNames))
         if len(supportNames) != len(bitString):
             raise MatrixException("Mismatch: %d variables in support, but only %d values in bit string" % (len(supportNames), len(bitString)))
         supportVars = [BrentVariable().fromName(s) for s in supportNames]
@@ -1395,6 +1483,8 @@ class MScheme(MProblem):
         outfile.write("# Own signature %s\n" % self.sign())
         if self.hasBeenCanonized:
             outfile.write("# This representation has been put into canonical form\n")
+        if self.hasBeenSymmetricallyCanonized:
+            outfile.write("# This representation has been put into symmetric canonical form\n")
 
         for line in metadata:
             outfile.write("# %s\n" % line)
