@@ -15,8 +15,9 @@ import glob
 
 
 def usage(name):
-    print("Usage: %s [-h] [-u] [-b] [-q] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name)
+    print("Usage: %s [-h] [-x] [-u] [-b] [-q] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name)
     print(" -h               Print this message")
+    print(" -x               Preserve symmetry")
     print(" -u               Print number of nodes at each level, rather than solutions")
     print(" -q               Quiet mode.  Only summarize results")
     print(" -b               Commands generated via breadth-first traversal")
@@ -40,16 +41,25 @@ generatedDatabaseDict = {}
 
 # Set to home directory for program, split into tokens
 homePathFields = ['.']
+subdirectoryFields = ["mm-solutions"]
+symmetricSubdirectoryFields = ["mm-solutions-symmetric"]
 
-databaseDirectory = "mm-solutions"
+def heuleDatabasePathFields():
+    sdf = symmetricSubdirectoryFields if doSymmetric else subDirectoryFields
+    return homePathFields + sdf + ["heule-database.txt"]
 
-heuleDatabasePathFields = [databaseDirectory, "heule-database.txt"]
-generatedDatabasePathFields = [databaseDirectory, "generated-database.txt"]
+def generatedDatabasePathFields():
+    sdf = symmetricSubdirectoryFields if doSymmetric else subDirectoryFields
+    return homePathFields + sdf + ["generated-database.txt"]
 
-generatedPathFields = [databaseDirectory, "generated"]
+def generatedPathFields():
+    sdf = symmetricSubdirectoryFields if doSymmetric else subDirectoryFields
+    return homePathFields + sdf + ["generated"]
 
 # Don't record in main database
 localMode = False
+# Work on symmetric cases
+doSymmetric = False
 
 cmdPrefix = "cmd>"
 
@@ -63,13 +73,25 @@ freshCount = 0
 # Prefix for subdirectories in generated directory
 directoryPrefix = 'D'
 
-def loadDatabase(databaseDict, databasePathFields, quiet):
-    dbname = '/'.join(homePathFields + databasePathFields)
+def loadDatabase(databaseDict, databasePathGenerator, quiet):
+    pathFields = databasePathGenerator()
+    dbpath = '/'.join(pathFields)
+    dbname = pathFields[-1]
+    if not os.path.exists(dbpath):
+        try:
+            dbfile = open(dbpath, 'w')
+            fields = ["Hash", "Adds", "K Hash", "Path"]
+            dbfile.write('\t'.join(fields) + '\n')
+            dbfile.close()
+        except Exception as ex:
+            print("Couldn't create database file '%s' (%s)" % (dbpath, str(ex)))
+            return
     try:
-        dbfile = open(dbname, 'r')
+        dbfile = open(dbpath, 'r')
     except Exception as ex:
-        print("Couldn't open database file '%s' (%s)" % (dbname, str(ex)))
+        print("Couldn't open database file '%s' (%s)" % (dbpath, str(ex)))
         return
+
     first = True
     lineNumber = 0
     dups = 0
@@ -96,7 +118,6 @@ def loadDatabase(databaseDict, databasePathFields, quiet):
         else:
             databaseDict[entry[0]] = entry
     dbfile.close()
-    dbname = databasePathFields[-1]
     if not quiet:
         print("Database %s contains %d entries" % (dbname, len(databaseDict)))
     if dups > 0:
@@ -111,12 +132,14 @@ def subtractFromDatabase(db, dbr):
     print("%d entries removed" % count)
     
         
-def restoreDatabase(databaseDict, databasePathFields, rehash = False, checkCanonical = False, dim = (3,3,3), auxCount = 23):
-    dbname = '/'.join(homePathFields + databasePathFields)
+def restoreDatabase(databaseDict, databasePathGenerator, rehash = False, checkCanonical = False, dim = (3,3,3), auxCount = 23):
+    pathFields = databasePathGenerator()
+    dbpath = '/'.join(pathFields)
+    dbname = pathFields[-1]
     try:
-        dbfile = open(dbname, 'w')
+        dbfile = open(dbpath, 'w')
     except Exception as ex:
-        print("Couldn't open database file '%s' (%s)" % (dbname, str(ex)))
+        print("Couldn't open database file '%s' (%s)" % (dbpath, str(ex)))
         return
     dbfile.write('\t'.join(fieldTitles) + '\n')
     count = 0
@@ -133,13 +156,15 @@ def restoreDatabase(databaseDict, databasePathFields, rehash = False, checkCanon
                 continue
             if rehash:
                 entry[fieldIndex['hash']] = scheme.sign()
-            if checkCanonical and not scheme.isCanonical():
-                print("WARNING: Scheme in file %s is not canonical.  Has signature %s.  Should have signature %s.  Ignoring" % (path, scheme.sign(), scheme.canonize().sign()))
+            if checkCanonical and not scheme.isCanonical(symmetric = doSymmetric):
+                sc = scheme.symmetricCanonize() if doSymmetric else s.canonize()
+                print("WARNING: Scheme in file %s is not canonical.  Has signature %s.  Should have signature %s.  Ignoring" % (path, scheme.sign(), sc.sign()))
         fields = [str(e) for e in entry]
         dbfile.write('\t'.join(fields) + '\n')
         count += 1
     dbfile.close()
     print("Wrote %d entries to database %s" % (count, dbname))
+
 
 
 # Extract the support information from file:
@@ -180,12 +205,8 @@ def getDependencies(fname):
             dname = fields[-2]
             sname = fields[-1]
             dependencyList.append((dname, sname))
-            print("%s depends on %s" % (dname, sname))
-        elif len(line) > 0 and line[0] == '#':
-            print("Parsed comment '%s'" % line)
         lineCount += 1
     inf.close()
-    print("%d symmetry dependencies found in %d lines" % (len(dependencyList), lineCount))
     return None if len(dependencyList) == 0 else dependencyList
 
 def getPeakNodes(fname):
@@ -280,22 +301,22 @@ def directoryName(fname):
     return directoryPrefix + fname[first:length+first]
 
 def recordSolution(scheme, metadata = []):
-    global homePathFields
-    global generatedPathFields, generatedDatabasePathFields
+    global homePathFields, subdirectoryFields
     fname = scheme.sign() + '.exp'
     if localMode:
-        dirName = '.'
-        homePathFields = [dirName]
+        homePathFields = ['.']
+        subdirectoryFields = []
         dirFields = []
-        generatedDatabasePathFields = ["generated-database.txt"]
-        pathFields = dirFields + ['generated', fname]
     else:
         dirName = directoryName(fname)
-        dirFields = generatedPathFields + [dirName]
-        pathFields = dirFields + [fname]
-    path =  '/'.join(pathFields)
-    dpath = '/'.join(homePathFields + dirFields)
-    fpath = '/'.join(homePathFields + pathFields)
+        dirFields = [dirName]
+
+    dirPathFields = generatedPathFields() + dirFields
+
+    dirPath = '/'.join(dirPathFields)
+    dpath =  '/'.join(pathFields)
+    fpath = '/'.join(dirPathFields + [fname])
+
     if not os.path.exists(dpath):
         try:
             os.mkdir(dpath)
@@ -309,8 +330,8 @@ def recordSolution(scheme, metadata = []):
         return
     scheme.printPolynomial(outf, metadata = metadata)
     outf.close()
-    dbEntryFields = [scheme.sign(), str(scheme.addCount()), scheme.kernelTerms.sign(), path]
-    dbpath = "/".join(homePathFields + generatedDatabasePathFields)
+    dbEntryFields = [scheme.sign(), str(scheme.addCount()), scheme.kernelTerms.sign(), fpath]
+    dbpath = '/'.join(generatedDatabasePathFields())
     try:
         dbfile = open(dbpath, 'a')
     except Exception as ex:
@@ -349,7 +370,6 @@ def processSolution(scheme, sname, metadata = [], recordFunction = recordSolutio
             recordFunction(scheme, metadata = metadata)
     return True
 
-
 def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
     global nonHeuleCount, freshCount
     supportNames = getSupport(iname)
@@ -377,7 +397,7 @@ def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
             print("Oops.  Generated solution does not satisfy Brent constraints")
             ss.printPolynomial(metadata = metadata)
             continue
-        sc = ss.canonize()
+        sc = ss.symmetricCanonize() if doSymmetric else ss.canonize()
         if processSolution(sc, sname, metadata, recordFunction):
             newCount += 1
         index += 1
@@ -391,13 +411,14 @@ def generateSolutions(iname, fileScheme, recordFunction = recordSolution):
 def run(name, args):
     global solutionDict, quietMode
     global localMode
+    global doSymmetric
     n1, n2, n3 = 3, 3, 3
     auxCount = 23
     solve = True
     pname = None
     inameList = []
     breadthFirst = False
-    optlist, args = getopt.getopt(args, 'huqbI:i:s:p:n:o:')
+    optlist, args = getopt.getopt(args, 'huqbxI:i:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -408,6 +429,8 @@ def run(name, args):
             quietMode = True
         elif opt == '-b':
             breadthFirst = True
+        elif opt == '-x':
+            doSymmetric = True
         elif opt == '-I':
             idir = val
             template = "%s/*.log" % idir
