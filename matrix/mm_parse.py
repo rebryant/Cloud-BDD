@@ -314,7 +314,7 @@ def recordSolution(scheme, metadata = []):
     dirPathFields = generatedPathFields() + dirFields
 
     dirPath = '/'.join(dirPathFields)
-    dpath =  '/'.join(pathFields)
+    dpath =  '/'.join(dirPathFields)
     fpath = '/'.join(dirPathFields + [fname])
 
     if not os.path.exists(dpath):
@@ -327,7 +327,7 @@ def recordSolution(scheme, metadata = []):
         outf = open(fpath, 'w')
     except Exception as ex:
         print("Can't open output file '%s' (%s)" % (fpath, str(ex)))
-        return
+        return 
     scheme.printPolynomial(outf, metadata = metadata)
     outf.close()
     dbEntryFields = [scheme.sign(), str(scheme.addCount()), scheme.kernelTerms.sign(), fpath]
@@ -339,7 +339,7 @@ def recordSolution(scheme, metadata = []):
         return
     dbfile.write("\t".join(dbEntryFields) + '\n')
     dbfile.close()
-    return path
+    return
     
 # Process a generated solution
 def processSolution(scheme, sname, metadata = [], recordFunction = recordSolution):

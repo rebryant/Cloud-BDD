@@ -52,6 +52,13 @@ databaseFile = None
 def newCanonical(scheme, subPath):
     fields = subPath.split('/')
     path = canonicalDirectory
+    if not os.path.exists(path):
+        try:
+            os.mkdir(path)
+        except Exception as ex:
+            print "Couldn't create directory '%s'" % path
+            return
+            
     for dir in fields[:-1]:
         path = path + '/' + dir
         if not os.path.exists(path):
@@ -81,9 +88,6 @@ def checkSolution(subPath):
         print "ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex))
         return
     sc = s.symmetricCanonize() if doSymmetry else s.canonize()
-    if sc is None:
-        print("Warning.  Encountered non-symmetric solution in %s" % path)
-        return
     solutionCount += 1
     sig = sc.signature()
     list = signatureDict[sig] if sig in signatureDict else []

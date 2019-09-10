@@ -27,7 +27,7 @@ import mm_parse
 import circuit
 
 def usage(name):
-    print("Usage %s [-h] [-K] [-k] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB] [-l LIMIT]")
+    print("Usage %s [-h] [-K] [-k] [-x] [-F] [(-P PORT|-H HOST:PORT)] [-R] [-t SECS] [-c APROB:BPROB:CPROB] [-p PROCS] [-v VERB] [-l LIMIT]")
     print("   -h               Print this message")
     print("  Server options")
     print("   -P PORT          Set up server on specified port")
@@ -36,17 +36,24 @@ def usage(name):
     print("  Local & server options")
     print("   -R               Allow unrestricted solution types")
     print("   -l LIMIT         Set limit on number of schemes generated")
+    print("   -x               Generate symmetric schemes")
     print("   -k               Put more weight on underrepresented kernels")
     print("  Local & client options")
     print("   -K               Try to generate new kernels")
+    print("   -F               Keep intermediate files")
     print("   -t SECS          Set runtime limit (in seconds)")
     print("   -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class")
     print("   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)N")
     print("   -v VERB          Set verbosity level")
     sys.exit(0)
 
+
 # Set to home directory for program, split into tokens
 homePathFields = ['.']
+
+# Consider only symmetric cases
+# Must update version in mm_parse as well.
+doSymmetric = False
 
 runbddFields = ["..", "runbdd"]
 
@@ -95,6 +102,9 @@ normalAbcList = ["20:55:70", "25:50:70",  "30:45:70", "15:45:80", "20:40:80", "2
 
 # Good choices for probabilities.  Kernel hunting mode
 huntAbcList = ["55:60:80", "40:60:90", "30:60:100"]
+
+# Good choices for probabilities.  Symmetric cases
+symmetricAbcList = ["40:40:50", "35:35:60", "30:30:70", "25:25:80", "20:20:90", "15:15:100"]
 
 def report(level, s):
     if level <= verbLevel:
@@ -394,6 +404,8 @@ def fileRoot(scheme, categoryProbabilities, seed):
     fields += [sc]
     sseed = "S%.2d" % seed
     fields += [sseed]
+    if doSymmetric:
+        fields += ['symmetric']
     if huntKernels:
         fields += ['symbolic']
     return "-".join(fields)
@@ -409,7 +421,12 @@ def generateCommandFile(scheme, seed):
         report(0, "Couldn't open '%s' to write" % fname)
         return ""
     scheme.ckt = circuit.Circuit(outf)
-    scheme.generateProgram(categoryProbabilities, seed, timeLimit, fixKV = not huntKernels, varKV = False, excludeSingleton = restrictSolutions and not huntKernels, breadthFirst = True, levelList = levelList, useZdd = False, symbolicStreamline = huntKernels)
+    scheme.generateProgram(categoryProbabilities, seed, timeLimit,
+                           fixKV = not huntKernels and not doSymmetric, varKV = False,
+                           excludeSingleton = restrictSolutions and not huntKernels and not doSymmetric,
+                           breadthFirst = True, levelList = levelList,
+                           useZdd = False,
+                           symbolicStreamline = huntKernels, checkSymmetry = doSymmetric)
     outf.close()
     return froot
 
@@ -509,6 +526,8 @@ def runStandalone(generator):
     report(0, "%d command files generated.  %d errors" % (generateCount, errorCount))
 
 def findABC():
+    if doSymmetric:
+        return random.choice(symmetricAbcList)
     if huntKernels:
         return random.choice(huntAbcList)
     else:
@@ -551,9 +570,10 @@ def run(name, args):
     global categoryProbabilities
     global fixedProbabilities
     global restrictSolutions
-    global keepFiles
     global balanceKernels
     global huntKernels
+    global doSymmetric
+    global keepFiles
     host = defaultHost
     port = defaultPort
     isServer = False
@@ -563,7 +583,7 @@ def run(name, args):
 
     abc = None
 
-    optlist, args = getopt.getopt(args, 'hkKP:H:Rt:c:p:l:v:')
+    optlist, args = getopt.getopt(args, 'hkKxFP:H:Rt:c:p:l:v:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -572,6 +592,8 @@ def run(name, args):
             balanceKernels = True
         if opt == '-K':
             huntKernels = True
+        if opt == '-x':
+            doSymmetric = True
         elif opt == '-P':
             isServer = True
             port = int(val)
@@ -591,6 +613,8 @@ def run(name, args):
             fixedProbabilities = True
         elif opt == '-R':
             restrictSolutions = False
+        elif opt == '-F':
+            keepFiles = True
         elif opt == '-p':
             processingList = val.split(":")
         elif opt == '-l':
@@ -603,12 +627,16 @@ def run(name, args):
     if not parseABC(abc):
         usage(name)
         return
+    if doSymmetric:
+        restrictSolutions = False
+        huntKernels = False
+    mm_parse.doSymmetric = doSymmetric
     mm_parse.loadDatabase(mm_parse.heuleDatabaseDict, mm_parse.heuleDatabasePathFields, mm_parse.quietMode)
     mm_parse.loadDatabase(mm_parse.generatedDatabaseDict, mm_parse.generatedDatabasePathFields, mm_parse.quietMode)
     if isClient:
         runClient(host, port)
     else:
-        generator = SchemeGenerator(3, 23, permute = True, balanceKernels = balanceKernels, limit = limit)
+        generator = SchemeGenerator(3, 23, permute = not doSymmetric, balanceKernels = balanceKernels, limit = limit)
         if isServer:
             runServer(port, generator)
         else:

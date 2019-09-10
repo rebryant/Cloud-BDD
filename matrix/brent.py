@@ -1295,44 +1295,29 @@ class MScheme(MProblem):
         sbest.hasBeenCanonized = True
         return sbest
 
-    # First step in symmetry detection
-    # Organize levels into canonical form
-    # given that multiple levels can have same kernel term(s).
-    # Used for symmetry detection
-    # Return resulting scheme + permuter
+    # First pass at level canonicalization
     def initialLevelCanonize(self):
-        (k, levelPermuter) = self.kernelTerms.levelCanonize()
-        # Generate map from new level back to original
-        reversePermuter = invertPermuter(levelPermuter)
-        ps = self.permute({'level' : levelPermuter})
-        pslist = ps.generatePolynomial()
-        # Challenge: can have multiple levels with same kernel representation
-        # Need to canonize these
-        # Create short string labels for each level
-        klist = k.shortStringList()
-        kdict = {}
-        uklist = []
-        for kstring, pstring, nlevel in zip(klist, pslist, unitRange(self.auxCount)):
-            # Where was this term in the original scheme
-            olevel = reversePermuter[nlevel]
-            if kstring in kdict:
-                kdict[kstring].append((pstring, olevel))
-            else:
-                uklist.append(kstring)
-                kdict[kstring] = [(pstring, olevel)]
-        nplist = []
-        for kstring in uklist:
-            plist = kdict[kstring]
-            plist.sort(key = lambda p: p[0])
-            nplist += plist
+        # Order according to following priorities:
+        #    Number of kernel terms (most to least) [Determine by length of its string representation]
+        #    String representation of kernel terms
+        #    Polynomial representation
+        klist = self.kernelTerms.shortStringList()
+        pslist = self.generatePolynomial()
+        pairList = []
+        for kstring, pstring, level in zip(klist, pslist, unitRange(self.auxCount)):
+            key = [-len(kstring), kstring, pstring]
+            pairList.append((key, level))
+        pairList.sort(key = lambda pair : pair[0])
+        permuter = {}
         ns = MScheme(self.dim, self.auxCount,self.ckt)
-        npermuter = {}
-        for level in unitRange(self.auxCount):
-            pstring, olevel = nplist[level-1]
-            ns.parsePolynomialLine(pstring, level)
-            npermuter[olevel] = level
+        for pair, nlevel in zip(pairList, unitRange(self.auxCount)):
+            key = pair[0]
+            pstring = key[-1]
+            ns.parsePolynomialLine(pstring, nlevel)
+            olevel = pair[1]
+            permuter[olevel] = nlevel
         ns.kernelTerms = ns.findKernels()
-        return (npermuter, ns)
+        return (permuter, ns)
 
     # Detect whether scheme is symmetric.  If not, return None.
     # Else, return mapping between symmetric levels
@@ -1359,7 +1344,8 @@ class MScheme(MProblem):
         matcher, lsp = ls.permute(pset).initialLevelCanonize()
         if ls.signature() != lsp.signature():
             return None
-        # Map from original level, through level canonizing, permuting and level canonizing
+
+        # Reorder levels: symmetric pairs followed by self-symmetric ones
         nlevel = 1
         ns = MScheme(self.dim, self.auxCount,self.ckt)
         # First pass: Find all symmetric pairs
@@ -1390,25 +1376,20 @@ class MScheme(MProblem):
         ss = self.symmetricLevelCanonize()
         if ss is None:
             return None
-        bestScheme = ss
-        bestSignature = ss.signature()
-        plist = allSymmetricPermuters(unitRange(self.dim[0]))
-        qlist = allSymmetricPermuters(unitRange(self.dim[1]))
+        bestScheme = None
+        bestSignature = None
+        plist = allPermuters(unitRange(self.dim[0]))
+        qlist = allPermuters(unitRange(self.dim[1]))
         for p in plist:
             for q in qlist:
                 pset = { 'i' : p, 'j' : q, 'k' : p }
-                ssp = ss.permute(pset).symmetricLevelCanonize()
-                if ssp is None:
-                    print("Initial:")
-                    ss.printPolynomial()
-                    print("Permuter p = %s" % showPerm(p))
-                    print("Permuter q = %s" % showPerm(q))
-                    print("Generated scheme:")
-                    ss.permute(pset).printPolynomial()
-                    raise MatrixException("Transformation gave non-symmetric matrix")
-                sig = ssp.signature()
-                if sig < bestSignature:
-                    bestScheme = ssp
+                sp = self.permute(pset).symmetricLevelCanonize()
+                if sp is None:
+                    print("Permuters p = %s, q = %s yielded non-symmetric matrix" % (showPerm(p), showPerm(q)))
+                    continue
+                sig = sp.signature()
+                if bestSignature is None or sig < bestSignature:
+                    bestScheme = sp
                     bestSignature = sig
         bestScheme.hasBeenSymmetricallyCanonized = True
         return bestScheme
