@@ -1372,12 +1372,14 @@ class MScheme(MProblem):
 
     # For canonical scheme: Put into a canonical form that preserves symmetry
     # If not canonical, return None
+    # Canonical form minimizes kernel representation, and uses polynomial
+    # representation as tie breaker
     def symmetricCanonize(self):
         ss = self.symmetricLevelCanonize()
         if ss is None:
             return None
         bestScheme = None
-        bestSignature = None
+        bestKey = None
         plist = allPermuters(unitRange(self.dim[0]))
         qlist = allPermuters(unitRange(self.dim[1]))
         for p in plist:
@@ -1387,10 +1389,12 @@ class MScheme(MProblem):
                 if sp is None:
                     print("Permuters p = %s, q = %s yielded non-symmetric matrix" % (showPerm(p), showPerm(q)))
                     continue
+                ks = sp.kernelTerms.shortString()
                 sig = sp.signature()
-                if bestSignature is None or sig < bestSignature:
+                key = ks + '|' + sig
+                if bestKey is None or key < bestKey:
                     bestScheme = sp
-                    bestSignature = sig
+                    bestKey = key
         bestScheme.hasBeenSymmetricallyCanonized = True
         return bestScheme
 
