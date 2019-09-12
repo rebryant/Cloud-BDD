@@ -3,6 +3,7 @@
 # Find all unique kernels from set of schemes
 # Print them in polynomial form
 
+import os.path
 import sys
 import glob
 import getopt
@@ -29,13 +30,25 @@ def usage(prog):
     print("  -D OUTDIR Write kernels to directory OUTDIR")
     
 
+def followPath(p, extension, sofar = []):
+    if os.path.isfile(p):
+        fields = p.split('/')
+        if len(fields) > 0:
+            name = fields[-1]
+            parts = name.split('.')
+            if len(parts) > 1 and parts[-1] == extension:
+                sofar.append(p)
+    elif os.path.isdir(p):
+        ls = glob.glob(p + '/*')
+        for np in ls:
+            sofar = followPath(np, extension, sofar)
+    return sofar
+    
 def getFiles(dlist):
     flist = []
     dirs = dlist.split(':')
     for dir in dirs:
-        ls = glob.glob(dir + '/*.exp')
-        print("Directory %s.  %d files" % (dir, len(ls)))
-        flist += ls
+        flist = followPath(dir, 'exp', flist)
     return flist
 
 optlist, args = getopt.getopt(args, 'hd:D:')
