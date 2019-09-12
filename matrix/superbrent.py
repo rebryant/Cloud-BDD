@@ -38,6 +38,9 @@ class Matrix:
     def val(self, r, c):
         return self.elements[self.index(r, c)]
 
+    def assign(self, r, c, v):
+        self.elements[self.index(r,c)] = v
+
     def rowString(self, r):
         line = "|"
         for c in range(self.cols):
@@ -98,6 +101,13 @@ class Matrix:
                     ielements[other.index(i,k)] += a * b
         elements = [val % 2 for val in ielements]
         return Matrix(self.rows, other.cols, elements)
+
+    def transpose(self):
+        nm = Matrix(self.cols, self.rows)
+        for i in range(self.rows):
+            for j in range(self.cols):
+                nm.assign(j, i, self.val(i,j))
+        return nm
 
     def compress(self):
         val = 0

@@ -63,6 +63,17 @@ def selfInverses(n, symmetricOnly = False):
     plist.sort(key = lambda p:p[0].sortKey())
     return plist
 
+def transposeInverses(n):
+    plist = []
+    n2 = signatureRange(n)
+    for sig in range(n2):
+        m = generate(n, sig)
+        mt = m.transpose()
+        if pairTest(m, mt):
+            plist.append((m, mt))
+    plist.sort(key = lambda p:p[0].sortKey())
+    return plist
+
 def allPermutations(n, symmetricOnly = False):
     plist = []
     n2 = signatureRange(n)
@@ -124,6 +135,13 @@ def run(name, args):
     outf.write("# as integer with bits expanding to form matrix elements\n")
     plist = allPairs(n, symmetricOnly)
     showPairs("allPairList", plist)
+    outf.write("\n")
+
+    outf.write("# All pairs of%s %d x %d matrices A, A^{-1} s.t. A^{-1} == A^{T}\n" % (qstring, n, n))
+    outf.write("# Represented in compressed form\n")
+    outf.write("# as integer with bits expanding to form matrix elements\n")
+    plist = transposeInverses(n)
+    showPairs("transposePairList", plist)
     outf.write("\n")
 
     outf.write("# All%s %d x %d matrices A, such that, A = A^{-1}\n" % (qstring, n, n))
