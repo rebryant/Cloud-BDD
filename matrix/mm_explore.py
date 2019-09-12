@@ -92,6 +92,8 @@ huntKernels = False
 dim = (3, 3, 3)
 auxCount = 27
 
+tryLimit = 3
+
 defaultHost = 'localhost'
 defaultPort = 6616
 
@@ -347,14 +349,20 @@ class Client:
         return secs/self.generatedCount if self.generatedCount > 0 else 0.0
 
     def next(self):
-        c =  self.connect()
-        if c is None:
-            return None
-        try:
-            bundle = c.next()
-        except Exception as ex:
-            report(0, "Error.  Could not get another scheme (%s)" % str(ex))
-            return None
+        ok = False
+        for t in range(tryLimit):
+            c =  self.connect()
+            if c is None:
+                return None
+            try:
+                bundle = c.next()
+                ok = True
+                break
+            except Exception as ex:
+                report(0, "Error.  Could not get another scheme (%s)" % str(ex))
+        if not ok:
+            report(0, "Error.  Could not get another scheme after %d tries" % tryLimit)
+            return
         if bundle == False:
             report(2, "Empty bundle")
             return None
