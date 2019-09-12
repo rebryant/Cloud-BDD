@@ -104,7 +104,11 @@ normalAbcList = ["20:55:70", "25:50:70",  "30:45:70", "15:45:80", "20:40:80", "2
 huntAbcList = ["55:60:80", "40:60:90", "30:60:100"]
 
 # Good choices for probabilities.  Symmetric cases
-symmetricAbcList = ["40:40:50", "35:35:60", "30:30:70", "25:25:80", "20:20:90", "15:15:100"]
+# Without other restrictions
+oldSymmetricAbcList = ["40:40:50", "35:35:60", "30:30:70", "25:25:80", "20:20:90", "15:15:100"]
+
+# With restrictions on kernel and non-kernel terms
+symmetricAbcList = ["35:35:35", "30:30:50", "25:25:60", "20:20:70", "10:10:80", "5:5:90"]
 
 def report(level, s):
     if level <= verbLevel:
@@ -421,12 +425,20 @@ def generateCommandFile(scheme, seed):
         report(0, "Couldn't open '%s' to write" % fname)
         return ""
     scheme.ckt = circuit.Circuit(outf)
+    # Options
+    fixKV = not huntKernels
+    varKV = False
+    excludeSingleton = restrictSolutions and not huntKernels and not doSymmetric
+    boundNonKernels = doSymmetric
+
     scheme.generateProgram(categoryProbabilities, seed, timeLimit,
-                           fixKV = not huntKernels and not doSymmetric, varKV = False,
-                           excludeSingleton = restrictSolutions and not huntKernels and not doSymmetric,
+                           fixKV = fixKV, varKV = False,
+                           excludeSingleton = excludeSingleton,
                            breadthFirst = True, levelList = levelList,
                            useZdd = False,
-                           symbolicStreamline = huntKernels, checkSymmetry = doSymmetric)
+                           symbolicStreamline = huntKernels,
+                           boundNonKernels = doSymmetric,
+                           checkSymmetry = doSymmetric)
     outf.close()
     return froot
 
