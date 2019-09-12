@@ -52,9 +52,12 @@ def generatedDatabasePathFields():
     sdf = symmetricSubdirectoryFields if doSymmetric else subDirectoryFields
     return homePathFields + sdf + ["generated-database.txt"]
 
-def generatedPathFields():
+def generatedPathFields(short = False):
     sdf = symmetricSubdirectoryFields if doSymmetric else subDirectoryFields
-    return homePathFields + sdf + ["generated"]
+    if short:
+        return sdf + ["generated"]
+    else:
+        return homePathFields + sdf + ["generated"]
 
 # Don't record in main database
 localMode = False
@@ -317,6 +320,9 @@ def recordSolution(scheme, metadata = []):
     dpath =  '/'.join(dirPathFields)
     fpath = '/'.join(dirPathFields + [fname])
 
+    shortFields = generatedPathFields(short = True) + dirFields
+    sfpath = '/'.join(shortFields + [fname])
+
     if not os.path.exists(dpath):
         try:
             os.mkdir(dpath)
@@ -330,7 +336,7 @@ def recordSolution(scheme, metadata = []):
         return 
     scheme.printPolynomial(outf, metadata = metadata)
     outf.close()
-    dbEntryFields = [scheme.sign(), str(scheme.addCount()), scheme.kernelTerms.sign(), fpath]
+    dbEntryFields = [scheme.sign(), str(scheme.addCount()), scheme.kernelTerms.sign(), sfpath]
     dbpath = '/'.join(generatedDatabasePathFields())
     try:
         dbfile = open(dbpath, 'a')
