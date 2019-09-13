@@ -88,6 +88,9 @@ def checkSolution(subPath):
         print "ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex))
         return
     sc = s.symmetricCanonize() if doSymmetry else s.canonize()
+    if sc is None:
+        print("Scheme at %s is not symmetric" % subPath)
+        return
     solutionCount += 1
     sig = sc.signature()
     list = signatureDict[sig] if sig in signatureDict else []
