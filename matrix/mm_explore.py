@@ -54,6 +54,8 @@ homePathFields = ['.']
 # Consider only symmetric cases
 # Must update version in mm_parse as well.
 doSymmetric = False
+# Should symmetric version use fixed kernels?
+symFixed = False
 
 runbddFields = ["..", "runbdd"]
 
@@ -105,12 +107,13 @@ normalAbcList = ["20:55:70", "25:50:70",  "30:45:70", "15:45:80", "20:40:80", "2
 # Good choices for probabilities.  Kernel hunting mode
 huntAbcList = ["55:60:80", "40:60:90", "30:60:100"]
 
-# Good choices for probabilities.  Symmetric cases
-# Without other restrictions
-oldSymmetricAbcList = ["40:40:50", "35:35:60", "30:30:70", "25:25:80", "20:20:90", "15:15:100"]
-
-# With restrictions on kernel and non-kernel terms
-symmetricAbcList = ["35:35:35", "30:30:50", "25:25:60", "20:20:70", "10:10:80", "5:5:90"]
+if symFixed:
+    # With restrictions on kernel and non-kernel terms
+    symmetricAbcList = ["35:35:35", "30:30:50", "25:25:60", "20:20:70", "10:10:80", "5:5:90"]
+else:
+    # Good choices for probabilities.  Symmetric cases
+    # Without other restrictions
+    symmetricAbcList = ["40:40:50", "35:35:60", "30:30:70", "25:25:80", "20:20:90", "15:15:100"]
 
 def report(level, s):
     if level <= verbLevel:
@@ -277,7 +280,10 @@ class Server:
         # In case server gets restarted while client is executing
         if self.startTime is None:
             self.startTime = datetime.datetime.now()
-        scheme = brent.MScheme(dim, auxCount, ckt).unbundle(schemeBundle).canonize()
+        if doSymmetric:
+            scheme = brent.MScheme(dim, auxCount, ckt).unbundle(schemeBundle).symmetricCanonize()
+        else:
+            scheme = brent.MScheme(dim, auxCount, ckt).unbundle(schemeBundle).canonize()
         hash = scheme.sign()
         report(3, "Received bundle from client giving scheme %s" % hash)
         signature = scheme.signature()
@@ -434,18 +440,28 @@ def generateCommandFile(scheme, seed):
         return ""
     scheme.ckt = circuit.Circuit(outf)
     # Options
-    fixKV = not huntKernels
     varKV = False
-    excludeSingleton = restrictSolutions and not huntKernels and not doSymmetric
-    boundNonKernels = doSymmetric
+    if doSymmetric:
+        fixKV = symFixed
+        excludeSingleton = False
+        boundNonKernels = symFixed
+        symbolicStreamline = False
+
+    else:
+        fixKV = not huntKernels
+        excludeSingleton = restrictSolutions and not huntKernels
+        boundNonKernels = False
+        symbolicStreamline = huntKernels
 
     scheme.generateProgram(categoryProbabilities, seed, timeLimit,
-                           fixKV = fixKV, varKV = False,
+                           fixKV = fixKV,
+                           varKV = varKV,
                            excludeSingleton = excludeSingleton,
-                           breadthFirst = True, levelList = levelList,
+                           breadthFirst = True,
+                           levelList = levelList,
                            useZdd = False,
-                           symbolicStreamline = huntKernels,
-                           boundNonKernels = doSymmetric,
+                           symbolicStreamline = symbolicStreamline,
+                           boundNonKernels = boundNonKernels,
                            checkSymmetry = doSymmetric)
     outf.close()
     return froot
