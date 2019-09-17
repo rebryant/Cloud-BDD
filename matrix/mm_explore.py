@@ -43,7 +43,7 @@ def usage(name):
     print("   -F               Keep intermediate files")
     print("   -t SECS          Set runtime limit (in seconds)")
     print("   -c APROB:BPROB:CPROB Assign probabilities (in percent) of fixing each variable class")
-    print("   -p P1:P2...      Specify simplification processing options NON, (U|S)(L|R)N")
+    print("   -p P1:P2...      Specify simplification processing options NNNN, (U|S)(L|R)(AN|AY|RN)")
     print("   -v VERB          Set verbosity level")
     sys.exit(0)
 
@@ -71,7 +71,7 @@ runbddQuiet = True
 cmdPrefix = "cmd>"
 
 reductionList = ['S']
-processingList = ['URN']
+processingList = ['URAN']
 
 timeLimit = 1800
 levelList = [2,3,6]
