@@ -85,6 +85,7 @@ bool do_satisfy(int argc, char *argv[]);
 bool do_shift(int argc, char *argv[]);
 bool do_simplify(int argc, char *argv[]);
 bool do_size(int argc, char *argv[]);
+bool do_soft_and(int argc, char *argv[]);
 bool do_status(int argc, char *argv[]);
 bool do_uquant(int argc, char *argv[]);
 bool do_var(int argc, char *argv[]);
@@ -161,9 +162,11 @@ static void console_init(bool do_dist, char *cstring) {
     add_cmd("xor", do_xor,
 	    " fd f1 f2 ...   | fd <- f1 ^ f2 ^ ...");
     add_cmd("restrict", do_restrict,
-	    " fd f c ...     | fd <- Restrict(f,c) [Coudert/Madre's restriction operation]");
+	    " fd f c         | fd <- Restrict(f,c) [Coudert/Madre's restriction operation]");
     add_cmd("simplify", do_simplify,
 	    " fnew fold  f1 f2 ... | Simplify fold with respect to f1 f2 ... while maintaining conjunction");
+    add_cmd("softand", do_soft_and,
+	    " fd f g         | fd <- SoftAnd(f,g) [Partial And operation]");
     add_cmd("zconvert", do_zconvert,
 	    " zf f           | Convert f to ZDD and name zf");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
@@ -898,6 +901,34 @@ bool do_restrict(int argc, char *argv[]) {
     return true;
 }
 
+bool do_soft_and(int argc, char *argv[]) {
+    char buf[24];
+    if (argc != 4) {
+	report(0, "Soft And requires 2 arguments");
+	return false;
+    }
+    ref_t rf = get_ref(argv[2]);
+    if (do_ref(smgr) && REF_IS_INVALID(rf))
+	return false;
+    ref_t rc = get_ref(argv[3]);
+    if (do_ref(smgr) && REF_IS_INVALID(rc))
+	return false;
+    ref_t rval = shadow_soft_and(smgr, rf, rc);
+    if (do_ref(smgr) && REF_IS_INVALID(rval))
+	return false;
+    assign_ref(argv[1], rval, false, false);
+    /* Check for local garbage collection */
+    if (shadow_gc_check(smgr))
+	do_collect(0, NULL);
+    /* Initiate any deferred garbage collection */
+    if (do_dist)
+	undefer();
+#if RPT >= 2
+    shadow_show(smgr, rval, buf);
+    report(2, "RESULT.  %s = %s", argv[1], buf);
+#endif
+    return true;
+}
 
 bool do_simplify(int argc, char *argv[]) {
     size_t ocnt = 0, ncnt = 0;

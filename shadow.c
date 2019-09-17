@@ -692,6 +692,38 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 }
 	
 
+ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
+    ref_t r = REF_ZERO;
+    bool za = is_zdd(mgr, aref);
+    bool zb = is_zdd(mgr, bref);
+    bool aa = is_add(mgr, aref);
+    bool ab = is_add(mgr, bref);
+    if (za || zb || aa || ab)
+	/* Soft And only implemented with BDDs */
+	return shadow_and(mgr, aref, bref);
+    if (!mgr->do_cudd)
+	/* Only implemented with CUDD */
+	return shadow_and(mgr, aref, bref);
+
+    DdNode *an = get_ddnode(mgr, aref);
+    DdNode *bn = get_ddnode(mgr, bref);
+    DdNode *rn = Cudd_bddNPAnd(mgr->bdd_manager, an, bn);
+    r = dd2ref(rn, IS_BDD);
+    if (!REF_IS_INVALID(r)) {
+	reference_dd(mgr, rn);
+	add_ref(mgr, r, rn);
+    }
+
+#if RPT >= 4
+    char buf1[24], buf2[24], buf3[24];
+    shadow_show(mgr, aref, buf1);
+    shadow_show(mgr, bref, buf2);
+    shadow_show(mgr, r, buf3);
+    report(4, "%s SOFT AND %s --> %s", buf1, buf2, buf3);
+#endif
+    return r;
+}
+
 ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref) {
     ref_t r = REF_ONE;
     dd_type_t dtype = IS_BDD;
