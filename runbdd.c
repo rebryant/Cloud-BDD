@@ -43,9 +43,6 @@ chaining_t chaining_type = CHAIN_NONE;
    should I assume all variables are in support of function? */
 int all_vars = 1;
 
-/* What should be factor determining balance between superset and similarity metrics (*100) */
-int superset_percent = 0;
-
 /* Data structures */
 shadow_mgr smgr;
 
@@ -230,8 +227,7 @@ static void usage(char *cmd) {
     printf("\t-L FILE    Echo results to FILE\n");
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
-    printf("\t-s SUP     Set superset factor in similarity metric [0,100]\n");
-    printf("\t-O (L|B|T|P|D|S)(NO|UL|UR|SL|SR)(N|Y) | Set options for conjunction\n");
+    printf("\t-O (L|B|T|P|D|S)(A|R|N)(NN|UL|UR|SL|SR)(N|Y) | Set options for conjunction\n");
     exit(0);
 }
 
@@ -249,7 +245,7 @@ int main(int argc, char *argv[]) {
     char hbuf[BUFSIZE] = "localhost";
     unsigned port = CPORT;
     bool try_local_router = false;
-    char cstring[6] = "LNON";
+    char cstring[6] = "LNNNN";
     
     do_cudd = 1;
     do_local = 0;
@@ -314,9 +310,6 @@ int main(int argc, char *argv[]) {
 	    break;
 	case 'O':
 	    strcpy(cstring, optarg);
-	    break;
-	case 's':
-	    superset_percent = atoi(optarg);
 	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
