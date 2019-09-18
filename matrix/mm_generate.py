@@ -160,7 +160,7 @@ def run(name, args):
             print "Parse of kernel file '%s' failed: %s" % (kname, str(ex))
             return
         s.loadKernels(kt)
-    if excludeSingleton and symbolicSingleton:
+    if excludeSingleton and symbolicStreamline:
         print("ERROR.  Cannot enforce both fixed and symbolic streamline constraints")
     else:
         s.generateProgram(categoryProbabilities, seed = seed, timeLimit = timeLimit, fixKV = fixKV, 
