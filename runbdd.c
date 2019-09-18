@@ -227,7 +227,7 @@ static void usage(char *cmd) {
     printf("\t-L FILE    Echo results to FILE\n");
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
-    printf("\t-O (L|B|T|P|D|S)(A|R|N)(NN|UL|UR|SL|SR)(N|Y) | Set options for conjunction\n");
+    printf("\t-O (L|B|T|P|D|S)(NN|UL|UR|SL|SR)(A|R|N)(N|Y) | Set options for conjunction\n");
     exit(0);
 }
 
