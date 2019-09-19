@@ -39,7 +39,6 @@ int check_results = 0;
    type == -1 ==> similarity reduction 
    type == -2 ==> pairwise reduction 
  */
-int reduction_type = 0;
 
 #define TERNARY_REDUCTION 3
 #define BINARY_REDUCTION 2
@@ -47,6 +46,8 @@ int reduction_type = 0;
 #define LINEAR_REDUCTION 0
 #define SIMILARITY_REDUCTION -1
 #define PAIRWISE_REDUCTION -2
+
+int reduction_type = SIMILARITY_REDUCTION;
 
 /* Should arguments to conjunction be preprocessed with soft and or Coudert/Madre restrict operation */
 int preprocess = 0;
@@ -57,7 +58,7 @@ int presort = 0;
 int reprocess = 0;
 
 /* Should preprocessing and reprocessing be done using soft and */
-int use_soft = 0;
+int use_soft = 1;
 
 /* Should preprocessing be done right-to-left */
 int right_to_left = 0;
@@ -118,10 +119,10 @@ void init_conjunct(char *cstring) {
     add_param("soft", &use_soft, "Use soft and, rather than C/M restriction for simplifying conjunction operands", NULL);
     if (!parse_cstring(cstring)) {
 	/* Revert to defaults */
-	reduction_type = LINEAR_REDUCTION;
+	reduction_type = SIMILARITY_REDUCTION;
 	preprocess = 0;
 	presort = 0;
-	use_soft = 0;
+	use_soft = 1;
 	reprocess = 0;
 	right_to_left = 0;
     }
@@ -169,7 +170,7 @@ void rset_add_term(rset *set, ref_t fun) {
 
 void rset_add_term_first(rset *set, ref_t fun) {
     root_addref(fun, false);
-    rset_ele *ele = malloc_or_fail(sizeof(rset_ele), "rset_add_term");
+    rset_ele *ele = malloc_or_fail(sizeof(rset_ele), "rset_add_term_first");
     ele->next = set->head;
     ele->fun = fun;
     ele->sat_count = -1.0;
@@ -268,12 +269,21 @@ static void swap_contents(rset_ele *ptr1, rset_ele *ptr2) {
     ref_t tfun = ptr1->fun;
     double tsat_count = ptr1->sat_count;
     size_t tsize = ptr1->size;
+    int tsupport_count = ptr1->support_count;
+    int *tsupport_indices = ptr1->support_indices;
+
     ptr1->fun = ptr2->fun;
     ptr1->sat_count = ptr2->sat_count;
     ptr1->size = ptr2->size;
+    ptr1->support_count = ptr2->support_count;
+    ptr1->support_indices = ptr2->support_indices;
+
     ptr2->fun = tfun;
     ptr2->sat_count = tsat_count;
     ptr2->size = tsize;
+    ptr2->support_count = tsupport_count;
+    ptr2->support_indices = tsupport_indices;
+
 }
 
 /* Recursive step of sorting.  Elements modified */
@@ -541,6 +551,10 @@ static void insert_candidate(pair *candidates, rset_ele *ptr1, rset_ele *ptr2, d
 static ref_t similarity_combine(rset *set, conjunction_data *data) {
     double expansion_factor = (double) expansion_factor_scaled / 100.0;
     pair candidates[abort_limit];
+    size_t max_argument_size = 0;
+    size_t abort_count = 0;
+    size_t argument_count = set->length;
+    size_t max_size_limit = 0;
     if (set->length == 0) {
 	ref_t rval = shadow_one(smgr);
 	root_addref(rval, false);
@@ -586,17 +600,19 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 	    ptr2 = candidates[tidx].ptr2;
 	    sim = candidates[tidx].sim;
 	    arg1 = ptr1->fun;
+	    size_t asize = get_size(ptr1);
+	    max_argument_size = SMAX(max_argument_size, asize);
 	    arg2 = ptr2->fun;
+	    asize = get_size(ptr2);
+	    max_argument_size = SMAX(max_argument_size, asize);
+
+	    max_size_limit = SMAX(max_size_limit, size_limit);
 	    nval = final_try ? shadow_and(smgr, arg1, arg2) : shadow_and_limit(smgr, arg1, arg2, size_limit);
-#if 0
-	    if (smgr->do_cudd) {
-		int collected = cudd_collect(smgr);
-		report(4, "Garbage collected %d nodes", collected);
-	    }
-#endif
+	    
 
 	    if (!REF_IS_INVALID(nval))
 		break;
+	    abort_count ++;
 	    if (verblevel >= 4) {
 		char arg1_buf[24], arg2_buf[24];
 		shadow_show(smgr, arg1, arg1_buf);
@@ -640,6 +656,9 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 
 
     }
+    report(1, "Conjunction of %zd elements.  %zd aborts.  Max argument %zd.  Max size limit %zd",
+	   argument_count, abort_count, max_argument_size, max_size_limit);
+
     return rset_remove_first(set);
 }
 
