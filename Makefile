@@ -3,11 +3,11 @@ OCUDDDIR = ./cudd-symlink-original
 
 CUDDINC= -I$(CUDDDIR)/include
 CUDDLIBS = $(CUDDDIR)/lib/libcudd.a 
+CUDDFLAGS = 
 
 OCUDDINC= -I$(OCUDDDIR)/include
 OCUDDLIBS = $(OCUDDDIR)/lib/libcudd.a
-
-#CUDDFLAGS = -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=8
+OCUDDFLAGS = -DNO_CHAINING
 
 VLEVEL=5
 
@@ -88,6 +88,11 @@ console_test: console_test.c console.h report.h console.o report.o chunk.o table
 
 runbdd: runbdd.c conjunct.o console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
 	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o conjunct.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS) -lm
+
+# Use standard version of CUDD
+runbdd-cudd: runbdd.c conjunct.o console.o chunk.o table.o report.o bdd.o shadow.c msg.o agent.o
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(OCUDDFLAGS) $(OCUDDINC) -o runbdd-cudd runbdd.c chunk.o conjunct.o console.o table.o report.o bdd.o shadow.c msg.o agent.o $(OCUDDLIBS) -lm
+
 
 bworker: bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o
 	$(CC) $(CFLAGS) -o bworker bworker.c table.o chunk.o report.o msg.o console.o agent.o bdd.o
