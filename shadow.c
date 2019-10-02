@@ -1538,8 +1538,6 @@ keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots,
 
 /* Compute similarity metric for support sets of two functions */
 /* Modified 09/17/2019 with revised similarity count */
-/* Allow both old and new versions */
-#define NEW 1
 
 double index_similarity(int support_count1, int *indices1, int support_count2, int *indices2) {
     double superset_factor = 0.00;
@@ -1571,15 +1569,9 @@ double index_similarity(int support_count1, int *indices1, int support_count2, i
     r2_count += (support_count2-idx2);
     int min_count = r1_count < r2_count ? r1_count : r2_count;
     double cov = min_count == 0 ? 1.0 : (double) intersection_count / min_count;
-#if NEW
     int sum_count = r1_count + r2_count + intersection_count;
     double sim = sum_count == 0 ? 1.0 : (double) (3 * intersection_count)/sum_count;
     score = cov > sim ? cov : sim;
-#else
-    int union_count = r1_count + r2_count - intersection_count;
-    double sim = union_count == 0 ? 1.0 : (double) intersection_count / union_count;
-    score = superset_factor * cov + (1-superset_factor) * sim;
-#endif
     return score;
 }
 
