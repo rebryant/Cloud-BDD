@@ -86,6 +86,9 @@ keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots);
 double shadow_similarity(shadow_mgr mgr, ref_t r1, ref_t r2);
 /* Based on indices retrieved by Cudd_SupportIndices() */
 double index_similarity(int scount1, int *indices1, int scount2, int *indices2);
+/* Computer coverage metric by f1 of f2 */
+double index_coverage(int scount1, int *indices1, int scount2, int *indices2);
+
 /* Wrapper for Cudd_SupportIndices */
 int shadow_support_indices(shadow_mgr mgr, ref_t r, int **indicesp);
 

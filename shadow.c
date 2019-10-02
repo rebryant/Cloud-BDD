@@ -1540,7 +1540,6 @@ keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots,
 /* Modified 09/17/2019 with revised similarity count */
 
 double index_similarity(int support_count1, int *indices1, int support_count2, int *indices2) {
-    double superset_factor = 0.00;
     double score = 0.0;
     int intersection_count = 0;
     int r1_count = 0;
@@ -1574,6 +1573,33 @@ double index_similarity(int support_count1, int *indices1, int support_count2, i
     score = cov > sim ? cov : sim;
     return score;
 }
+
+double index_coverage(int support_count1, int *indices1, int support_count2, int *indices2) {
+    int intersection_count = 0;
+    int r1_count = 0;
+    int idx1 = 0;
+    int idx2 = 0;
+
+    while (idx1 < support_count1 && idx2 < support_count2) {
+	int next1 = indices1[idx1];
+	int next2 = indices2[idx2];
+	if (next1 == next2) {
+	    intersection_count++;
+	    r1_count++;
+	    idx1++;
+	    idx2++;
+	} else if (next1 < next2) {
+	    r1_count++;
+	    idx1++;
+	} else {
+	    idx2++;
+	}
+    }
+    r1_count += (support_count1-idx1);
+    double cov = r1_count == 0 ? 1.0 : (double) intersection_count / r1_count;
+    return cov;
+}
+
 
 int shadow_support_indices(shadow_mgr mgr, ref_t r, int **indicesp) {
     if (!mgr->do_cudd) {
