@@ -50,12 +50,12 @@ int check_results = 0;
 int reduction_type = SIMILARITY_REDUCTION;
 
 /* Should arguments to conjunction be preprocessed with soft and or Coudert/Madre restrict operation */
-int preprocess = 0;
+int preprocess = 1;
 /* Should arguments to conjunction be sorted in descending order of sat count before preprocessing? */
 int presort = 0;
 
 /* Should arguments be reprocessed with Coudert/Madre restrict or soft and operation as conjunction proceeds? */
-int reprocess = 0;
+int reprocess = 1;
 
 /* Should preprocessing and reprocessing be done using soft and */
 int use_soft = 1;
@@ -95,37 +95,22 @@ typedef struct {
 } conjunction_data;
 
 /* String representation of conjunction options */
-bool do_cstring(int argc, char *argv[]);
 bool do_similar(int argc, char *argv[]);
-static bool parse_cstring(char *cstring);
-static void compute_cstring(char *cstring);
 
-
-void init_conjunct(char *cstring) {
+void init_conjunct() {
     /* Add commands and options */
-    add_cmd("cstring", do_cstring,
-	    "(L|B|T|P|D)(NN|UL|UR|SL|SR)(A|R|N)(N|Y) | Set options for conjunction");
     add_cmd("similar", do_similar,
 	    "f1 f2 ...       | Compute pairwise support similarity for functions");
     add_param("check", &check_results, "Check results of conjunctoperations", NULL);
     add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
     add_param("pass", &pass_limit, "Maximum number of passes during single conjunction", NULL);
     add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
-    add_param("reduction", &reduction_type, "Reduction degree (2+: tree, 1:dynamic, 0:linear, -1:similarity, -2:pairwise)", NULL);
-    add_param("preprocess", &preprocess, "Preprocess conjunction arguments with simplification operation", NULL);
-    add_param("presort", &presort, "Sort by descending SAT count before preprocessing", NULL);
-    add_param("reprocess", &preprocess, "Reprocess arguments with simplification operation during conjunction", NULL);
-    add_param("right", &right_to_left, "Perform simplification starting with rightmost (rather than leftmost) element", NULL);
-    add_param("soft", &use_soft, "Use soft and, rather than C/M restriction for simplifying conjunction operands", NULL);
-    if (!parse_cstring(cstring)) {
-	/* Revert to defaults */
-	reduction_type = SIMILARITY_REDUCTION;
-	preprocess = 0;
-	presort = 0;
-	use_soft = 1;
-	reprocess = 0;
-	right_to_left = 0;
-    }
+    reduction_type = SIMILARITY_REDUCTION;
+    preprocess = 0;
+    presort = 0;
+    use_soft = 1;
+    reprocess = 0;
+    right_to_left = 0;
 }
 
 /*** Operations on rsets ***/
@@ -401,7 +386,7 @@ static ref_t simplify_downstream(ref_t fun, rset_ele *ptr) {
 	    root_deref(rval);
 	    return arg;
 	}
-	ref_t nval = use_soft ? shadow_soft_and(smgr, rval, arg) : shadow_cm_restrict(smgr, rval, arg);
+	ref_t nval = shadow_soft_and(smgr, rval, arg);
 	if (REF_IS_INVALID(nval)) {
 	    root_deref(rval);
 	    return nval;
@@ -747,7 +732,6 @@ ref_t tree_combine(rset *set, size_t degree, conjunction_data *data) {
 
 /* Compute conjunction of set (destructive) */
 ref_t rset_conjunct(rset *set) {
-    char cstring[6];
     conjunction_data cdata;
     cdata.max_size = 0;
     cdata.total_size = 0;
@@ -792,19 +776,10 @@ ref_t rset_conjunct(rset *set) {
     }
 
     size_t rsize = cudd_single_size(smgr, rval);
-    compute_cstring(cstring);
-    report(0, "Conjunction %s Result %zd Max_BDD %zd Max_combined %zd Max_sum %zd",
-	   cstring, rsize, cdata.max_size, cdata.total_size, cdata.sum_size);
+    report(0, "Conjunction result %zd Max_BDD %zd Max_combined %zd Max_sum %zd",
+	   rsize, cdata.max_size, cdata.total_size, cdata.sum_size);
 
     return rval;
-}
-
-bool do_cstring(int argc, char *argv[]) {
-    if (argc != 2) {
-	report(0, "Must provide single argument to cstring command");
-	return false;
-    }
-    return parse_cstring(argv[1]);
 }
 
 bool do_similar(int argc, char *argv[]) {
@@ -841,134 +816,3 @@ bool do_similar(int argc, char *argv[]) {
 
 
 
-static bool parse_cstring(char *cstring) {
-    if (strlen(cstring) != 5) {
-	report(0, "cstring must be of length 4, of form '(L|B|T|P|D|S)(NO|UL|UR|SL|SR)(A|R|N)(N|Y)'");
-	return false;
-    }
-    switch(cstring[0]) {
-    case 'T':
-	reduction_type = TERNARY_REDUCTION;
-	break;
-    case 'B':
-	reduction_type = BINARY_REDUCTION;
-	break;
-    case 'L':
-	reduction_type = LINEAR_REDUCTION;
-	break;
-    case 'D':
-	reduction_type = DYNAMIC_REDUCTION;
-	break;
-    case 'P':
-	reduction_type = PAIRWISE_REDUCTION;
-	break;
-    case 'S':
-	reduction_type = SIMILARITY_REDUCTION;
-	break;
-    default:
-	report(0, "Must have reduction type T, B, L, D, P, or S");
-	return false;
-    }
-    switch(cstring[1]) {
-    case 'N':
-	preprocess = 0;
-	presort = 0;
-	break;
-    case 'U':
-	preprocess = 1;
-	presort = 0;
-	break;
-    case 'S':
-	preprocess = 1;
-	presort = 1;
-	break;
-    default:
-	report(0, "cstring must be of form '(L|B|T|P|D)(NN|UL|UR|SL|SR)(A|R|N)(N|Y)'");
-	return false;
-    }
-    if (preprocess) {
-	switch(cstring[2]) {
-	case 'L':
-	    right_to_left = 0;
-	    break;
-	case 'R':
-	    right_to_left = 1;
-	    break;
-	default:
-	    report(0, "Must preprocess in either left-to-right (L) or right-to-left (R) mode");
-	    return false;
-	}
-	switch(cstring[3]) {
-	case 'A':
-	    use_soft = 1;
-	    break;
-	case 'R':
-	    use_soft = 0;
-	    break;
-	default:
-	    report(0, "Preprocessing requires either soft and (A) or C/M restrict (R)");
-	    return false;
-	}
-    } else {
-	if (cstring[2] != 'N' || cstring[3] != 'N' || cstring[4] != 'N') {
-	    report(0, "Without preprocessing, cstring must be of form (L|B|T|P|D)NNNN");
-	    return false;
-	}
-    }
-    switch (cstring[4]) {
-    case 'N':
-	reprocess = 0;
-	break;
-    case 'Y':
-	reprocess = 0;
-	if (reduction_type == DYNAMIC_REDUCTION && !use_soft)
-	    report(0, "Cannot do reprocessing via C/M restrict with dynamic reduction.  Reprocessing disabled");
-	else if (reduction_type == SIMILARITY_REDUCTION && !use_soft)
-	    report(0, "Cannot do reprocessing via C/M restrict with similarity reduction.  Reprocessing disabled");
-	else if (!preprocess)
-	    report(0, "Can only reprocess if first preprocess.  Reprocessing disabled");
-	else
-	    reprocess = 1;
-	break;
-    default:
-	report(0, "cstring must be of form '(L|B|T|P|D)(NO|UL|UR|SL|SR)(A|R|N)(N|Y)'");
-	return false;
-    }
-    return true;
-}
-
-static void compute_cstring(char *cstring) {
-    switch (reduction_type) {
-    case TERNARY_REDUCTION:
-	cstring[0] = 'T';
-	break;
-    case BINARY_REDUCTION:
-	cstring[0] = 'B';
-	break;
-    case LINEAR_REDUCTION:
-	cstring[0] = 'L';
-	break;
-    case DYNAMIC_REDUCTION:
-	cstring[0] = 'D';
-	break;
-    case SIMILARITY_REDUCTION:
-	cstring[0] = 'S';
-	break;
-    case PAIRWISE_REDUCTION:
-	cstring[0] = 'P';
-	break;
-    default:
-	cstring[0] = '?';
-    }
-    if (preprocess) {
-	cstring[1] = presort ? 'S' : 'U';
-	cstring[2] = right_to_left ? 'R' : 'L';
-	cstring[3] = use_soft ? 'A' : 'R';
-    } else {
-	cstring[1] = 'N';
-	cstring[2] = 'N';
-	cstring[3] = 'N';
-    }
-    cstring[4] = reprocess ? 'Y' : 'N';
-    cstring[5] = '\0';
-}

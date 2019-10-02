@@ -113,7 +113,7 @@ static void bdd_init() {
     set_gc_handlers(client_gc_start, client_gc_finish);
 }
 
-static void console_init(bool do_dist, char *cstring) {
+static void console_init(bool do_dist) {
     add_cmd("aconvert", do_aconvert,
 	    " af f ...       | Convert f to ADD and name af");
     add_cmd("and", do_and,
@@ -168,7 +168,7 @@ static void console_init(bool do_dist, char *cstring) {
 	    " zf f           | Convert f to ZDD and name zf");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
     add_param("allvars", &all_vars, "Count all variables in support", NULL);
-    init_conjunct(cstring);
+    init_conjunct();
 }
 
 static bool bdd_quit(int argc, char *argv[]) {
@@ -245,7 +245,6 @@ int main(int argc, char *argv[]) {
     char hbuf[BUFSIZE] = "localhost";
     unsigned port = CPORT;
     bool try_local_router = false;
-    char cstring[6] = "LNNNN";
     
     do_cudd = 1;
     do_local = 0;
@@ -253,7 +252,7 @@ int main(int argc, char *argv[]) {
     chaining_type = CHAIN_ALL;
 
 
-    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:O:s:")) != -1) {
+    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:s:")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -308,9 +307,6 @@ int main(int argc, char *argv[]) {
 		err(true, "Invalid chaining type '%c'\n", optarg[0]);
 	    }
 	    break;
-	case 'O':
-	    strcpy(cstring, optarg);
-	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);
@@ -324,7 +320,7 @@ int main(int argc, char *argv[]) {
 	set_agent_flush_helper(run_flush);
 	set_agent_stat_helper(do_summary_stat);
     }
-    console_init(do_dist, cstring);
+    console_init(do_dist);
     set_verblevel(level);
     if (logfile_name)
 	set_logfile(logfile_name);

@@ -1612,7 +1612,6 @@ int shadow_support_indices(shadow_mgr mgr, ref_t r, int **indicesp) {
 }
 
 /* Compute similarity metric for support sets of two functions */
-/* Parameter superset_factor determines ratio between superset and similarity metrics */
 double shadow_similarity(shadow_mgr mgr, ref_t r1, ref_t r2) {
     int *indices1;
     int *indices2;

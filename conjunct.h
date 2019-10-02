@@ -3,15 +3,13 @@
 /* Global variables defined in runbdd.c */
 extern shadow_mgr smgr;
 extern keyvalue_table_ptr reftable;
-/* What should be factor determining balance between superset and similarity metrics (*100) */
-extern int superset_percent;
 
 /* Functions defined in runbdd.c */
 void root_addref(ref_t r, bool fresh);
 void root_deref(ref_t r);
 ref_t get_ref(char *name);
 
-void init_conjunct(char *cstring);
+void init_conjunct();
 
 /* Data structure for representing lists of refs */
 typedef struct RSET rset;
