@@ -55,9 +55,6 @@ int preprocess = 1;
 /* Should arguments be reprocessed with Coudert/Madre restrict or soft and operation as conjunction proceeds? */
 int reprocess = 1;
 
-/* Should preprocessing be done right-to-left */
-int right_to_left = 0;
-
 /* Maximum number of pairs to try when doing conjunction with aborts */
 int abort_limit = 7;
 /* Maximum expansion factor for conjunction (scaled 100x) */
@@ -103,7 +100,6 @@ void init_conjunct() {
     reduction_type = SIMILARITY_REDUCTION;
     preprocess = 0;
     reprocess = 0;
-    right_to_left = 0;
 }
 
 /*** Operations on rsets ***/
@@ -392,27 +388,17 @@ static ref_t simplify_downstream(ref_t fun, rset_ele *ptr) {
     return rval;
 }
 
-static void simplify_recurse(rset_ele *ptr, bool preorder) {
+static void simplify_recurse(rset_ele *ptr) {
     if (!ptr)
 	return;
     rset_ele *rest = ptr->next;
-    if (preorder) {
-	ref_t fun = ptr->fun;
-	ref_t nval = simplify_downstream(fun, rest);
-	root_deref(fun);
-	ptr->fun = nval;
-	ptr->size = 0;
-	ptr->sat_count = -1.0;
-    }
-    simplify_recurse(rest, preorder);
-    if (!preorder) {
-	ref_t fun = ptr->fun;
-	ref_t nval = simplify_downstream(fun, rest);
-	root_deref(fun);
-	ptr->fun = nval;
-	ptr->size = 0;
-	ptr->sat_count = -1.0;
-    }
+    ref_t fun = ptr->fun;
+    ref_t nval = simplify_downstream(fun, rest);
+    root_deref(fun);
+    ptr->fun = nval;
+    ptr->size = 0;
+    ptr->sat_count = -1.0;
+    simplify_recurse(rest);
 }
 
 /* Simplify all functions in rset */
@@ -427,7 +413,7 @@ static void simplify_rset(rset *set) {
 	report(2, "");
     }
 
-    simplify_recurse(set->head, !right_to_left);
+    simplify_recurse(set->head);
 
     if (verblevel >= 2) {
 	report_noreturn(2, "After simplification:");
