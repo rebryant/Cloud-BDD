@@ -69,13 +69,16 @@ typedef struct {
     size_t total_size;
 } conjunction_data;
 
-/* String representation of conjunction options */
 bool do_similar(int argc, char *argv[]);
+bool do_coverage(int argc, char *argv[]);
+
 
 void init_conjunct() {
     /* Add commands and options */
     add_cmd("similar", do_similar,
 	    "f1 f2 ...       | Compute pairwise support similarity for functions");
+    add_cmd("cover", do_coverage,
+	    "f1 f2           | Compute coverage metric of f1 by f2");
     add_param("check", &check_results, "Check results of conjunctoperations", NULL);
     add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
     add_param("pass", &pass_limit, "Maximum number of passes during single conjunction", NULL);
@@ -630,4 +633,32 @@ bool do_similar(int argc, char *argv[]) {
 }
 
 
+bool do_coverage(int argc, char *argv[]) {
+    int r;
+
+    if (argc != 3) {
+	err(false, "coverage command requires two arguments");
+	return false;
+    }
+    /* Check refs */
+    bool ok = true;
+    for (r = 1; r < argc; r++) {
+	ref_t ref = get_ref(argv[r]);
+	if (REF_IS_INVALID(ref)) {
+	    err(false, "Invalid function name: %s", argv[r]);
+	    ok = false;
+	}
+    }
+    if (!ok)
+	return ok;
+
+    ref_t r1 = get_ref(argv[1]);
+    ref_t r2 = get_ref(argv[2]);
+
+    double c = shadow_coverage(smgr, r1, r2);
+
+    report(0, "Coverage(%s, %s) = %.3f", argv[1], argv[2], c);
+
+    return true;
+}
 

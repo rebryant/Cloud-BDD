@@ -1628,3 +1628,20 @@ double shadow_similarity(shadow_mgr mgr, ref_t r1, ref_t r2) {
 
     return result;
 }
+
+double shadow_coverage(shadow_mgr mgr, ref_t r1, ref_t r2) {
+    int *indices1;
+    int *indices2;
+
+    if (!mgr->do_cudd)
+	return 0.0;
+    int support_count1 = shadow_support_indices(mgr, r1, &indices1);
+    int support_count2 = shadow_support_indices(mgr, r2, &indices2);
+
+    double result = index_coverage(support_count1, indices1, support_count2, indices2);
+
+    free(indices1);
+    free(indices2);
+
+    return result;
+}
