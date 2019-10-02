@@ -31,23 +31,6 @@
 
 /* Should I check results of conjunct (and possibly other) operations? */
 int check_results = 0;
-/*
-  How should terms be combined?  
-   type >=  2 ==> tree reduction.
-   type ==  1 ==> dynamically sorted reduction
-   type ==  0 ==> linear reduction
-   type == -1 ==> similarity reduction 
-   type == -2 ==> pairwise reduction 
- */
-
-#define TERNARY_REDUCTION 3
-#define BINARY_REDUCTION 2
-#define DYNAMIC_REDUCTION 1
-#define LINEAR_REDUCTION 0
-#define SIMILARITY_REDUCTION -1
-#define PAIRWISE_REDUCTION -2
-
-int reduction_type = SIMILARITY_REDUCTION;
 
 /* Should arguments to conjunction be preprocessed with soft and operation */
 int preprocess = 1;
@@ -97,7 +80,6 @@ void init_conjunct() {
     add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
     add_param("pass", &pass_limit, "Maximum number of passes during single conjunction", NULL);
     add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
-    reduction_type = SIMILARITY_REDUCTION;
     preprocess = 0;
     reprocess = 0;
 }
@@ -432,49 +414,6 @@ ref_t simplify_with_rset(ref_t fun, rset *set) {
     return simplify_downstream(fun, set->head);
 }
 
-static ref_t linear_combine(rset *set, conjunction_data *data) {
-    ref_t rval = shadow_one(smgr);
-    root_addref(rval, false);
-    while (set->length > 0) {
-	ref_t rarg = rset_remove_first(set);
-	ref_t nval = shadow_and(smgr, rval, rarg);
-	root_addref(nval, true);
-	root_deref(rarg);
-	root_deref(rval);
-	if (reprocess) {
-	    ref_t sval = simplify_downstream(nval, set->head);
-	    root_deref(nval);
-	    nval = sval;
-	}
-	rval = nval;
-	report_combination(set, rval, data);
-    }
-    return rval;
-}
-
-static ref_t sorted_combine(rset *set, conjunction_data *data) {
-    ref_t rval;
-    if (set->length == 0) {
-	rval = shadow_one(smgr);
-	root_addref(rval, false);
-	return rval;
-    }
-    while (set->length > 1) {
-	rset_sort(set, true, true);
-	ref_t arg1 = rset_remove_first(set);
-	ref_t arg2 = rset_remove_first(set);
-	ref_t nval = shadow_and(smgr, arg1, arg2);
-	root_addref(nval, true);
-	root_deref(arg1);
-	root_deref(arg2);
-	report_combination(set, nval, data);
-	rset_add_term_first(set, nval);
-	root_deref(nval);
-    }
-    rval = rset_remove_first(set);
-    return rval;
-}
-
 /* Manage candidate argument pairs */
 typedef struct {
     rset_ele *ptr1;
@@ -626,89 +565,6 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
     return rset_remove_first(set);
 }
 
-
-static ref_t pairwise_combine(rset *set, conjunction_data *data) {
-    ref_t rval;
-    if (set->length == 0) {
-	rval = shadow_one(smgr);
-	root_addref(rval, false);
-	return rval;
-    }
-    report_combination(set, REF_INVALID, data);
-    while (set->length > 1) {
-	rset_ele *ptr = set->head;
-	rset_ele *best_ele = NULL;
-	size_t best_score = 0;
-	bool first = true;
-	/* Find adjacent elements that minimize product of sizes */
-	while (ptr->next) {
-	    rset_ele *next = ptr->next;
-	    size_t score = get_size(ptr) * get_size(next);
-	    if (first || score < best_score) {
-		first = false;
-		best_score = score;
-		best_ele = ptr;
-	    }
-	    ptr = next;
-	}
-	rset_ele *bnext = best_ele->next;
-	/* Combine two elements */
-	ref_t nval = shadow_and(smgr, best_ele->fun, bnext->fun);
-	root_addref(nval, true);
-	root_deref(best_ele->fun);
-	root_deref(bnext->fun);
-	// Hold spot in list
-	best_ele->fun = REF_INVALID;
-	best_ele->next = bnext->next;
-	if (set->tail == bnext)
-	    set->tail = best_ele;
-	free_block(bnext, sizeof(rset_ele));
-	set->length--;
-	report_combination(set, nval, data);
-	best_ele->fun = nval;
-	if (reprocess)
-	    simplify_rset(set);
-    }
-    rval = rset_remove_first(set);
-    return rval;
-}
-
-/* Recursive helper function for tree combination */
-static ref_t tree_combiner(rset *set, size_t degree, size_t count, conjunction_data *data) {
-    ref_t rval = shadow_one(smgr);
-    root_addref(rval, false);
-    if (count == 0 || set->length == 0)
-	return rval;
-    if (count == 1) {
-	return rset_remove_first(set);
-    }
-    size_t sub_count = (count + degree-1)/degree;
-    int d;
-    rval = tree_combiner(set, degree, sub_count, data);
-    for (d = 1; d < degree; d++) {
-	ref_t subval = tree_combiner(set, degree, sub_count, data);
-	if (subval == shadow_one(smgr))
-	    continue;
-	ref_t nval = shadow_and(smgr, rval, subval);
-	root_addref(nval, true);
-	root_deref(rval);
-	root_deref(subval);
-	if (reprocess) {
-	    ref_t sval = simplify_downstream(nval, set->head);
-	    root_deref(nval);
-	    nval = sval;
-	}
-	rval = nval;
-	report_combination(set, rval, data);
-    }
-    return rval;
-}
-
-ref_t tree_combine(rset *set, size_t degree, conjunction_data *data) {
-    report_combination(set, REF_INVALID, data);
-    return tree_combiner(set, degree, set->length, data);
-}
-
 /* Compute conjunction of set (destructive) */
 ref_t rset_conjunct(rset *set) {
     conjunction_data cdata;
@@ -722,16 +578,7 @@ ref_t rset_conjunct(rset *set) {
 
     ref_t rval = shadow_one(smgr);
 
-    if (reduction_type > 1)
-	rval = tree_combine(set, reduction_type, &cdata);
-    else if (reduction_type == DYNAMIC_REDUCTION) {
-	rval = sorted_combine(set, &cdata);
-    } else if (reduction_type == SIMILARITY_REDUCTION) {
-	rval = similarity_combine(set, &cdata);
-    } else if (reduction_type == PAIRWISE_REDUCTION)
-	rval = pairwise_combine(set, &cdata);
-    else
-	rval = linear_combine(set, &cdata);
+    rval = similarity_combine(set, &cdata);
 
     if (check_results) {
 	if (rprod != rval) {
