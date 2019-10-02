@@ -49,16 +49,11 @@ int check_results = 0;
 
 int reduction_type = SIMILARITY_REDUCTION;
 
-/* Should arguments to conjunction be preprocessed with soft and or Coudert/Madre restrict operation */
+/* Should arguments to conjunction be preprocessed with soft and operation */
 int preprocess = 1;
-/* Should arguments to conjunction be sorted in descending order of sat count before preprocessing? */
-int presort = 0;
 
 /* Should arguments be reprocessed with Coudert/Madre restrict or soft and operation as conjunction proceeds? */
 int reprocess = 1;
-
-/* Should preprocessing and reprocessing be done using soft and */
-int use_soft = 1;
 
 /* Should preprocessing be done right-to-left */
 int right_to_left = 0;
@@ -107,8 +102,6 @@ void init_conjunct() {
     add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
     reduction_type = SIMILARITY_REDUCTION;
     preprocess = 0;
-    presort = 0;
-    use_soft = 1;
     reprocess = 0;
     right_to_left = 0;
 }
@@ -738,9 +731,6 @@ ref_t rset_conjunct(rset *set) {
     cdata.sum_size = 0;
     ref_t rprod = check_results ? and_check(set) : REF_INVALID;
 
-    if (presort)
-	rset_sort(set, false, false);
-
     if (preprocess)
 	simplify_rset(set);
 
@@ -749,16 +739,8 @@ ref_t rset_conjunct(rset *set) {
     if (reduction_type > 1)
 	rval = tree_combine(set, reduction_type, &cdata);
     else if (reduction_type == DYNAMIC_REDUCTION) {
-	if (reprocess && !use_soft) {
-	    report(0, "WARNING: Cannot reprocess arguments with C/M restrict when using dynamic reduction.  Reprocessing disabled");
-	    reprocess = 0;
-	}
 	rval = sorted_combine(set, &cdata);
     } else if (reduction_type == SIMILARITY_REDUCTION) {
-	if (reprocess && !use_soft) {
-	    report(0, "WARNING: Cannot reprocess arguments with C/M restrict when using similarity reduction.  Reprocessing disabled");
-	    reprocess = 0;
-	}
 	rval = similarity_combine(set, &cdata);
     } else if (reduction_type == PAIRWISE_REDUCTION)
 	rval = pairwise_combine(set, &cdata);
