@@ -78,7 +78,7 @@ void init_conjunct() {
     add_cmd("similar", do_similar,
 	    "f1 f2 ...       | Compute pairwise support similarity for functions");
     add_cmd("cover", do_coverage,
-	    "f1 f2           | Compute coverage metric of f1 by f2");
+	    "f1 f2 ...       | Compute pairwise support coverage for functions");
     add_param("check", &check_results, "Check results of conjunctoperations", NULL);
     add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
     add_param("pass", &pass_limit, "Maximum number of passes during single conjunction", NULL);
