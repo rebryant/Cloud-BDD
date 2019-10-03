@@ -634,6 +634,38 @@ bool do_similar(int argc, char *argv[]) {
 
 
 bool do_coverage(int argc, char *argv[]) {
+    int r, c;
+    /* Check refs */
+    bool ok = true;
+    for (r = 1; r < argc; r++) {
+	ref_t ref = get_ref(argv[r]);
+	if (REF_IS_INVALID(ref)) {
+	    err(false, "Invalid function name: %s", argv[r]);
+	    ok = false;
+	}
+    }
+    if (!ok)
+	return ok;
+    /* Write column headings */
+    for (c = 1; c < argc; c++)
+	report_noreturn(0, "\t%s", argv[c]);
+    report(0, "");
+    for (r = 1; r < argc; r++) {
+	report_noreturn(0, argv[r]);
+	ref_t r1 = get_ref(argv[r]);
+	for (c = 1; c < argc; c++) {
+	    ref_t r2 = get_ref(argv[c]);
+	    double s = shadow_coverage(smgr, r1, r2);
+	    report_noreturn(0, "\t%.3f", s);
+	}
+	report(0, "");
+    }
+    return ok;
+}
+
+
+#if 0
+bool do_coverage(int argc, char *argv[]) {
     int r;
 
     if (argc != 3) {
@@ -661,4 +693,4 @@ bool do_coverage(int argc, char *argv[]) {
 
     return true;
 }
-
+#endif
