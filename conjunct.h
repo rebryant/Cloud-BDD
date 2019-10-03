@@ -18,7 +18,7 @@ typedef struct RSET rset;
 rset *rset_new();
 
 /* Add function to set to be conjuncted */
-void rset_add_term(rset *set, ref_t fun);
+void rset_add_term_last(rset *set, ref_t fun);
 
 /* Clear elements of rset (for error recovery) and free all storage */
 void rset_free(rset *set);

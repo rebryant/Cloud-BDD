@@ -942,7 +942,7 @@ bool do_simplify(int argc, char *argv[]) {
 	    rset_free(set);
 	    return false;
 	}
-	rset_add_term(set, rarg);
+	rset_add_term_last(set, rarg);
     }
 
     ref_t rval = simplify_with_rset(fun, set);
@@ -991,7 +991,7 @@ bool do_conjunct(int argc, char *argv[]) {
 	    rset_free(set);
 	    return rarg;
 	}
-	rset_add_term(set, rarg);
+	rset_add_term_last(set, rarg);
     }
 
     ref_t rval = rset_conjunct(set);

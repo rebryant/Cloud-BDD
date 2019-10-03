@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <sys/select.h>
 #include <signal.h>
+#include <math.h>
 
 #include "dtype.h"
 #include "table.h"
@@ -44,6 +45,15 @@ int abort_limit = 7;
 int expansion_factor_scaled = 142;
 /* Number of passes of conjunction before giving up */
 int pass_limit = 3;
+
+/* Maximum amount by which support coverage and similarities can be discounted for large arguments */
+double max_large_argument_penalty = 0.4;
+
+/* Log of the smallest and largest BDDs in the conjunction */
+/* These get updated as conjuncts are removed and added */
+double log10_min_size = 4.0;
+double log10_max_size = 8.0;
+
 
 /* Representation of set of terms to be conjuncted */
 /* Linked list elements */
@@ -109,15 +119,20 @@ void rset_free(rset *set) {
     free_block((void *) set, sizeof(rset));
 }
 
-void rset_add_term(rset *set, ref_t fun) {
+static rset_ele *rset_new_ele(ref_t fun) {
     root_addref(fun, false);
-    rset_ele *ele = malloc_or_fail(sizeof(rset_ele), "rset_add_term");
+    rset_ele *ele = malloc_or_fail(sizeof(rset_ele), "rset_new_ele");
     ele->next = NULL;
     ele->fun = fun;
     ele->sat_count = -1.0;
     ele->size = 0;
     ele->support_count = -1;
     ele->support_indices = NULL;
+    return ele;
+}
+
+void rset_add_term_last(rset *set, ref_t fun) {
+    rset_ele *ele = rset_new_ele(fun);
     if (set->tail) {
 	set->tail->next = ele;
 	set->tail = ele;
@@ -128,14 +143,8 @@ void rset_add_term(rset *set, ref_t fun) {
 }
 
 void rset_add_term_first(rset *set, ref_t fun) {
-    root_addref(fun, false);
-    rset_ele *ele = malloc_or_fail(sizeof(rset_ele), "rset_add_term_first");
+    rset_ele *ele = rset_new_ele(fun);
     ele->next = set->head;
-    ele->fun = fun;
-    ele->sat_count = -1.0;
-    ele->size = 0;
-    ele->support_count = -1;
-    ele->support_indices = NULL;
     set->head = ele;
     if (!set->tail)
 	set->tail = ele;
@@ -209,6 +218,47 @@ static int *get_support_indices(rset_ele *ptr) {
 	ptr->support_count = shadow_support_indices(smgr, ptr->fun, &ptr->support_indices);
     }
     return ptr->support_indices;
+}
+
+/* Assign weight between 1.0-max_large_argument_penalty and 1.0 according to argument sizes */
+static double size_weight(rset_ele *ptr1, rset_ele *ptr2) {
+    size_t size1 = get_size(ptr1);
+    size_t size2 = get_size(ptr2);
+    size_t size = SMAX(size1, size2);
+    double lsize = log10((double) size);
+    double penalty = 0.0;
+    if (lsize <= log10_min_size)
+	penalty = max_large_argument_penalty;
+    else if (lsize <= log10_max_size) {
+	penalty = max_large_argument_penalty * (double) (lsize - log10_min_size) / (log10_max_size - log10_min_size);
+    }
+    return 1.0 - penalty;
+}
+
+static double get_support_similarity(rset_ele *ptr1, rset_ele *ptr2, bool weighted) {
+    int support_count1 = get_support_count(ptr1);
+    int *indices1 = get_support_indices(ptr1);
+    int support_count2 = get_support_count(ptr2);
+    int *indices2 = get_support_indices(ptr2);
+    double sim = index_similarity(support_count1, indices1, support_count2, indices2);
+    if (weighted) {
+	double weight = size_weight(ptr1, ptr2);
+	sim *= weight;
+    }
+    return sim;
+}
+
+static double get_support_coverage(rset_ele *ptr1, rset_ele *ptr2, bool weighted) {
+    int support_count1 = get_support_count(ptr1);
+    int *indices1 = get_support_indices(ptr1);
+    int support_count2 = get_support_count(ptr2);
+    int *indices2 = get_support_indices(ptr2);
+    double cov = index_coverage(support_count1, indices1, support_count2, indices2);
+    if (weighted) {
+	double weight = size_weight(ptr1, ptr2);
+	cov *= weight;
+    }
+    return cov;
 }
 
 /* Comparison function for sorting */
@@ -473,11 +523,7 @@ static ref_t similarity_combine(rset *set, conjunction_data *data) {
 	int ccount = 0;
 	for (ptr1 = set->head; ptr1; ptr1 = ptr1->next) {
 	    for (ptr2 = ptr1->next; ptr2; ptr2 = ptr2->next) {
-		int support_count1 = get_support_count(ptr1);
-		int *indices1 = get_support_indices(ptr1);
-		int support_count2 = get_support_count(ptr2);
-		int *indices2 = get_support_indices(ptr2);
-		double sim = index_similarity(support_count1, indices1, support_count2, indices2);
+		double sim = get_support_similarity(ptr1, ptr2, true);
 		insert_candidate(candidates, ptr1, ptr2, sim);
 		if (ccount < abort_limit)
 		    ccount++;
