@@ -65,7 +65,6 @@ keyvalue_table_ptr reftable;
 bool do_aconvert(int argc, char *argv[]);
 bool do_and(int argc, char *argv[]);
 bool do_collect(int argc, char *argv[]);
-bool do_conjunct(int argc, char *argv[]);
 bool do_delete(int argc, char *argv[]);
 bool do_cofactor(int argc, char *argv[]);
 bool do_count(int argc, char *argv[]);
@@ -80,7 +79,6 @@ bool do_not(int argc, char *argv[]);
 bool do_restrict(int argc, char *argv[]);
 bool do_satisfy(int argc, char *argv[]);
 bool do_shift(int argc, char *argv[]);
-bool do_simplify(int argc, char *argv[]);
 bool do_size(int argc, char *argv[]);
 bool do_soft_and(int argc, char *argv[]);
 bool do_status(int argc, char *argv[]);
@@ -95,7 +93,6 @@ chunk_ptr run_flush();
 void root_deref(ref_t r);
 ref_t get_ref(char *name);
 static set_ptr get_refs(int cnt, char *names[]);
-static void assign_ref(char *name, ref_t r, bool fresh, bool variable);
 
 static void client_gc_start();
 static void client_gc_finish();
@@ -117,8 +114,6 @@ static void console_init(bool do_dist) {
     add_cmd("aconvert", do_aconvert,
 	    " af f ...       | Convert f to ADD and name af");
     add_cmd("and", do_and,
-	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
-    add_cmd("conjunct", do_conjunct,
 	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
     add_cmd("cofactor", do_cofactor,
 	    " fd f l1 ...    | fd <- cofactor(f, l1, ...");
@@ -160,8 +155,6 @@ static void console_init(bool do_dist) {
 	    " fd f1 f2 ...   | fd <- f1 ^ f2 ^ ...");
     add_cmd("restrict", do_restrict,
 	    " fd f c         | fd <- Restrict(f,c) [Coudert/Madre's restriction operation]");
-    add_cmd("simplify", do_simplify,
-	    " fnew fold  f1 f2 ... | Simplify fold with respect to f1 f2 ... while maintaining conjunction");
     add_cmd("softand", do_soft_and,
 	    " fd f g         | fd <- SoftAnd(f,g) [Partial And operation]");
     add_cmd("zconvert", do_zconvert,
@@ -401,7 +394,7 @@ void root_deref(ref_t r) {
 }
 
 /* Add reference to table.  Makes permanent copy of name */
-static void assign_ref(char *name, ref_t r, bool fresh, bool variable) {
+void assign_ref(char *name, ref_t r, bool fresh, bool variable) {
     ref_t rold;
     char *sname;
     /* Add reference to new value */
@@ -916,91 +909,6 @@ bool do_soft_and(int argc, char *argv[]) {
     shadow_show(smgr, rval, buf);
     report(2, "RESULT.  %s = %s", argv[1], buf);
 #endif
-    return true;
-}
-
-bool do_simplify(int argc, char *argv[]) {
-    size_t ocnt = 0, ncnt = 0;
-    // Minimum is simplify fnew fold
-    if (argc < 3) {
-	report(0, "simplify needs at least 2 arguments");
-	return false;
-    }
-
-    // Correctness checking
-    // And of fold f1 f2 ...
-    ref_t prod_init = tree_reduce(argv, shadow_one(smgr), shadow_and, 2, argc-1);
-
-    ref_t fun = get_ref(argv[2]);
-    ocnt = cudd_single_size(smgr, fun);
-
-    int i;
-    rset *set = rset_new();
-    for (i = 3; i < argc; i++) {
-	ref_t rarg = get_ref(argv[i]);
-	if (REF_IS_INVALID(rarg)) {
-	    rset_free(set);
-	    return false;
-	}
-	rset_add_term_last(set, rarg);
-    }
-
-    ref_t rval = simplify_with_rset(fun, set);
-    if (REF_IS_INVALID(rval)) {
-	return false;
-    }
-    // Assign to fnew
-    assign_ref(argv[1], rval, false, false);
-
-    // Correctness checking
-    // And of f1 f2 ...
-    ref_t partial_prod_final = tree_reduce(argv, shadow_one(smgr), shadow_and, 3, argc-1);
-    // Combine with fnew
-    ref_t prod_final = shadow_and(smgr, partial_prod_final, rval);
-    root_deref(partial_prod_final);
-
-    if (prod_init != prod_final) {
-	char init_buf[24], final_buf[24];
-	shadow_show(smgr, prod_init, init_buf);
-	shadow_show(smgr, prod_final, final_buf);
-	report(0, "WARNING: Simplification did not preserve product %s --> %s", init_buf, final_buf);
-    }
-    root_deref(prod_init);
-    root_deref(prod_final);
-
-    if (smgr->do_cudd) {
-	ncnt = cudd_single_size(smgr, rval);
-	double ratio = (double) ocnt/ncnt;
-	report(1, "Simplify of %s: Size %lu --> %lu (%.2fX reduction)", argv[1], ocnt, ncnt, ratio);
-    }
-    root_deref(rval);
-    return true;
-}
-
-bool do_conjunct(int argc, char *argv[]) {
-    if (argc < 2) {
-	report(0, "Need destination name");
-	return false;
-    }
-
-    int i;
-    rset *set = rset_new();
-    for (i = 2; i < argc; i++) {
-	ref_t rarg = get_ref(argv[i]);
-	if (REF_IS_INVALID(rarg)) {
-	    rset_free(set);
-	    return rarg;
-	}
-	rset_add_term_last(set, rarg);
-    }
-
-    ref_t rval = rset_conjunct(set);
-    if (REF_IS_INVALID(rval)) {
-	return false;
-    }
-    assign_ref(argv[1], rval, false, false);
-    root_deref(rval);
-    rset_free(set);
     return true;
 }
 
