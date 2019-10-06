@@ -220,7 +220,7 @@ static void usage(char *cmd) {
     printf("\t-L FILE    Echo results to FILE\n");
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
-    printf("\t-O (L|B|T|P|D|S)(NN|UL|UR|SL|SR)(A|R|N)(N|Y) | Set options for conjunction\n");
+    printf("\t-S SOFT    Threshold for attempting soft-and simplification (0-101)\n");
     exit(0);
 }
 
@@ -245,7 +245,7 @@ int main(int argc, char *argv[]) {
     chaining_type = CHAIN_ALL;
 
 
-    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:s:")) != -1) {
+    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:S:")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -300,6 +300,8 @@ int main(int argc, char *argv[]) {
 		err(true, "Invalid chaining type '%c'\n", optarg[0]);
 	    }
 	    break;
+	case 'S':
+	    soft_and_threshold = atoi(optarg);
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);

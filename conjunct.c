@@ -51,7 +51,7 @@ int pass_limit = 3;
 /* Lower bound on support coverage metric required to attempt soft and
    (Scaled by 100)
  */
-int soft_and_threshold = 80;
+int soft_and_threshold = 110;
 
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
 double max_large_argument_penalty = 0.4;
@@ -71,15 +71,15 @@ double log10_max_size = 8.0;
 /* Also use as standalone representation of function + metadata */
 typedef struct RELE {
     ref_t fun;
-    double sat_count;
     size_t size;
-    int support_count;
+    long support_count;
     int *support_indices;
     struct RELE *next;
 } rset_ele;
 
 /* Data collected during conjunction */
 typedef struct {
+    size_t result_size;
     size_t max_size;
     size_t sum_size;
     size_t total_size;
@@ -101,12 +101,18 @@ void init_conjunct() {
     add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
     add_param("pass", &pass_limit, "Maximum number of passes during single conjunction", NULL);
     add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
+    add_param("soft", &soft_and_threshold, "Threshold for attempting soft-and simplification (0-101)", NULL);
     preprocess = 0;
     reprocess = 0;
 }
 
 /*** Operations on rsets ***/
-static void rset_ele_new_fun(rset_ele *ele, ref_t fun);
+static void rset_ele_new_fun(rset_ele *ele, ref_t fun) {
+    ele->fun = fun;
+    ele->size = 0;
+    ele->support_count = -1;
+    ele->support_indices = NULL;
+}
 
 static rset_ele *rset_new(ref_t fun) {
     rset_ele *ele = malloc_or_fail(sizeof(rset_ele), "rset_new");
@@ -115,28 +121,25 @@ static rset_ele *rset_new(ref_t fun) {
     return ele;
 }
 
-/* Free entire list */
-void rset_free(rset_ele *set) {
+/* Free single element */
+static void rset_ele_free(rset_ele *set) {
+    rset_ele *ptr = set;
+    if (ptr->support_indices != NULL)
+	free(ptr->support_indices);
+    free_block((void *) ptr, sizeof(rset_ele));
+}
+
+/* Free entire set */
+static void rset_free(rset_ele *set) {
     rset_ele *ptr = set;
     while (ptr) {
-	root_deref(ptr->fun);
-	if (ptr->support_indices != NULL)
-	    free(ptr->support_indices);
-	rset_ele *nptr = ptr->next;
-	free_block((void *) ptr, sizeof(rset_ele));
-	ptr = nptr;
+	rset_ele *next = ptr->next;
+	rset_ele_free(ptr);
+	ptr = next;
     }
 }
 
-static void rset_ele_new_fun(rset_ele *ele, ref_t fun) {
-    ele->fun = fun;
-    ele->sat_count = -1.0;
-    ele->size = 0;
-    ele->support_count = -1;
-    ele->support_indices = NULL;
-}
-
-rset_ele *rset_add_element(rset_ele *set, rset_ele *ele) {
+static rset_ele *rset_add_element(rset_ele *set, rset_ele *ele) {
     ele->next = set;
     return ele;
 }
@@ -149,14 +152,15 @@ rset_ele *rset_remove_element(rset_ele *set, rset_ele *ele) {
 	prev = next;
 	next = next->next;
     }
-    if (!next)
+    if (!next) {
+	err(false, "Internal element.  Did not find element in set");
 	return set;
+    }
     /* next == ele, prev points to predecessor */
     if (prev) {
 	prev->next = ele->next;
-    }
-    else {
-	nset = next;
+    } else {
+	nset = ele->next;
     }
     /* Unlink */
     ele->next = NULL;
@@ -189,16 +193,6 @@ static size_t get_size(rset_ele *ptr) {
     return ptr->size;
 }
 
-#if INCLUDE_SORT
-static double get_sat_count(rset_ele *ptr) {
-    if (ptr == NULL)
-	return 0.0;
-    if (ptr->sat_count <= 0.0)
-	ptr->sat_count = cudd_single_count(smgr, ptr->fun);
-    return ptr->sat_count;
-}
-#endif /* INCLUDE_SORT */
-
 static int get_support_count(rset_ele *ptr) {
     if (ptr == NULL)
 	return 0;
@@ -224,6 +218,7 @@ static double size_weight(rset_ele *ptr1, rset_ele *ptr2) {
     size_t size1 = get_size(ptr1);
     size_t size2 = get_size(ptr2);
     size_t size = SMAX(size1, size2);
+    size = SMAX(size, 1);
     double lsize = log10((double) size);
     double penalty = 0.0;
     if (lsize <= log10_min_size)
@@ -274,9 +269,11 @@ static size_t rset_max_size(rset_ele *set) {
 
 /* Find largest element in set */
 static size_t rset_min_size(rset_ele *set) {
-    size_t size = (size_t) -1;  /* Wraps around to max size_t value */
+    if (rset_is_empty(set))
+	return 0;
+    size_t size = get_size(set);
     rset_ele *ptr;
-    for (ptr = set; ptr; ptr = ptr->next) {
+    for (ptr = set->next; ptr; ptr = ptr->next) {
 	size_t esize = get_size(ptr);
 	if (esize < size)
 	    size = esize;
@@ -309,14 +306,11 @@ static ref_t and_check(rset_ele *set) {
 }
 
 /* Print statistics about partial results */
-/* sofar is and of conjuncts to this point */
 static void report_combination(rset_ele *set, conjunction_data *data) {
-    size_t result_size = 0;
+    size_t result_size = data ? data->result_size : 0;
     size_t max_size = 0;
     size_t sum_size = 0;
     size_t count = rset_length(set);
-    if (verblevel < 1)
-	return;
     /* Must convert to other form of set */
     set_ptr pset = word_set_new();
     size_t set_size = count;
@@ -351,6 +345,8 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set) {
     rset_ele *myptr, *otherptr;
     for (myptr = set; myptr; myptr = myptr->next) {
 	ref_t myrval = myptr->fun;
+	size_t start_size = get_size(myptr);
+	int sa_count = 0;
 	if (REF_IS_INVALID(myrval))
 	    continue;
 	for (otherptr = other_set; otherptr; otherptr = otherptr->next) {
@@ -361,13 +357,19 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set) {
 	    double cov = get_support_coverage(otherptr, myptr, false);
 	    if (cov >= threshold) {
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval);
+		sa_count++;
 		if (REF_IS_INVALID(nval))
 		    continue;
 		root_addref(nval, false);
 		root_deref(myrval);
 		rset_ele_new_fun(myptr, nval);
 	    }
+	    
 	}
+	size_t final_size = get_size(myptr);
+	double reduction = (double) final_size / start_size;
+	if (sa_count > 0)
+	    report(2, "Soft and applied %d times.  %zd --> %zd (%.3fX)", sa_count, start_size, final_size, reduction);
     }
 }
 
@@ -408,7 +410,7 @@ static void insert_candidate(pair *candidates, rset_ele *ptr1, rset_ele *ptr2, d
 }
 
 static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
-    double expansion_factor = (double) expansion_factor_scaled / 100.0;
+    double expansion_factor = (double) expansion_factor_scaled * 0.01;
     pair candidates[abort_limit];
     size_t abort_count = 0;
     size_t argument_count = rset_length(set);
@@ -487,13 +489,17 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    shadow_show(smgr, nval, nval_buf);
 	    report(3, "%s & %s (sim = %.3f, try #%d) --> %s", arg1_buf, arg2_buf, sim, try+1, nval_buf);
 	}
-	rset_free(ptr1);
-	rset_free(ptr2);
+	root_deref(arg1);
+	root_deref(arg2);
+	rset_ele_free(ptr1);
+	rset_ele_free(ptr2);
 	rset_ele *nset = rset_new(nval);
 	/* Attempt to simplify in both directions */
 	soft_simplify(nset, set);
 	soft_simplify(set, nset);
 	set = rset_add_element(set, nset);
+	if (data)
+	    data->result_size = get_size(nset);
 	report_combination(set, data);
     }
     report(1, "Conjunction of %zd elements.  %zd aborts.  Max argument %zd.  Max size limit %zd",
@@ -501,7 +507,9 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 
     ref_t rval = set->fun;
     root_addref(rval, true);
-    rset_free(set);
+    root_deref(rval);
+    rset_ele_free(set);
+
     return rval;
 
 }
@@ -512,11 +520,13 @@ ref_t rset_conjunct(rset_ele *set) {
     cdata.max_size = 0;
     cdata.total_size = 0;
     cdata.sum_size = 0;
-    ref_t rprod = check_results ? and_check(set) : REF_INVALID;
 
-    ref_t rval = shadow_one(smgr);
+    ref_t rprod;
 
-    rval = similarity_combine(set, &cdata);
+    if (check_results)
+	rprod = and_check(set);
+
+    ref_t rval = similarity_combine(set, &cdata);
 
     if (check_results) {
 	if (rprod != rval) {
@@ -559,7 +569,6 @@ bool do_conjunct(int argc, char *argv[]) {
     }
     assign_ref(argv[1], rval, false, false);
     root_deref(rval);
-    rset_free(set);
     return true;
 }
 

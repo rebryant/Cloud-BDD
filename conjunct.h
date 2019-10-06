@@ -9,4 +9,10 @@ void root_deref(ref_t r);
 void assign_ref(char *name, ref_t r, bool fresh, bool variable);
 
 /* Functions defined in runbdd.c */
+ref_t get_ref(char *name);
+
+/* Global variables defined in conjunct.c */
+extern int soft_and_threshold;
+
+/* Functions defined in conjunct.c */
 void init_conjunct();
