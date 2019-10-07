@@ -206,7 +206,7 @@ static bool bdd_quit(int argc, char *argv[]) {
 
 static void usage(char *cmd) {
     printf(
-"Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain][-s SUP]\n",
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain][-S SOFT][-g]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
@@ -220,8 +220,10 @@ static void usage(char *cmd) {
     printf("\t-L FILE    Echo results to FILE\n");
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
-    printf("\t-S SOFT    Threshold for attempting soft-and simplification (0-101)\n");
+    printf("\t-S SOFT    Threshold for attempting soft-and simplification (0-100)\n");
+    printf("\t-g         Allow growth from soft-and simplification\n");
     exit(0);
+
 }
 
 
@@ -245,7 +247,7 @@ int main(int argc, char *argv[]) {
     chaining_type = CHAIN_ALL;
 
 
-    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:S:")) != -1) {
+    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:S:g")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -302,6 +304,10 @@ int main(int argc, char *argv[]) {
 	    break;
 	case 'S':
 	    soft_and_threshold = atoi(optarg);
+	    break;
+	case 'g':
+	    soft_and_allow_growth = 1;
+	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
 	    usage(argv[0]);

@@ -13,6 +13,7 @@ ref_t get_ref(char *name);
 
 /* Global variables defined in conjunct.c */
 extern int soft_and_threshold;
+extern int soft_and_allow_growth;
 
 /* Functions defined in conjunct.c */
 void init_conjunct();

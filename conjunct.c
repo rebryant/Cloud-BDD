@@ -51,7 +51,9 @@ int pass_limit = 3;
 /* Lower bound on support coverage metric required to attempt soft and
    (Scaled by 100)
  */
-int soft_and_threshold = 110;
+int soft_and_threshold = 75;
+/* Allow growth during soft and? */
+int soft_and_allow_growth = 0;
 
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
 double max_large_argument_penalty = 0.4;
@@ -101,7 +103,8 @@ void init_conjunct() {
     add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
     add_param("pass", &pass_limit, "Maximum number of passes during single conjunction", NULL);
     add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
-    add_param("soft", &soft_and_threshold, "Threshold for attempting soft-and simplification (0-101)", NULL);
+    add_param("soft", &soft_and_threshold, "Threshold for attempting soft-and simplification (0-100)", NULL);
+    add_param("grow", &soft_and_allow_growth, "Allow growth from soft-and simplification", NULL);
     preprocess = 0;
     reprocess = 0;
 }
@@ -346,30 +349,37 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set) {
     for (myptr = set; myptr; myptr = myptr->next) {
 	ref_t myrval = myptr->fun;
 	size_t start_size = get_size(myptr);
+	int try_count = 0;
 	int sa_count = 0;
 	if (REF_IS_INVALID(myrval))
 	    continue;
 	for (otherptr = other_set; otherptr; otherptr = otherptr->next) {
+	    try_count++;
 	    ref_t otherrval = otherptr->fun;
 	    if (REF_IS_INVALID(otherrval))
 		continue;
 	    /* Attempt to simplify myrval using otherrval */
 	    double cov = get_support_coverage(otherptr, myptr, false);
-	    if (cov >= threshold) {
+	    if (cov > threshold) {
+		size_t current_size = get_size(myptr);
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval);
+		root_addref(nval, false);
 		sa_count++;
 		if (REF_IS_INVALID(nval))
 		    continue;
-		root_addref(nval, false);
-		root_deref(myrval);
-		rset_ele_new_fun(myptr, nval);
+		size_t new_size = soft_and_allow_growth ? 0 : cudd_single_size(smgr, nval);
+		if (new_size < current_size || soft_and_allow_growth) {
+		    root_deref(myrval);
+		    rset_ele_new_fun(myptr, nval);
+		} else {
+		    root_deref(nval);
+		}
 	    }
-	    
 	}
 	size_t final_size = get_size(myptr);
 	double reduction = (double) final_size / start_size;
 	if (sa_count > 0)
-	    report(2, "Soft and applied %d times.  %zd --> %zd (%.3fX)", sa_count, start_size, final_size, reduction);
+	    report(2, "Soft and applied %d/%d times.  %zd --> %zd (%.3fX)", sa_count, try_count, start_size, final_size, reduction);
     }
 }
 
@@ -459,9 +469,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    ptr2 = candidates[tidx].ptr2;
 	    sim = candidates[tidx].sim;
 	    arg1 = ptr1->fun;
-	    size_t asize = get_size(ptr1);
 	    arg2 = ptr2->fun;
-	    asize = get_size(ptr2);
 
 	    nval = final_try ? shadow_and(smgr, arg1, arg2) : shadow_and_limit(smgr, arg1, arg2, size_limit);
 
@@ -521,7 +529,7 @@ ref_t rset_conjunct(rset_ele *set) {
     cdata.total_size = 0;
     cdata.sum_size = 0;
 
-    ref_t rprod;
+    ref_t rprod = REF_INVALID;
 
     if (check_results)
 	rprod = and_check(set);
