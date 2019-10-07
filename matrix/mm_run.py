@@ -11,12 +11,13 @@ import subprocess
 import brent
 
 def usage(name):
-    print("Usage %s [-h] [-r] [-R] [-C] [-I]")
+    print("Usage %s [-h] [-r] [-R] [-C] [-I] [-s SUFFIX]")
     print(" -h               Print this message")
     print(" -r               Redo runs that didn't complete")
     print(" -R               Redo all runs")
     print(" -C               Disable chaining")
     print(" -I IDIR          Directory containing command files")
+    print(" -s SUFFIX        Specify suffix for log file root name")
     sys.exit(0)
 
 # Set to home directory for program, split into tokens
@@ -33,11 +34,13 @@ cmdPrefix = "cmd>"
 
 
 # Check if should run.  Return either None (don't run) or name of log file
-def shouldRun(cmdPath):
+def shouldRun(cmdPath, suffix = None):
     fields = cmdPath.split('.')
     if fields[-1] != 'cmd':
         print("Path does not appear to be a command file '%s'" % cmdPath)
         return False
+    if suffix is not None:
+        fields[-2] += '-' + suffix
     fields[-1] = 'log'
     logPath = ".".join(fields)
     if hardRedo:
@@ -62,8 +65,8 @@ def shouldRun(cmdPath):
     else:
         return logPath
     
-def process(cmdPath):
-    logPath = shouldRun(cmdPath)
+def process(cmdPath, suffix = None):
+    logPath = shouldRun(cmdPath, suffix)
     if logPath is None:
         print("Skipping %s" % cmdPath)
     else:
@@ -83,7 +86,8 @@ def process(cmdPath):
 def run(name, args):
     global softRedo, hardRedo, chain
     nameList = []
-    optlist, args = getopt.getopt(args, 'hrRCI:')
+    suffix = None
+    optlist, args = getopt.getopt(args, 'hrRCI:s:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -97,8 +101,10 @@ def run(name, args):
         elif opt == '-I':
             template = "%s/*.cmd" % val
             nameList = sorted(glob.glob(template))
+        elif opt == '-s':
+            suffix = val
     for name in nameList:
-        process(name)
+        process(name, suffix)
 
 if __name__ == "__main__":
     current = os.path.realpath(__file__)
