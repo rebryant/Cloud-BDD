@@ -692,7 +692,7 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 }
 	
 
-ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
+ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, unsigned limit) {
     ref_t r = REF_ZERO;
     bool za = is_zdd(mgr, aref);
     bool zb = is_zdd(mgr, bref);
@@ -707,7 +707,7 @@ ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 
     DdNode *an = get_ddnode(mgr, aref);
     DdNode *bn = get_ddnode(mgr, bref);
-    DdNode *rn = Cudd_bddNPAnd(mgr->bdd_manager, an, bn);
+    DdNode *rn = limit == 0 ? Cudd_bddNPAnd(mgr->bdd_manager, an, bn) : Cudd_bddNPAndLimit(mgr->bdd_manager, an, bn, limit);
     r = dd2ref(rn, IS_BDD);
     if (!REF_IS_INVALID(r)) {
 	reference_dd(mgr, rn);

@@ -54,6 +54,8 @@ int pass_limit = 3;
 int soft_and_threshold = 75;
 /* Allow growth during soft and? */
 int soft_and_allow_growth = 0;
+/* How many nodes are allowed when computing soft and.  Set to ratio with current size */
+double soft_and_expansion_ratio = 2.0;
 
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
 double max_large_argument_penalty = 0.4;
@@ -362,11 +364,14 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set) {
 	    double cov = get_support_coverage(otherptr, myptr, false);
 	    if (cov > threshold) {
 		size_t current_size = get_size(myptr);
-		ref_t nval = shadow_soft_and(smgr, myrval, otherrval);
+		unsigned limit = (unsigned) current_size * soft_and_expansion_ratio;
+		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
+		if (REF_IS_INVALID(nval)) {
+		    report(4, "Soft and of BDD with %zd nodes requires more than %u nodes", current_size, limit);
+		    continue;
+		}
 		root_addref(nval, false);
 		sa_count++;
-		if (REF_IS_INVALID(nval))
-		    continue;
 		size_t new_size = soft_and_allow_growth ? 0 : cudd_single_size(smgr, nval);
 		if (new_size < current_size || soft_and_allow_growth) {
 		    root_deref(myrval);

@@ -903,7 +903,7 @@ bool do_soft_and(int argc, char *argv[]) {
     ref_t rc = get_ref(argv[3]);
     if (do_ref(smgr) && REF_IS_INVALID(rc))
 	return false;
-    ref_t rval = shadow_soft_and(smgr, rf, rc);
+    ref_t rval = shadow_soft_and(smgr, rf, rc, 0);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
     assign_ref(argv[1], rval, false, false);
