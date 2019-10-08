@@ -595,9 +595,9 @@ bool do_conjunct(int argc, char *argv[]) {
 	}
 	rset_ele *ele = rset_new(rarg);
 	if (i > 2) {
-	    report(2, "Applying soft simplify to argument %d using arguments 1-%d", i-1, i-2);
+	    report(2, "Applying soft to simplify argument %d using arguments 1-%d", i-1, i-2);
 	    soft_simplify(ele, set);
-	    report(2, "Applying soft simplify to arguments 1-%d using argument %d", i-2, i-1);
+	    report(2, "Applying soft to simplify arguments 1-%d using argument %d", i-2, i-1);
 	    soft_simplify(set, ele);
 	}
 	set = rset_add_element(set, ele);
