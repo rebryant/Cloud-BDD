@@ -51,14 +51,20 @@ int pass_limit = 3;
 /* Lower bound on support coverage metric required to attempt soft and
    (Scaled by 100)
  */
-int soft_and_threshold = 75;
+int soft_and_threshold_scaled = 75;
+
+/* Upper bound on size of other function for soft and */
+/* (Scaled by 100) */
+int soft_and_relative_ratio_scaled = 200;
+
 /* Allow growth during soft and? */
 int soft_and_allow_growth = 0;
-/* How many nodes are allowed when computing soft and.  Set to ratio with current size */
-double soft_and_expansion_ratio = 2.0;
+/* How many nodes are allowed when computing soft and.  Set to ratio with current size. (Sclaed by 100) */
+int soft_and_expansion_ratio_scaled = 200;
 
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
-double max_large_argument_penalty = 0.4;
+/* (Scaled by 100) */
+double max_large_argument_penalty_scaled = 40;
 
 /* Size of the smallest and largest BDDs in the conjunction */
 size_t max_argument_size = 0;
@@ -105,7 +111,7 @@ void init_conjunct() {
     add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
     add_param("pass", &pass_limit, "Maximum number of passes during single conjunction", NULL);
     add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
-    add_param("soft", &soft_and_threshold, "Threshold for attempting soft-and simplification (0-100)", NULL);
+    add_param("soft", &soft_and_threshold_scaled, "Threshold for attempting soft-and simplification (0-100)", NULL);
     add_param("grow", &soft_and_allow_growth, "Allow growth from soft-and simplification", NULL);
     preprocess = 0;
     reprocess = 0;
@@ -226,10 +232,11 @@ static double size_weight(rset_ele *ptr1, rset_ele *ptr2) {
     size = SMAX(size, 1);
     double lsize = log10((double) size);
     double penalty = 0.0;
+    double max_penalty = 0.01 * max_large_argument_penalty_scaled;
     if (lsize <= log10_min_size)
-	penalty = max_large_argument_penalty;
+	penalty = max_penalty;
     else if (lsize <= log10_max_size) {
-	penalty = max_large_argument_penalty * (double) (lsize - log10_min_size) / (log10_max_size - log10_min_size);
+	penalty = max_penalty * (double) (lsize - log10_min_size) / (log10_max_size - log10_min_size);
     }
     return 1.0 - penalty;
 }
@@ -346,7 +353,7 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
 
 /* Conditionally simplify elements of one set with those of another */
 static void soft_simplify(rset_ele *set, rset_ele *other_set) {
-    double threshold = 0.01 * soft_and_threshold;
+    double threshold = 0.01 * soft_and_threshold_scaled;
     rset_ele *myptr, *otherptr;
     for (myptr = set; myptr; myptr = myptr->next) {
 	ref_t myrval = myptr->fun;
@@ -362,23 +369,33 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set) {
 		continue;
 	    /* Attempt to simplify myrval using otherrval */
 	    double cov = get_support_coverage(otherptr, myptr, false);
-	    if (cov > threshold) {
-		size_t current_size = get_size(myptr);
-		unsigned limit = (unsigned) current_size * soft_and_expansion_ratio;
+	    size_t current_size = get_size(myptr);
+	    size_t other_size = get_size(otherptr);
+	    size_t other_limit = (0.01 * soft_and_relative_ratio_scaled) * current_size;
+	    if (cov > threshold && other_size <= other_limit) {
+		double ratio = 0.01 * soft_and_expansion_ratio_scaled;
+		unsigned limit = (unsigned) current_size * ratio;
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
 		if (REF_IS_INVALID(nval)) {
-		    report(4, "Soft and of BDD with %zd nodes requires more than %u nodes", current_size, limit);
+		    report(4, "Soft AND.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
+			   cov, current_size, other_size, limit);
 		    continue;
 		}
 		root_addref(nval, false);
 		sa_count++;
 		size_t new_size = soft_and_allow_growth ? 0 : cudd_single_size(smgr, nval);
+		double reduction = (double) new_size/current_size;
+		report(4, "Soft AND.  cov = %.3f.  size = %zd.  Other size = %zd.  Size --> %zd (%.3fX)",
+		       cov, current_size, other_size, new_size, reduction);
 		if (new_size < current_size || soft_and_allow_growth) {
 		    root_deref(myrval);
 		    rset_ele_new_fun(myptr, nval);
 		} else {
 		    root_deref(nval);
 		}
+	    } else {
+		report(4, "Soft AND.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
+		       cov, current_size, other_size);
 	    }
 	}
 	size_t final_size = get_size(myptr);
@@ -435,6 +452,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	root_addref(rval, false);
 	return rval;
     }
+    
     while (!rset_is_singleton(set)) {
 	compute_size_range(set);
 	clear_candidates(candidates);
@@ -508,7 +526,10 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	rset_ele_free(ptr2);
 	rset_ele *nset = rset_new(nval);
 	/* Attempt to simplify in both directions */
+	int length = rset_length(set);
+	report(2, "Apply soft simplify to new argument based on existing %d arguments", length);
 	soft_simplify(nset, set);
+	report(2, "Apply soft simplify to existing %d arguments based on new argument", length);
 	soft_simplify(set, nset);
 	set = rset_add_element(set, nset);
 	if (data)
@@ -573,6 +594,12 @@ bool do_conjunct(int argc, char *argv[]) {
 	    return rarg;
 	}
 	rset_ele *ele = rset_new(rarg);
+	if (i > 2) {
+	    report(2, "Applying soft simplify to argument %d using arguments 1-%d", i-1, i-2);
+	    soft_simplify(ele, set);
+	    report(2, "Applying soft simplify to arguments 1-%d using argument %d", i-2, i-1);
+	    soft_simplify(set, ele);
+	}
 	set = rset_add_element(set, ele);
     }
 

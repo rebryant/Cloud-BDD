@@ -12,7 +12,7 @@ void assign_ref(char *name, ref_t r, bool fresh, bool variable);
 ref_t get_ref(char *name);
 
 /* Global variables defined in conjunct.c */
-extern int soft_and_threshold;
+extern int soft_and_threshold_scaled;
 extern int soft_and_allow_growth;
 
 /* Functions defined in conjunct.c */

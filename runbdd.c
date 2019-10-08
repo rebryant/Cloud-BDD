@@ -303,7 +303,7 @@ int main(int argc, char *argv[]) {
 	    }
 	    break;
 	case 'S':
-	    soft_and_threshold = atoi(optarg);
+	    soft_and_threshold_scaled = atoi(optarg);
 	    break;
 	case 'g':
 	    soft_and_allow_growth = 1;
