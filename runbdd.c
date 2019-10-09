@@ -220,7 +220,7 @@ static void usage(char *cmd) {
     printf("\t-L FILE    Echo results to FILE\n");
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
-    printf("\t-S SOFT    Threshold for attempting soft-and simplification (0-100)\n");
+    printf("\t-S SOFT[:ISOFT] Thresholds for attempting soft-and simplification (0-100)\n");
     printf("\t-g         Allow growth from soft-and simplification\n");
     exit(0);
 
@@ -303,7 +303,7 @@ int main(int argc, char *argv[]) {
 	    }
 	    break;
 	case 'S':
-	    soft_and_threshold_scaled = atoi(optarg);
+	    inprocess_soft_and_threshold_scaled = atoi(optarg);
 	    break;
 	case 'g':
 	    soft_and_allow_growth = 1;

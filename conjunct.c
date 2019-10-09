@@ -49,9 +49,11 @@ int expansion_factor_scaled = 142;
 int pass_limit = 3;
 
 /* Lower bound on support coverage metric required to attempt soft and
-   (Scaled by 100)
+   (Scaled by 100).
+   Distinguish between use in initial preprocessing step, vs. during conjunction operations 
  */
-int soft_and_threshold_scaled = 75;
+int preprocess_soft_and_threshold_scaled = 90;
+int inprocess_soft_and_threshold_scaled = 75;
 
 /* Upper bound on size of other function for soft and */
 /* (Scaled by 100) */
@@ -111,7 +113,7 @@ void init_conjunct() {
     add_param("abort", &abort_limit, "Maximum number of pairs to attempt in single conjunction step", NULL);
     add_param("pass", &pass_limit, "Maximum number of passes during single conjunction", NULL);
     add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
-    add_param("soft", &soft_and_threshold_scaled, "Threshold for attempting soft-and simplification (0-100)", NULL);
+    add_param("soft", &inprocess_soft_and_threshold_scaled, "Threshold for attempting soft-and simplification (0-100)", NULL);
     add_param("grow", &soft_and_allow_growth, "Allow growth from soft-and simplification", NULL);
     preprocess = 0;
     reprocess = 0;
@@ -352,8 +354,7 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
 }
 
 /* Conditionally simplify elements of one set with those of another */
-static void soft_simplify(rset_ele *set, rset_ele *other_set) {
-    double threshold = 0.01 * soft_and_threshold_scaled;
+static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold) {
     rset_ele *myptr, *otherptr;
     for (myptr = set; myptr; myptr = myptr->next) {
 	ref_t myrval = myptr->fun;
@@ -447,6 +448,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
     size_t abort_count = 0;
     size_t argument_count = rset_length(set);
     size_t max_size_limit = 0;
+    double ithreshold = 0.01 * preprocess_soft_and_threshold_scaled;
     if (argument_count == 0) {
 	ref_t rval = shadow_one(smgr);
 	root_addref(rval, false);
@@ -528,9 +530,9 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	/* Attempt to simplify in both directions */
 	int length = rset_length(set);
 	report(2, "Apply soft simplify to new argument based on existing %d arguments", length);
-	soft_simplify(nset, set);
+	soft_simplify(nset, set, ithreshold);
 	report(2, "Apply soft simplify to existing %d arguments based on new argument", length);
-	soft_simplify(set, nset);
+	soft_simplify(set, nset, ithreshold);
 	set = rset_add_element(set, nset);
 	if (data)
 	    data->result_size = get_size(nset);
@@ -585,11 +587,14 @@ bool do_conjunct(int argc, char *argv[]) {
 	return false;
     }
 
-    /* Keep track of original argument sizes */
-    size_t *initial_size = calloc_or_fail(argc-2, sizeof(size_t), "do_conjunct");
+    double pthreshold = 0.01 * inprocess_soft_and_threshold_scaled;
 
     int i;
     rset_ele *set = NULL;
+    /* Track statistics on pre/post simplification sizes */
+    size_t itotal = 0;
+    size_t imax = 0;
+
     for (i = 2; i < argc; i++) {
 	ref_t rarg = get_ref(argv[i]);
 	root_addref(rarg, false);
@@ -597,40 +602,34 @@ bool do_conjunct(int argc, char *argv[]) {
 	    rset_free(set);
 	    return rarg;
 	}
+
 	rset_ele *ele = rset_new(rarg);
-	initial_size[i-2] = get_size(ele);
+	size_t asize = get_size(ele);
+	itotal += asize;
+	imax = SMAX(asize, imax);
 	/* This optimization is effective, but very time consuming */
 	if (i > 2) {
 	    report(2, "Applying soft and to simplify argument %d using arguments 1-%d", i-1, i-2);
-	    soft_simplify(ele, set);
+	    soft_simplify(ele, set, pthreshold);
 	    report(2, "Applying soft and to simplify arguments 1-%d using argument %d", i-2, i-1);
-	    soft_simplify(set, ele);
+	    soft_simplify(set, ele, pthreshold);
 	}
 	set = rset_add_element(set, ele);
     }
 
     /* Gather statistics about initial simplification */
     rset_ele *ele;
-    size_t itotal = 0;
-    size_t imax = 0;
     size_t ntotal = 0;
     size_t nmax = 0;
-    i = 0;
     for (ele = set; ele; ele = ele->next) {
-	size_t isize = initial_size[i];
-	itotal += isize;
-	imax = SMAX(imax, isize);
 	size_t nsize = get_size(ele);
 	ntotal += nsize;
 	nmax = SMAX(nmax, nsize);
-	i++;
     }
     double tratio = (double) ntotal/itotal;
     double mratio = (double) nmax/imax;
     report(1, "Initial simplification.  Total %zd --> %zd (%.3fX).  Max %zd --> %zd (%.3fX)",
 	   itotal, ntotal, tratio, imax, nmax, mratio);
-    free_block(initial_size, (argc-2)*sizeof(size_t));
-    
 
     ref_t rval = rset_conjunct(set);
     if (REF_IS_INVALID(rval)) {
