@@ -371,10 +371,10 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set) {
 	    double cov = get_support_coverage(otherptr, myptr, false);
 	    size_t current_size = get_size(myptr);
 	    size_t other_size = get_size(otherptr);
-	    size_t other_limit = (0.01 * soft_and_relative_ratio_scaled) * current_size;
+	    size_t other_limit = (size_t) (0.01 * soft_and_relative_ratio_scaled * current_size);
 	    if (cov > threshold && other_size <= other_limit) {
 		double ratio = 0.01 * soft_and_expansion_ratio_scaled;
-		unsigned limit = (unsigned) current_size * ratio;
+		unsigned limit = (unsigned) (current_size * ratio);
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
 		if (REF_IS_INVALID(nval)) {
 		    report(4, "Soft AND.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
@@ -383,7 +383,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set) {
 		}
 		root_addref(nval, false);
 		sa_count++;
-		size_t new_size = soft_and_allow_growth ? 0 : cudd_single_size(smgr, nval);
+		size_t new_size = cudd_single_size(smgr, nval);
 		double reduction = (double) new_size/current_size;
 		report(4, "Soft AND.  cov = %.3f.  size = %zd.  Other size = %zd.  Size --> %zd (%.3fX)",
 		       cov, current_size, other_size, new_size, reduction);
@@ -401,7 +401,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set) {
 	size_t final_size = get_size(myptr);
 	double reduction = (double) final_size / start_size;
 	if (sa_count > 0)
-	    report(2, "Soft and applied %d/%d times.  %zd --> %zd (%.3fX)", sa_count, try_count, start_size, final_size, reduction);
+	    report(3, "Soft and applied %d/%d times.  %zd --> %zd (%.3fX)", sa_count, try_count, start_size, final_size, reduction);
     }
 }
 
@@ -585,23 +585,52 @@ bool do_conjunct(int argc, char *argv[]) {
 	return false;
     }
 
+    /* Keep track of original argument sizes */
+    size_t *initial_size = calloc_or_fail(argc-2, sizeof(size_t), "do_conjunct");
+
     int i;
     rset_ele *set = NULL;
     for (i = 2; i < argc; i++) {
 	ref_t rarg = get_ref(argv[i]);
+	root_addref(rarg, false);
 	if (REF_IS_INVALID(rarg)) {
 	    rset_free(set);
 	    return rarg;
 	}
 	rset_ele *ele = rset_new(rarg);
+	initial_size[i-2] = get_size(ele);
+	/* This optimization is effective, but very time consuming */
 	if (i > 2) {
-	    report(2, "Applying soft to simplify argument %d using arguments 1-%d", i-1, i-2);
+	    report(2, "Applying soft and to simplify argument %d using arguments 1-%d", i-1, i-2);
 	    soft_simplify(ele, set);
-	    report(2, "Applying soft to simplify arguments 1-%d using argument %d", i-2, i-1);
+	    report(2, "Applying soft and to simplify arguments 1-%d using argument %d", i-2, i-1);
 	    soft_simplify(set, ele);
 	}
 	set = rset_add_element(set, ele);
     }
+
+    /* Gather statistics about initial simplification */
+    rset_ele *ele;
+    size_t itotal = 0;
+    size_t imax = 0;
+    size_t ntotal = 0;
+    size_t nmax = 0;
+    i = 0;
+    for (ele = set; ele; ele = ele->next) {
+	size_t isize = initial_size[i];
+	itotal += isize;
+	imax = SMAX(imax, isize);
+	size_t nsize = get_size(ele);
+	ntotal += nsize;
+	nmax = SMAX(nmax, nsize);
+	i++;
+    }
+    double tratio = (double) ntotal/itotal;
+    double mratio = (double) nmax/imax;
+    report(1, "Initial simplification.  Total %zd --> %zd (%.3fX).  Max %zd --> %zd (%.3fX)",
+	   itotal, ntotal, tratio, imax, nmax, mratio);
+    free_block(initial_size, (argc-2)*sizeof(size_t));
+    
 
     ref_t rval = rset_conjunct(set);
     if (REF_IS_INVALID(rval)) {
