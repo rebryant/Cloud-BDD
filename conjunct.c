@@ -44,6 +44,7 @@ int reprocess = 1;
 /* Maximum number of pairs to try when doing conjunction with aborts */
 int abort_limit = 7;
 /* Maximum expansion factor for conjunction (scaled 100x) */
+
 int expansion_factor_scaled = 142;
 /* Number of passes of conjunction before giving up */
 int pass_limit = 3;
@@ -52,16 +53,19 @@ int pass_limit = 3;
    (Scaled by 100).
    Distinguish between use in initial preprocessing step, vs. during conjunction operations 
  */
+
 int preprocess_soft_and_threshold_scaled = 90;
 int inprocess_soft_and_threshold_scaled = 75;
 
 /* Upper bound on size of other function for soft and */
 /* (Scaled by 100) */
+
 int soft_and_relative_ratio_scaled = 200;
 
 /* Allow growth during soft and? */
 int soft_and_allow_growth = 0;
-/* How many nodes are allowed when computing soft and.  Set to ratio with current size. (Sclaed by 100) */
+/* How many nodes are allowed when computing soft and.  Set to ratio with current size. (Scaled by 100) */
+
 int soft_and_expansion_ratio_scaled = 200;
 
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
@@ -354,7 +358,7 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
 }
 
 /* Conditionally simplify elements of one set with those of another */
-static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold) {
+static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, char *docstring) {
     rset_ele *myptr, *otherptr;
     for (myptr = set; myptr; myptr = myptr->next) {
 	ref_t myrval = myptr->fun;
@@ -378,16 +382,16 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold) 
 		unsigned limit = (unsigned) (current_size * ratio);
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
 		if (REF_IS_INVALID(nval)) {
-		    report(4, "Soft AND.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
-			   cov, current_size, other_size, limit);
+		    report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
+			   docstring, cov, current_size, other_size, limit);
 		    continue;
 		}
 		root_addref(nval, false);
 		sa_count++;
 		size_t new_size = cudd_single_size(smgr, nval);
 		double reduction = (double) new_size/current_size;
-		report(4, "Soft AND.  cov = %.3f.  size = %zd.  Other size = %zd.  Size --> %zd (%.3fX)",
-		       cov, current_size, other_size, new_size, reduction);
+		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Size --> %zd (%.3fX)",
+		       docstring, cov, current_size, other_size, new_size, reduction);
 		if (new_size < current_size || soft_and_allow_growth) {
 		    root_deref(myrval);
 		    rset_ele_new_fun(myptr, nval);
@@ -395,8 +399,8 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold) 
 		    root_deref(nval);
 		}
 	    } else {
-		report(4, "Soft AND.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
-		       cov, current_size, other_size);
+		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
+		       docstring, cov, current_size, other_size);
 	    }
 	}
 	size_t final_size = get_size(myptr);
@@ -530,9 +534,9 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	/* Attempt to simplify in both directions */
 	int length = rset_length(set);
 	report(2, "Apply soft simplify to new argument based on existing %d arguments", length);
-	soft_simplify(nset, set, ithreshold);
+	soft_simplify(nset, set, ithreshold, "conj_old2new");
 	report(2, "Apply soft simplify to existing %d arguments based on new argument", length);
-	soft_simplify(set, nset, ithreshold);
+	soft_simplify(set, nset, ithreshold, "conj_new2old");
 	set = rset_add_element(set, nset);
 	if (data)
 	    data->result_size = get_size(nset);
@@ -610,9 +614,9 @@ bool do_conjunct(int argc, char *argv[]) {
 	/* This optimization is effective, but very time consuming */
 	if (i > 2) {
 	    report(2, "Applying soft and to simplify argument %d using arguments 1-%d", i-1, i-2);
-	    soft_simplify(ele, set, pthreshold);
+	    soft_simplify(ele, set, pthreshold, "preprocess_old2new");
 	    report(2, "Applying soft and to simplify arguments 1-%d using argument %d", i-2, i-1);
-	    soft_simplify(set, ele, pthreshold);
+	    soft_simplify(set, ele, pthreshold, "preprocess_new2old");
 	}
 	set = rset_add_element(set, ele);
     }
