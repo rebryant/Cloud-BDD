@@ -1278,6 +1278,12 @@ size_t cudd_set_size(shadow_mgr mgr, set_ptr roots) {
     return (size_t) cnt;
 }
 
+size_t shadow_peak_nodes(shadow_mgr mgr) {
+    if (!mgr->do_cudd)
+	return 0;
+    return Cudd_ReadPeakLiveNodeCount(mgr->bdd_manager);
+}
+
 /* Have CUDD perform garbage collection.  Return number of nodes collected */
 int cudd_collect(shadow_mgr mgr) {
     if (!mgr->do_cudd)

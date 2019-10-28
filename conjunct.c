@@ -45,7 +45,7 @@ int reprocess = 1;
 int abort_limit = 7;
 /* Maximum expansion factor for conjunction (scaled 100x) */
 
-int expansion_factor_scaled = 142;
+int expansion_factor_scaled = 173;
 /* Number of passes of conjunction before giving up */
 int pass_limit = 3;
 
@@ -54,8 +54,8 @@ int pass_limit = 3;
    Distinguish between use in initial preprocessing step, vs. during conjunction operations 
  */
 
-int preprocess_soft_and_threshold_scaled = 90;
-int inprocess_soft_and_threshold_scaled = 75;
+int preprocess_soft_and_threshold_scaled = 50;
+int inprocess_soft_and_threshold_scaled = 50;
 
 /* Upper bound on size of other function for soft and */
 /* (Scaled by 100) */
@@ -64,8 +64,8 @@ int soft_and_relative_ratio_scaled = 200;
 
 /* Allow growth during soft and? */
 int soft_and_allow_growth = 0;
-/* How many nodes are allowed when computing soft and.  Set to ratio with current size. (Scaled by 100) */
 
+/* How many nodes are allowed when computing soft and.  Set to ratio with current size. (Scaled by 100) */
 int soft_and_expansion_ratio_scaled = 200;
 
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
@@ -377,7 +377,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	    size_t current_size = get_size(myptr);
 	    size_t other_size = get_size(otherptr);
 	    size_t other_limit = (size_t) (0.01 * soft_and_relative_ratio_scaled * current_size);
-	    if (cov > threshold && other_size <= other_limit) {
+	    if (cov > threshold && (other_limit == 0 || other_size <= other_limit)) {
 		double ratio = 0.01 * soft_and_expansion_ratio_scaled;
 		unsigned limit = (unsigned) (current_size * ratio);
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
@@ -389,7 +389,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		root_addref(nval, false);
 		sa_count++;
 		size_t new_size = cudd_single_size(smgr, nval);
-		double reduction = (double) new_size/current_size;
+		double reduction = (double) current_size/new_size;
 		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Size --> %zd (%.3fX)",
 		       docstring, cov, current_size, other_size, new_size, reduction);
 		if (new_size < current_size || soft_and_allow_growth) {
@@ -404,7 +404,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	    }
 	}
 	size_t final_size = get_size(myptr);
-	double reduction = (double) final_size / start_size;
+	double reduction = (double) start_size / final_size;
 	if (sa_count > 0)
 	    report(3, "Soft and applied %d/%d times.  %zd --> %zd (%.3fX)", sa_count, try_count, start_size, final_size, reduction);
     }
@@ -452,7 +452,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
     size_t abort_count = 0;
     size_t argument_count = rset_length(set);
     size_t max_size_limit = 0;
-    double ithreshold = 0.01 * preprocess_soft_and_threshold_scaled;
+    double ithreshold = 0.01 * inprocess_soft_and_threshold_scaled;
     if (argument_count == 0) {
 	ref_t rval = shadow_one(smgr);
 	root_addref(rval, false);
@@ -591,7 +591,7 @@ bool do_conjunct(int argc, char *argv[]) {
 	return false;
     }
 
-    double pthreshold = 0.01 * inprocess_soft_and_threshold_scaled;
+    double pthreshold = 0.01 * preprocess_soft_and_threshold_scaled;
 
     int i;
     rset_ele *set = NULL;
@@ -630,8 +630,8 @@ bool do_conjunct(int argc, char *argv[]) {
 	ntotal += nsize;
 	nmax = SMAX(nmax, nsize);
     }
-    double tratio = (double) ntotal/itotal;
-    double mratio = (double) nmax/imax;
+    double tratio = (double) itotal/ntotal;
+    double mratio = (double) imax/nmax;
     report(1, "Initial simplification.  Total %zd --> %zd (%.3fX).  Max %zd --> %zd (%.3fX)",
 	   itotal, ntotal, tratio, imax, nmax, mratio);
 
