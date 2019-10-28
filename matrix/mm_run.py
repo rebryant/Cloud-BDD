@@ -11,13 +11,15 @@ import subprocess
 import brent
 
 def usage(name):
-    print("Usage %s [-h] [-r] [-R] [-C] [-I] [-s SUFFIX]")
+    print("Usage %s [-h] [-r] [-R] [-C] [-I] [-s SUFFIX] [-t TIME] [-v VERB]")
     print(" -h               Print this message")
     print(" -r               Redo runs that didn't complete")
     print(" -R               Redo all runs")
     print(" -C               Disable chaining")
     print(" -I IDIR          Directory containing command files")
     print(" -s SUFFIX        Specify suffix for log file root name")
+    print(" -t TIME          Set runtime limit (in seconds)")
+    print(" -v VERB          Set verbosity level")
     sys.exit(0)
 
 # Set to home directory for program, split into tokens
@@ -29,6 +31,9 @@ softRedo = False
 hardRedo = False
 
 chain = True
+
+timeLimit = None
+verbLevel = None
 
 cmdPrefix = "cmd>"
 
@@ -75,6 +80,10 @@ def process(cmdPath, suffix = None):
             cmd += ['-C', 'n']
         cmd += ['-f', cmdPath]
         cmd += ['-L', logPath]
+        if timeLimit is not None:
+            cmd += ['-t', str(timeLimit)]
+        if verbLevel is not None:
+            cmd += ['-v', str(verbLevel)]
         cmdLine = " ".join(cmd)
         print("Running %s" % cmdPath)
         p = subprocess.Popen(cmd)
@@ -84,10 +93,10 @@ def process(cmdPath, suffix = None):
 
 
 def run(name, args):
-    global softRedo, hardRedo, chain
+    global softRedo, hardRedo, chain, timeLimit, verbLevel
     nameList = []
     suffix = None
-    optlist, args = getopt.getopt(args, 'hrRCI:s:')
+    optlist, args = getopt.getopt(args, 'hrRCI:s:t:v:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -103,6 +112,10 @@ def run(name, args):
             nameList = sorted(glob.glob(template))
         elif opt == '-s':
             suffix = val
+        elif opt == '-t':
+            timeLimit = int(val)
+        elif opt == '-v':
+            verbLevel = int(val)
     for name in nameList:
         process(name, suffix)
 
