@@ -45,15 +45,15 @@ subdirectoryFields = ["mm-solutions"]
 symmetricSubdirectoryFields = ["mm-solutions-symmetric"]
 
 def heuleDatabasePathFields():
-    sdf = symmetricSubdirectoryFields if doSymmetric else subDirectoryFields
+    sdf = symmetricSubdirectoryFields if doSymmetric else subdirectoryFields
     return homePathFields + sdf + ["heule-database.txt"]
 
 def generatedDatabasePathFields():
-    sdf = symmetricSubdirectoryFields if doSymmetric else subDirectoryFields
+    sdf = symmetricSubdirectoryFields if doSymmetric else subdirectoryFields
     return homePathFields + sdf + ["generated-database.txt"]
 
 def generatedPathFields(short = False):
-    sdf = symmetricSubdirectoryFields if doSymmetric else subDirectoryFields
+    sdf = symmetricSubdirectoryFields if doSymmetric else subdirectoryFields
     if short:
         return sdf + ["generated"]
     else:
