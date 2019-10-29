@@ -115,6 +115,8 @@ size_t cudd_set_size(shadow_mgr mgr, set_ptr roots);
 /* Returns number of nodes collected */
 int cudd_collect(shadow_mgr mgr);
 
+size_t shadow_peak_nodes(shadow_mgr mgr);
+
 /* Create key-value table mapping set of root nodes to their restrictions,
    with respect to a set of literals (given as a set of refs)
 */

@@ -1584,7 +1584,8 @@ class MScheme(MProblem):
             ca = self.assignment.subset(lambda v: v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
             fixedAssignment.overWrite(ca)
         if len(fixedAssignment) > 0:
-            self.ckt.comment("Fixed assignments, generated from scheme with signature %s" % self.sign())
+            if sum(categoryProbabilities.values()) > 0.0:
+                self.ckt.comment("Fixed assignments, generated from scheme with signature %s" % self.sign())
             fixedAssignment.assign(self.ckt)
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables, symmetryMap)

@@ -127,7 +127,7 @@ seedList.sort()
 modeList.sort()
 
 hfields = [""] + [seed for seed in seedList]
-showFields(hfields + ["Min"])
+showFields(hfields + ["Min", "Max"])
 
 for mode in modeList:
     d = modeDict[mode]
@@ -138,7 +138,8 @@ for mode in modeList:
         if seed not in minBySeed or size < minBySeed[seed]:
             minBySeed[seed] = size
     minSize = min(sizes)
-    fields = [mode] + [d[seed] if seed in d else "?" for seed in seedList] + [minSize]
+    maxSize = max(sizes)
+    fields = [mode] + [d[seed] if seed in d else "?" for seed in seedList] + [minSize, maxSize]
     showFields(fields)
 
 fields = ["Min"] + [minBySeed[seed] for seed in seedList]
