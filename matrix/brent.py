@@ -255,15 +255,23 @@ class BrentVariable:
 
 
 # A literal is either a variable (phase = 1) or its complement (phase = 0)
+@total_ordering
 class Literal:
 
     variable = None
     # Should be 0 or 1
     phase = 1
 
-    def __init__(self, variable, phase):
+    def __init__(self, variable = None, phase = 0):
         self.variable = variable
         self.phase = phase
+
+    def fromName(self, name):
+        self.phase = 0 if name[0] == '!' else 1
+        if self.phase == 0:
+            name = name[1:]
+        self.variable = BrentVariable().fromName(name)
+        return self
 
     def __str__(self):
         prefix = '' if self.phase == 1 else '!'
@@ -272,11 +280,12 @@ class Literal:
     def __eq__(self, other):
         return self.variable == other.variable and self.phase == other.phase
 
-    def __cmp__(self, other):
-        c = cmp(self.variable, other.variable)
-        if c != 0:
-            return c
-        return cmp(self.phase, other.phase)
+    def __lt__(self, other):
+        if self.variable < other.variable:
+            return True
+        if self.variable > other.variable:
+            return False
+        return self.phase < other.phase
 
     def assign(self, ckt):
         node = circuit.Node(self.variable)
@@ -1570,7 +1579,7 @@ class MScheme(MProblem):
         return snode
 
     def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None,
-                                 fixKV = False, varKV = False, symmetryMap = None):
+                                 fixKV = False, varKV = False, fixedLiterals = [], symmetryMap = None):
         fixedAssignment = Assignment()
         vlist = []
         if fixKV:
@@ -1579,6 +1588,11 @@ class MScheme(MProblem):
             fixedAssignment.overWrite(ka)
         elif varKV:
             vlist = self.kernelTerms.variables()
+        # Assign fixed literals.  Some might overlap with kernel terms (assume no conflicts)
+        for lit in fixedLiterals:
+            if lit.variable not in fixedAssignment:
+                fixedAssignment[lit.variable] = lit.phase
+                vlist.append(lit.variable)
         for cat in categoryProbabilities.keys():
             prob = categoryProbabilities[cat]
             ca = self.assignment.subset(lambda v: v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
@@ -1592,7 +1606,7 @@ class MScheme(MProblem):
 
 
     def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None,
-                        fixKV = False, varKV = False, excludeSingleton = False, breadthFirst = False, levelList = None,
+                        fixKV = False, varKV = False, fixedLiterals = [], excludeSingleton = False, breadthFirst = False, levelList = None,
                         useZdd = False, symbolicStreamline = False, boundNonKernels = False, checkSymmetry = False):
         plist = list(categoryProbabilities.values())
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
@@ -1612,6 +1626,8 @@ class MScheme(MProblem):
         if varKV:
             khash = self.kernelTerms.sign()
             self.ckt.comment("Leaving kernel terms from kernel %s variable" % khash)
+        if len(fixedLiterals) > 0:
+            self.ckt.comment("Fixing %d literals" % len(fixedLiterals))
         if excludeSingleton:
             self.ckt.comment("Enforcing singleton exclusion")
         if symbolicStreamline:
@@ -1622,7 +1638,7 @@ class MScheme(MProblem):
             symmetryMap = None
         if symmetryMap is not None:
             self.ckt.comment("Exploiting symmetry constraints")
-        self.generateMixedConstraints(categoryProbabilities, seed, fixKV, varKV, symmetryMap)
+        self.generateMixedConstraints(categoryProbabilities, seed, fixKV, varKV, fixedLiterals, symmetryMap)
         streamlineNode = None
         if excludeSingleton:
             streamlineNode = self.generateStreamline()

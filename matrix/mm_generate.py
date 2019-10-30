@@ -15,6 +15,7 @@ def usage(name):
     print " -h               Print this message"
     print " -k               Use fixed values for Kronecker terms"
     print " -K KFILE         Read kernel structure from KFILE"
+    print " -L LFILE         Read fixed literals from LFILE"
     print " -e               Generate streamline constraints based on singleton exclusion property"
     print " -E               Generate symbolic streamline formula constraining solution form"
     print " -2               Constrain nonkernel terms to have at most 2 positive instances"
@@ -40,6 +41,7 @@ def run(name, args):
     someFixed = False
     pname = None
     kname = None
+    lname = None
     fixKV = False
     varKV = False
     excludeSingleton = False
@@ -52,7 +54,7 @@ def run(name, args):
     timeLimit = None
     seed = 0
     
-    optlist, args = getopt.getopt(args, 'hkK:eE2xbB:zS:t:c:s:p:n:o:')
+    optlist, args = getopt.getopt(args, 'hkK:L:eE2xbB:zS:t:c:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -61,6 +63,9 @@ def run(name, args):
             fixKV = True
         elif opt == '-K':
             kname = val
+            fixKV = True
+        elif opt == '-L':
+            lname = val
             fixKV = True
         elif opt == '-e':
             excludeSingleton = True
@@ -160,10 +165,26 @@ def run(name, args):
             print "Parse of kernel file '%s' failed: %s" % (kname, str(ex))
             return
         s.loadKernels(kt)
+
+    fixedLiterals = []
+    if lname is not None:
+        try:
+            lfile = open(lname, 'r')
+        except Exception as ex:
+            print ("Cannot open literal file '%s' (%s)" % (lname, str(ex)))
+            return
+        for line in lfile:
+            line = brent.trim(line)
+            lit = brent.Literal().fromName(line)
+            fixedLiterals.append(lit)
+        lfile.close()
+        print("Read %d literals from file" % len(fixedLiterals))
+
     if excludeSingleton and symbolicStreamline:
         print("ERROR.  Cannot enforce both fixed and symbolic streamline constraints")
     else:
         s.generateProgram(categoryProbabilities, seed = seed, timeLimit = timeLimit, fixKV = fixKV, 
+                          fixedLiterals = fixedLiterals,
                           excludeSingleton = excludeSingleton, 
                           breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd, symbolicStreamline = symbolicStreamline,
                           boundNonKernels = boundNonKernels, checkSymmetry = checkSymmetry

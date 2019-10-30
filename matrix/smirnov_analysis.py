@@ -2,6 +2,7 @@
 # Generate histogram information about probabilities in variable-probabilities.txt
 
 import getopt
+import os
 import sys
 
 import circuit
@@ -9,13 +10,21 @@ import brent
 import random
 
 def usage(name):
-    print("Usage: %s [-h] [-H] [-v N] [-k K]")
+    print("Usage: %s [-h] [-H] [-v N] [-k K] [-o OFILE]")
     print("  -h          Print this message")
     print("  -H          Generate histogram")
     print("  -n N        Select assignments for N variables")
     print("  -k K        Select exponent in weight computation")
+    print("  -o OFILE    Write output to OFILE")
 
-path = "analysis/smirnov/variable-probabilities.txt"
+
+# set to home directory for program, split into tokens
+homePathFields = ['.']
+pathFields = ["analysis", "smirnov", "variable-probabilities.txt"]
+
+def getPath():
+    fields = homePathFields + pathFields
+    return "/".join(fields)
 
 # Histogram parameters
 bucketCount = 102
@@ -95,7 +104,7 @@ def generateVariables(path):
         return
     first = True
     count = 0
-    level = 0
+    level = 1
     for line in inf:
         if first:
             termList = line.split('\t')[1:]
@@ -114,10 +123,7 @@ def generateVariables(path):
             count += 1
         level += 1
     inf.close()
-    wlist = weightedVariables.values()
-    maxWeight = max(wlist)
-    minWeight = min(wlist)
-    print("Total: %d.  Hi: %d.  Lo: %d.  Weighted: %d (%.6f-%.6f)" % (count, len(highVariables), len(lowVariables), len(weightedVariables), minWeight, maxWeight))
+    print("Total: %d.  Hi: %d.  Lo: %d.  Weighted: %d" % (count, len(highVariables), len(lowVariables), len(weightedVariables)))
     
 
 def select(count):
@@ -131,6 +137,7 @@ def select(count):
     count -= forcedCount
     if count == 0:
         print("Returning %d literals, all forced" % forcedCount)
+        literals.sort()
         return literals
     print("Choosing %d unforced literals" % count)
     while count > 0:
@@ -147,18 +154,29 @@ def select(count):
                 count -= 1
                 del weightedVariables[v]
                 break
+    literals.sort()
     return literals
     
-def process(count):
+def process(path, count, opath = None):
     generateVariables(path)
     literals = select(count)
+    if opath is None:
+        ofile = sys.stdout
+    else:
+        try:
+            ofile = open(opath, 'w')
+        except Exception as ex:
+            print("Couldn't open output file '%s' (%s)" % (opath, str(ex)))
+            return
     for lit in literals:
-        print(str(lit))
+        ofile.write(str(lit) + '\n')
 
 def run(name, args):
     global exponent
+    path = getPath()
     count = 0
-    optlist, args = getopt.getopt(args, 'hHk:n:')
+    opath = None
+    optlist, args = getopt.getopt(args, 'hHk:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -171,11 +189,13 @@ def run(name, args):
             exponent = float(val)
         elif opt == '-n':
             count = int(val)
-    process(count)
-
+        elif opt == '-o':
+            opath = val
+    process(path, count, opath)
 
 
 if __name__ == "__main__":
+    current = os.path.realpath(__file__)
+    homePathFields = current.split('/')[:-1]
     run(sys.argv[0], sys.argv[1:])
-
     
