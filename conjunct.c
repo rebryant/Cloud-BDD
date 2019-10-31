@@ -161,7 +161,7 @@ static rset_ele *rset_add_element(rset_ele *set, rset_ele *ele) {
     return ele;
 }
 
-rset_ele *rset_remove_element(rset_ele *set, rset_ele *ele) {
+static rset_ele *rset_remove_element(rset_ele *set, rset_ele *ele) {
     rset_ele *next = set;
     rset_ele *prev = NULL;
     rset_ele *nset = set;
@@ -184,7 +184,7 @@ rset_ele *rset_remove_element(rset_ele *set, rset_ele *ele) {
     return nset;
 }
 
-int rset_length(rset_ele *set) {
+static int rset_length(rset_ele *set) {
     int len = 0;
     rset_ele *ptr;
     for (ptr = set; ptr; ptr = ptr->next)
@@ -192,11 +192,11 @@ int rset_length(rset_ele *set) {
     return len;
 }
 
-bool rset_is_empty(rset_ele *set) {
+static bool rset_is_empty(rset_ele *set) {
     return set == NULL;
 }
 
-bool rset_is_singleton(rset_ele *set) {
+static bool rset_is_singleton(rset_ele *set) {
     return !rset_is_empty(set) && rset_is_empty(set->next);
 }
 
@@ -306,7 +306,7 @@ static void compute_size_range(rset_ele *set) {
     log10_min_size = log10(min_argument_size == 0 ? 1.0 : (double) min_argument_size);
 }
 
-/* Compute AND of terms without decrementing reference counts */
+/* Compute AND of terms without decrementing reference counts of arguments */
 /* Used to check results of conjunction operation */
 static ref_t and_check(rset_ele *set) {
     ref_t rval = shadow_one(smgr);
@@ -315,7 +315,8 @@ static ref_t and_check(rset_ele *set) {
     while(ptr) {
 	ref_t arg = ptr->fun;
 	ref_t nval = shadow_and(smgr, rval, arg);
-	root_addref(nval, false);
+	// FIX REF: This one should be fresh
+	root_addref(nval, true);
 	root_deref(rval);
 	rval = nval;
 	ptr = ptr->next;
@@ -386,7 +387,8 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 			   docstring, cov, current_size, other_size, limit);
 		    continue;
 		}
-		root_addref(nval, false);
+		// FIX REF: This one should be fresh
+		root_addref(nval, true);
 		sa_count++;
 		size_t new_size = cudd_single_size(smgr, nval);
 		double reduction = (double) current_size/new_size;
@@ -398,6 +400,9 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		} else {
 		    root_deref(nval);
 		}
+		/* DEBUG */
+		int ncollect = cudd_collect(smgr);
+		report(3, "Cudd collected %d nodes", ncollect);
 	    } else {
 		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
 		       docstring, cov, current_size, other_size);
@@ -516,7 +521,8 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	if (REF_IS_INVALID(nval))
 	    err(true, "Couldn't compute conjunction");
 
-	root_addref(nval, false);
+	// FIX REF: This one should be fresh
+	root_addref(nval, true);
 	set = rset_remove_element(set, ptr1);
 	set = rset_remove_element(set, ptr2);
 	if (verblevel >= 3) {
@@ -531,6 +537,11 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	rset_ele_free(ptr1);
 	rset_ele_free(ptr2);
 	rset_ele *nset = rset_new(nval);
+
+	/* DEBUG */
+	int ncollect = cudd_collect(smgr);
+	report(3, "Cudd collected %d nodes", ncollect);
+
 	/* Attempt to simplify in both directions */
 	int length = rset_length(set);
 	report(2, "Apply soft simplify to new argument based on existing %d arguments", length);
@@ -546,8 +557,6 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	   argument_count, abort_count, max_argument_size, max_size_limit);
 
     ref_t rval = set->fun;
-    root_addref(rval, true);
-    root_deref(rval);
     rset_ele_free(set);
 
     return rval;
@@ -555,7 +564,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 }
 
 /* Compute conjunction of set (destructive) */
-ref_t rset_conjunct(rset_ele *set) {
+static ref_t rset_conjunct(rset_ele *set) {
     conjunction_data cdata;
     cdata.max_size = 0;
     cdata.total_size = 0;
@@ -601,16 +610,21 @@ bool do_conjunct(int argc, char *argv[]) {
 
     for (i = 2; i < argc; i++) {
 	ref_t rarg = get_ref(argv[i]);
-	root_addref(rarg, false);
 	if (REF_IS_INVALID(rarg)) {
+	    // Fix: Must deference existing list elements before aborting
+	    rset_ele *ele;
+	    for (ele = set; ele; ele = ele->next)
+		root_deref(ele->fun);
 	    rset_free(set);
 	    return rarg;
 	}
-
+	root_addref(rarg, false);
 	rset_ele *ele = rset_new(rarg);
 	size_t asize = get_size(ele);
 	itotal += asize;
 	imax = SMAX(asize, imax);
+	// DEBUG
+#if 0
 	/* This optimization is effective, but very time consuming */
 	if (i > 2) {
 	    report(2, "Applying soft and to simplify argument %d using arguments 1-%d", i-1, i-2);
@@ -618,6 +632,7 @@ bool do_conjunct(int argc, char *argv[]) {
 	    report(2, "Applying soft and to simplify arguments 1-%d using argument %d", i-2, i-1);
 	    soft_simplify(set, ele, pthreshold, "preprocess_new2old");
 	}
+#endif
 	set = rset_add_element(set, ele);
     }
 
@@ -707,35 +722,3 @@ bool do_coverage(int argc, char *argv[]) {
     }
     return ok;
 }
-
-
-#if 0
-bool do_coverage(int argc, char *argv[]) {
-    int r;
-
-    if (argc != 3) {
-	err(false, "coverage command requires two arguments");
-	return false;
-    }
-    /* Check refs */
-    bool ok = true;
-    for (r = 1; r < argc; r++) {
-	ref_t ref = get_ref(argv[r]);
-	if (REF_IS_INVALID(ref)) {
-	    err(false, "Invalid function name: %s", argv[r]);
-	    ok = false;
-	}
-    }
-    if (!ok)
-	return ok;
-
-    ref_t r1 = get_ref(argv[1]);
-    ref_t r2 = get_ref(argv[2]);
-
-    double c = shadow_coverage(smgr, r1, r2);
-
-    report(0, "Coverage(%s, %s) = %.3f", argv[1], argv[2], c);
-
-    return true;
-}
-#endif

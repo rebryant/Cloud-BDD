@@ -344,6 +344,7 @@ int main(int argc, char *argv[]) {
 
 /* Increment reference count for new ref */
 /* Argument fresh indicates whether argument is result of new operation */
+/* I.e., was it created by an operation that called dd_reference? */
 void root_addref(ref_t r, bool fresh) {
     int ocnt = 0;
     int ncnt = 0;
@@ -452,7 +453,9 @@ void assign_ref(char *name, ref_t r, bool fresh, bool variable) {
     }
     keyvalue_insert(nametable, (word_t) sname, (word_t) r);
     if (variable) {
-	root_addref(r, fresh);
+	// FIX REF
+	/* This counts as a reference, but it's no longer fresh */
+	root_addref(r, false);
 	sname = strsave_or_fail(name, "assign_ref");
 	keyvalue_insert(inverse_varnametable, (word_t) r, (word_t) sname);
     }
@@ -584,6 +587,7 @@ static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun
     rval = tree_reduce(argv, unit_ref, cfun, 2, argc-1);
     if (REF_IS_INVALID(rval))
 	return false;
+    // FIX REF: Tree reduction already handled Cudd reference count
     assign_ref(argv[1], rval, false, false);
     /* Remove double counting of refs */
     root_deref(rval);
@@ -593,102 +597,6 @@ static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun
 #endif
     return true;
 }
-
-
-#if OLD_REDUCE
-/* Linear reduction.  Returns result with incremented reference count */
-static ref_t linear_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int arglo, int arghi) {
-    ref_t rval = unit_ref;
-    int i;
-    root_addref(rval, false);
-    for (i = arglo; i <= arghi; i++) {
-	ref_t rarg = get_ref(argv[i]);
-	if (REF_IS_INVALID(rarg))
-	    return rarg;
-	ref_t nval = cfun(smgr, rval, rarg);
-	root_addref(nval, true);
-	root_deref(rval);
-	rval = nval;
-	/* Check for local garbage collection */
-	if (shadow_gc_check(smgr))
-	    do_collect(0, NULL);
-	/* Initiate any deferred garbage collection */
-	if (do_dist)
-	    undefer();
-    }
-    return rval;
-}
-#endif /* OLD_REDUCE */
-
-#if OLD_REDUCE
-/* Use linear reduction.  Enable GC after each operation */
-static bool do_reduce_monolithic(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
-    int i;
-    char buf[24];
-    ref_t rval = unit_ref;
-    if (argc < 2) {
-	report(0, "Need destination name");
-	return false;
-    }
-    for (i = 2; i < argc; i++) {
-	ref_t rarg = get_ref(argv[i]);
-	if (REF_IS_INVALID(rarg))
-	    return false;
-	ref_t nval = cfun(smgr, rval, rarg);
-	root_addref(nval, true);
-	if (argc > 2)
-	    root_deref(rval);
-	rval = nval;
-	/* Check for local garbage collection */
-	if (shadow_gc_check(smgr))
-	    do_collect(0, NULL);
-	/* Initiate any deferred garbage collection */
-	if (do_dist)
-	    undefer();
-    }
-    assign_ref(argv[1], rval, false, false);
-    /* Remove double counting of refs */
-    if (argc > 2)
-	root_deref(rval);
-#if RPT >= 1
-    shadow_show(smgr, rval, buf);
-    report(2, "RESULT.  %s = %s", argv[1], buf);
-#endif
-    return true;
-}
-#endif /* OLD_REDUCE */
-
-#if OLD_REDUCE
-/* This version waited until the very end to enable GC */
-static bool do_reduce_old(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
-    int i;
-    char buf[24];
-    ref_t rval = unit_ref;
-    if (argc < 2) {
-	report(0, "Need destination name");
-	return false;
-    }
-    for (i = 2; i < argc; i++) {
-	ref_t rarg = get_ref(argv[i]);
-	if (REF_IS_INVALID(rarg))
-	    return false;
-	ref_t nval = cfun(smgr, rval, rarg);
-	rval = nval;
-    }
-    assign_ref(argv[1], rval, false, false);
-    /* Check for local garbage collection */
-    if (shadow_gc_check(smgr))
-	do_collect(0, NULL);
-    /* Initiate any deferred garbage collection */
-    if (do_dist)
-	undefer();
-#if RPT >= 1
-    shadow_show(smgr, rval, buf);
-    report(2, "RESULT.  %s = %s", argv[1], buf);
-#endif
-    return true;
-}
-#endif /* OLD_REDUCE */
 
 bool do_and(int argc, char *argv[]) {
     return do_reduce(argc, argv, shadow_one(smgr), shadow_and);
@@ -714,7 +622,8 @@ bool do_not(int argc, char *argv[]) {
     ref_t rval = shadow_negate(smgr, rf);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    assign_ref(argv[1], rval, false, false);
+    // FIX REF: This should be fresh
+    assign_ref(argv[1], rval, true, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
 	do_collect(0, NULL);
@@ -744,7 +653,8 @@ bool do_ite(int argc, char *argv[]) {
     ref_t rval = shadow_ite(smgr, ri, rt, re);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    assign_ref(argv[1], rval, false, false);
+    // FIX REF: This should be fresh
+    assign_ref(argv[1], rval, true, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
 	do_collect(0, NULL);
@@ -877,7 +787,8 @@ bool do_restrict(int argc, char *argv[]) {
     ref_t rval = shadow_cm_restrict(smgr, rf, rc);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    assign_ref(argv[1], rval, false, false);
+    // FIX REF: This should be fresh
+    assign_ref(argv[1], rval, true, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
 	do_collect(0, NULL);
@@ -906,7 +817,8 @@ bool do_soft_and(int argc, char *argv[]) {
     ref_t rval = shadow_soft_and(smgr, rf, rc, 0);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    assign_ref(argv[1], rval, false, false);
+    // FIX REF: This should be fresh
+    assign_ref(argv[1], rval, true, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
 	do_collect(0, NULL);
@@ -945,7 +857,8 @@ bool do_zconvert(int argc, char *argv[]) {
 	    free_string(olds);
 	}
 	rnew = shadow_zconvert(smgr, rold);
-	assign_ref(argv[1], rnew, false, false);
+	// FIX REF: This should be fresh
+	assign_ref(argv[1], rnew, true, false);
 #if RPT >= 2
 	shadow_show(smgr, rold, bufold);
 	shadow_show(smgr, rnew, bufnew);
@@ -983,7 +896,8 @@ bool do_aconvert(int argc, char *argv[]) {
 	    free_string(olds);
 	}
 	rnew = shadow_aconvert(smgr, rold);
-	assign_ref(argv[1], rnew, false, false);
+	// FIX REF: This should be fresh
+	assign_ref(argv[1], rnew, true, false);
 #if RPT >= 2
 	shadow_show(smgr, rold, bufold);
 	shadow_show(smgr, rnew, bufnew);
@@ -1109,7 +1023,8 @@ bool do_cofactor(int argc, char *argv[]) {
     bool ok = keyvalue_find(map, (word_t) rold, &wr);
     if (ok) {
 	ref_t rnew = (ref_t) wr;
-	assign_ref(argv[1], rnew, false, false);
+	// FIX REF: This should be fresh
+	assign_ref(argv[1], rnew, true, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
 	report(2, "RESULT.  %s = %s", argv[1], buf);
@@ -1146,7 +1061,8 @@ bool do_equant(int argc, char *argv[]) {
     bool ok = keyvalue_find(map, (word_t) rold, &wr);
     if (ok) {
 	ref_t rnew = (ref_t) wr;
-	assign_ref(argv[1], rnew, false, false);
+	// FIX REF: This should be fresh
+	assign_ref(argv[1], rnew, true, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
 	report(2, "RESULT.  %s = %s", argv[1], buf);
@@ -1186,7 +1102,8 @@ bool do_uquant(int argc, char *argv[]) {
     if (ok) {
 	ref_t rnew = (ref_t) wr;
 	rnew = REF_NEGATE(rnew);
-	assign_ref(argv[1], rnew, false, false);
+	// FIX REF: This should be fresh
+	assign_ref(argv[1], rnew, true, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
 	report(2, "RESULT.  %s = %s", argv[1], buf);
@@ -1346,7 +1263,8 @@ bool do_var(int argc, char *argv[]) {
 	rv = shadow_new_variable(smgr);
 	if (REF_IS_INVALID(rv))
 	    return false;
-	assign_ref(argv[i], rv, false, true);
+	// FIX REF: This should be fresh
+	assign_ref(argv[i], rv, true, true);
 	shadow_show(smgr, rv, buf);
 #if RPT >= 2
 	report(2, "VAR %s = %s", argv[i], buf);
