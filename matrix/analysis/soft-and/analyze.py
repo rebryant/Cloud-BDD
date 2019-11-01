@@ -1,4 +1,3 @@
-#!/usr/bin/python
 
 # Lines of form:
 # run-ab000-c090-s01-A50N.log:Soft_And.  preprocess_old2new.  cov = 0.917.  size = 2937022.  Other size = 4183.  Size --> 123895 (0.042X)
@@ -30,6 +29,7 @@ failedExpression = re.compile("Requires more than")
 resultSizeExpression = re.compile("Size --> ([0-9]+)")
 
 class ParseFailure(Exception):
+
     reason = ""
 
     def __init__(self, reason):
@@ -47,6 +47,8 @@ class Entry:
     skipped = False
     failed = False
     resultSize = 0
+
+    floatFormat = "%.5f"
 
     def __init__(self, entry):
         m = contextExpression.search(entry)
@@ -119,6 +121,8 @@ class Entry:
             return self.skipped
         if name == 'failed':
             return self.failed
+        if name == 'completed':
+            return not self.skipped and not self.failed
         if name == 'rsize':
             return self.resultSize
         if name == 'rratio':
@@ -134,10 +138,18 @@ class Entry:
         if value is None:
             svalue = '???'
         elif type(value) == type(0.0):
-            svalue = "%.3f" % value
+            svalue = self.floatFormat % value
         elif type(value) == type(True):
             svalue = "T" if value else "F"
         return svalue
+
+    def nameToFloat(self, name):
+        value = self.nameToValue(name)
+        if value is None:
+            return 0.0
+        elif type(value) == type(False):
+            return 1.0 if value else 0.0
+        return float(value)
 
     def composeFields(self, nameList):
         return [self.nameToString(name) for name in nameList]
@@ -161,12 +173,24 @@ class Entry:
                 return False
         return True
 
+    # Compute weighted sum of values
+    # weights is either the name of some field, or a dictionary mapping from names to weights
+    def score(self, weights):
+        score = 0.0
+        if type(weights) == type('abcd'):
+            return self.nameToFloat(weights)
+        for k in weights.keys:
+            value = self.nameToFloat(k)
+            weight = weights[k]
+            score += value * weight
+        return score
+
     def argRatio(self, log = False):
-        ratio = 1.0 if self.size == 0 else float(self.otherSize)/float(self.size)
+        ratio = 0.0 if self.size == 0 else float(self.otherSize)/float(self.size)
         return math.log(ratio, 2) if log else ratio
 
     def resultRatio(self, log = False):
-        ratio = 1.0 if self.size == 0 else float(self.resultSize)/float(self.size)
+        ratio = 0.0 if self.size == 0 else float(self.resultSize)/float(self.size)
         return math.log(ratio, 2) if log else ratio
 
 
@@ -174,7 +198,7 @@ class Entry:
     def __str__(self):
         fields = ['prep' if self.preprocess else 'conj',
                   'o2n' if self.old2new else 'n2o',
-                  "%.3f" % self.coverage,
+                  self.floatFormat % self.coverage,
                   str(self.size),
                   str(self.otherSize),
                   "skip" if self.skipped else "fail" if self.failed else str(self.resultSize)
@@ -216,3 +240,66 @@ class EntrySet:
     def filter(self, fdict):
         ndata = [e for e in self.data if e.filter(fdict)]
         return EntrySet(ndata)
+
+    # weights either a single name, or a dictionary mapping from names to weights
+    def maxScore(self, weights):
+        vals = [e.score(weights) for e in self.data]
+        return max(vals)
+
+    def minScore(self, weights):
+        vals = [e.score(weights) for e in self.data]
+        return min(vals)
+
+    def averageScore(self, weights):
+        if len(self.data) == 0:
+            return 0.0
+        vals = [e.score(weights) for e in self.data]
+        s = sum(vals)
+        l = len(vals)
+        avg = sum(vals)/len(vals)
+        # Debugging
+        svals = ["%.3f" % v for v in vals]
+        print("Average %s = %.5f" % (str(svals), avg))
+        return avg
+
+    def standardDeviationScore(self, weights):
+        if len(self.data) == 0:
+            return 0.0
+        vals = [e.score(weights) for e in self.data]
+        aval = sum(vals)/len(vals)
+        squareVals = [v*v for v in vals]
+        asval = sum(squareVals)/len(vals)
+        sigmaSquared = asval - (aval*aval)
+        stdev = math.sqrt(sigmaSquared) 
+        # Debugging
+        svals = ["%.3f" % v for v in vals]
+        print("Std Dev %s.  avg = %.5f, sqAvg = %.5f, sqSig = %.5f, sig = %.5f" %
+              (str(svals), aval, asval, sigmaSquared, stdev))
+        return stdev
+
+    def covarianceScores(self, weights1, weights2):
+        if len(self.data) == 0:
+            return 0.0
+        val1 = [e.score(weights1) for e in self.data]
+        val2 = [e.score(weights2) for e in self.data]
+        avg1 = sum(val1)/len(val1)
+        avg2 = sum(val2)/len(val2)
+        prods = [(v1-avg1) * (v2-avg2) for v1, v2 in zip(val1, val2)]
+        cov sum(prods)/len(prods)
+        # Debugging
+        svals = ["%.3f" % v for v in vals]
+        print("Cov %s.  avg = %.5f, sqAvg = %.5f, sqSig = %.5f, sig = %.5f" %
+              (str(svals), aval, asval, sigmaSquared, stdev))
+
+        return cov
+        
+    def correlationScores(self, weights1, weights2):
+        if len(self.data) == 0:
+            return 0.0
+        cov = self.covarianceScores(weights1, weights2)
+        sig1 = self.standardDeviationScore(weights1)
+        sig2 = self.standardDeviationScore(weights2)
+        return cov/(sig1 * sig2)
+
+
+        
