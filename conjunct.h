@@ -6,6 +6,7 @@ extern keyvalue_table_ptr reftable;
 
 void root_addref(ref_t r, bool fresh);
 void root_deref(ref_t r);
+void root_checkref(ref_t r);
 void assign_ref(char *name, ref_t r, bool fresh, bool variable);
 
 /* Functions defined in runbdd.c */

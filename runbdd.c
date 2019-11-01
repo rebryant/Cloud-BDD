@@ -370,6 +370,19 @@ void root_addref(ref_t r, bool fresh) {
 #endif
 }
 
+/* Make sure have nonzero reference count for ref */
+void root_checkref(ref_t r) {
+    if (REF_IS_INVALID(r))
+	return;
+    ref_t ar = shadow_absval(smgr, r);
+    word_t wv;
+    if (!keyvalue_find(reftable, (word_t) ar, &wv)) {
+	char buf[24];
+	shadow_show(smgr, ar, buf);
+	err(true, "Attempt to reference nonexistent entry %s", buf);
+    }
+}
+
 
 /* Decrement reference count for ref */
 void root_deref(ref_t r) {
@@ -388,12 +401,16 @@ void root_deref(ref_t r) {
 	if (ncnt < 0) {
 	    char buf[24];
 	    shadow_show(smgr, ar, buf);
-	    err(true, "Negative ref count for %s", buf, ncnt);
+	    err(true, "Negative ref count for %s (%d)", buf, ncnt);
 	}
 	if (ncnt > 0)
 	    keyvalue_insert(reftable, (word_t) ar, ncnt);
 	else
 	    shadow_deref(smgr, ar);
+    } else {
+	char buf[24];
+	shadow_show(smgr, ar, buf);
+	err(true, "Attempt to dereference nonexistent entry %s", buf);
     }
 #if RPT >= 5
     char buf[24];
@@ -453,7 +470,6 @@ void assign_ref(char *name, ref_t r, bool fresh, bool variable) {
     }
     keyvalue_insert(nametable, (word_t) sname, (word_t) r);
     if (variable) {
-	// FIX REF
 	/* This counts as a reference, but it's no longer fresh */
 	root_addref(r, false);
 	sname = strsave_or_fail(name, "assign_ref");
@@ -559,6 +575,8 @@ static ref_t tree_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int a
 		root_deref(rlo);
 		rval = rhi;
 	    } else {
+		root_checkref(rlo);
+		root_checkref(rhi);
 		rval = cfun(smgr, rlo, rhi);
 		root_addref(rval, true);
 		root_deref(rlo);
@@ -587,7 +605,6 @@ static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun
     rval = tree_reduce(argv, unit_ref, cfun, 2, argc-1);
     if (REF_IS_INVALID(rval))
 	return false;
-    // FIX REF: Tree reduction already handled Cudd reference count
     assign_ref(argv[1], rval, false, false);
     /* Remove double counting of refs */
     root_deref(rval);
@@ -622,7 +639,6 @@ bool do_not(int argc, char *argv[]) {
     ref_t rval = shadow_negate(smgr, rf);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    // FIX REF: This should be fresh
     assign_ref(argv[1], rval, true, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
@@ -653,7 +669,6 @@ bool do_ite(int argc, char *argv[]) {
     ref_t rval = shadow_ite(smgr, ri, rt, re);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    // FIX REF: This should be fresh
     assign_ref(argv[1], rval, true, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
@@ -787,7 +802,6 @@ bool do_restrict(int argc, char *argv[]) {
     ref_t rval = shadow_cm_restrict(smgr, rf, rc);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    // FIX REF: This should be fresh
     assign_ref(argv[1], rval, true, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
@@ -817,7 +831,6 @@ bool do_soft_and(int argc, char *argv[]) {
     ref_t rval = shadow_soft_and(smgr, rf, rc, 0);
     if (do_ref(smgr) && REF_IS_INVALID(rval))
 	return false;
-    // FIX REF: This should be fresh
     assign_ref(argv[1], rval, true, false);
     /* Check for local garbage collection */
     if (shadow_gc_check(smgr))
@@ -857,7 +870,6 @@ bool do_zconvert(int argc, char *argv[]) {
 	    free_string(olds);
 	}
 	rnew = shadow_zconvert(smgr, rold);
-	// FIX REF: This should be fresh
 	assign_ref(argv[1], rnew, true, false);
 #if RPT >= 2
 	shadow_show(smgr, rold, bufold);
@@ -896,7 +908,6 @@ bool do_aconvert(int argc, char *argv[]) {
 	    free_string(olds);
 	}
 	rnew = shadow_aconvert(smgr, rold);
-	// FIX REF: This should be fresh
 	assign_ref(argv[1], rnew, true, false);
 #if RPT >= 2
 	shadow_show(smgr, rold, bufold);
@@ -1023,7 +1034,6 @@ bool do_cofactor(int argc, char *argv[]) {
     bool ok = keyvalue_find(map, (word_t) rold, &wr);
     if (ok) {
 	ref_t rnew = (ref_t) wr;
-	// FIX REF: This should be fresh
 	assign_ref(argv[1], rnew, true, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
@@ -1061,7 +1071,6 @@ bool do_equant(int argc, char *argv[]) {
     bool ok = keyvalue_find(map, (word_t) rold, &wr);
     if (ok) {
 	ref_t rnew = (ref_t) wr;
-	// FIX REF: This should be fresh
 	assign_ref(argv[1], rnew, true, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
@@ -1102,7 +1111,6 @@ bool do_uquant(int argc, char *argv[]) {
     if (ok) {
 	ref_t rnew = (ref_t) wr;
 	rnew = REF_NEGATE(rnew);
-	// FIX REF: This should be fresh
 	assign_ref(argv[1], rnew, true, false);
 	shadow_show(smgr, rnew, buf);
 #if RPT >= 2
@@ -1263,7 +1271,6 @@ bool do_var(int argc, char *argv[]) {
 	rv = shadow_new_variable(smgr);
 	if (REF_IS_INVALID(rv))
 	    return false;
-	// FIX REF: This should be fresh
 	assign_ref(argv[i], rv, true, true);
 	shadow_show(smgr, rv, buf);
 #if RPT >= 2

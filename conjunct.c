@@ -314,8 +314,9 @@ static ref_t and_check(rset_ele *set) {
     rset_ele *ptr = set;
     while(ptr) {
 	ref_t arg = ptr->fun;
+	root_checkref(rval);
+	root_checkref(arg);
 	ref_t nval = shadow_and(smgr, rval, arg);
-	// FIX REF: This one should be fresh
 	root_addref(nval, true);
 	root_deref(rval);
 	rval = nval;
@@ -381,13 +382,14 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	    if (cov > threshold && (other_limit == 0 || other_size <= other_limit)) {
 		double ratio = 0.01 * soft_and_expansion_ratio_scaled;
 		unsigned limit = (unsigned) (current_size * ratio);
+		root_checkref(myrval);
+		root_checkref(otherrval);
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
 		if (REF_IS_INVALID(nval)) {
 		    report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
 			   docstring, cov, current_size, other_size, limit);
 		    continue;
 		}
-		// FIX REF: This one should be fresh
 		root_addref(nval, true);
 		sa_count++;
 		size_t new_size = cudd_single_size(smgr, nval);
@@ -397,12 +399,18 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		if (new_size < current_size || soft_and_allow_growth) {
 		    root_deref(myrval);
 		    rset_ele_new_fun(myptr, nval);
+		    myrval = nval;
+#if RPT >= 5
+		    {
+			char obuf[24], nbuf[24];
+			shadow_show(smgr, myrval, obuf);
+			shadow_show(smgr, nval, nbuf);
+			report(5, "Replacing %s with %s", obuf, nbuf);
+		    }
+#endif
 		} else {
 		    root_deref(nval);
 		}
-		/* DEBUG */
-		int ncollect = cudd_collect(smgr);
-		report(3, "Cudd collected %d nodes", ncollect);
 	    } else {
 		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
 		       docstring, cov, current_size, other_size);
@@ -505,6 +513,8 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    arg1 = ptr1->fun;
 	    arg2 = ptr2->fun;
 
+	    root_checkref(arg1);
+	    root_checkref(arg2);
 	    nval = final_try ? shadow_and(smgr, arg1, arg2) : shadow_and_limit(smgr, arg1, arg2, size_limit);
 
 	    if (!REF_IS_INVALID(nval))
@@ -521,7 +531,6 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	if (REF_IS_INVALID(nval))
 	    err(true, "Couldn't compute conjunction");
 
-	// FIX REF: This one should be fresh
 	root_addref(nval, true);
 	set = rset_remove_element(set, ptr1);
 	set = rset_remove_element(set, ptr2);
@@ -537,10 +546,6 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	rset_ele_free(ptr1);
 	rset_ele_free(ptr2);
 	rset_ele *nset = rset_new(nval);
-
-	/* DEBUG */
-	int ncollect = cudd_collect(smgr);
-	report(3, "Cudd collected %d nodes", ncollect);
 
 	/* Attempt to simplify in both directions */
 	int length = rset_length(set);
@@ -623,8 +628,6 @@ bool do_conjunct(int argc, char *argv[]) {
 	size_t asize = get_size(ele);
 	itotal += asize;
 	imax = SMAX(asize, imax);
-	// DEBUG
-#if 0
 	/* This optimization is effective, but very time consuming */
 	if (i > 2) {
 	    report(2, "Applying soft and to simplify argument %d using arguments 1-%d", i-1, i-2);
@@ -632,7 +635,6 @@ bool do_conjunct(int argc, char *argv[]) {
 	    report(2, "Applying soft and to simplify arguments 1-%d using argument %d", i-2, i-1);
 	    soft_simplify(set, ele, pthreshold, "preprocess_new2old");
 	}
-#endif
 	set = rset_add_element(set, ele);
     }
 
