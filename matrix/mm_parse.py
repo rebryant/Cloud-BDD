@@ -15,17 +15,19 @@ import glob
 
 
 def usage(name):
-    print("Usage: %s [-h] [-x] [-u] [-b] [-q] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name)
+    print("Usage: %s [-h] [-x] [-u] [-b] [-q] [-L] [-I IDIR] [-i IFILE] [-s PFILE] [-p AUX] [-n (N|N1:N2:N3)]" % name)
     print(" -h               Print this message")
     print(" -x               Preserve symmetry")
     print(" -u               Print number of nodes at each level, rather than solutions")
     print(" -q               Quiet mode.  Only summarize results")
+    print(" -L               Local mode.  Record database and solutions locally")
     print(" -b               Commands generated via breadth-first traversal")
     print(" -I IDIR          Run for all files with extension '.log' in directory IDIR")
     print(" -i IFILE         Specify input file")
     print(" -s PFILE         Read hard-coded values from polynomial in PFILE")
     print(" -p AUX           Number of auxiliary variables")
     print(" -n N or N1:N2:N3 Matrix dimension(s)")
+
 
 # Quiet mode
 quietMode = False
@@ -372,7 +374,7 @@ def processSolution(scheme, sname, metadata = [], recordFunction = recordSolutio
         else:
             freshCount += 1
             if not quietMode:
-                print("Completely new Solution")
+                print("Completely new Solution #%d" % freshCount)
             recordFunction(scheme, metadata = metadata)
     return True
 
@@ -424,7 +426,7 @@ def run(name, args):
     pname = None
     inameList = []
     breadthFirst = False
-    optlist, args = getopt.getopt(args, 'huqbxI:i:s:p:n:o:')
+    optlist, args = getopt.getopt(args, 'huqbxLI:i:s:p:n:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -437,6 +439,8 @@ def run(name, args):
             breadthFirst = True
         elif opt == '-x':
             doSymmetric = True
+        elif opt == '-L':
+            localMode = True
         elif opt == '-I':
             idir = val
             template = "%s/*.log" % idir
