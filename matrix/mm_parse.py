@@ -509,7 +509,7 @@ def run(name, args):
         return
     if not localMode:
         loadDatabase(heuleDatabaseDict, heuleDatabasePathFields, quietMode)
-        loadDatabase(generatedDatabaseDict, generatedDatabasePathFields, quietMode)
+    loadDatabase(generatedDatabaseDict, generatedDatabasePathFields, quietMode)
 
 
     signature = generateSignature(fileScheme)
