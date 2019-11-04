@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Determine installed RAM size for machine
+# Determine installed RAM size for machine (in megabytes)
 
 import getopt
 import sys
@@ -45,10 +45,10 @@ def runMac(verbose = False):
     except Exception as ex:
         show(verbose, "Couldn't find byte count in response '%s'" % stdout)
         return 0
-    return bytes/2**30
+    return bytes/2**20
 
 def runLinux(verbose = False):
-    cmd = ['free', '-g']
+    cmd = ['free', '-m']
     cmdline = " ".join(cmd)
     try:
         process = subprocess.Popen(cmd, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
@@ -73,8 +73,8 @@ def runLinux(verbose = False):
         show(verbose, "Bad data line '%s'" % lines[1])
         return 0
     try:
-        gb = int(data[1])
-        return gb
+        mb = int(data[1])
+        return mb
     except:
         show(verbose, "Cannot extract gigabyte count from line '%s'" % data)
         return 0
@@ -83,7 +83,7 @@ def run(name, args):
     verbose = False
     tryMac = True
     tryLinux = True
-    gb = 0
+    mb = 0
     optlist, args = getopt.getopt(args, 'hvLM')
     for (opt, val) in optlist:
         if opt == '-h':
@@ -99,13 +99,13 @@ def run(name, args):
             tryMac = False
     if tryMac:
         show(verbose, "Trying Mac")
-        gb = runMac(verbose)
-    if gb == 0 and tryLinux:
+        mb = runMac(verbose)
+    if mb == 0 and tryLinux:
         show(verbose, "Trying Linux")
-        gb = runLinux(verbose)
-    if gb == 0:
+        mb = runLinux(verbose)
+    if mb == 0:
         show(verbose, "Couldn't find memory size")
-    print(str(gb))
+    print(str(mb))
 
 if __name__ == "__main__":
     run(sys.argv[0], sys.argv[1:])
