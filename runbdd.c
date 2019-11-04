@@ -206,11 +206,12 @@ static bool bdd_quit(int argc, char *argv[]) {
 
 static void usage(char *cmd) {
     printf(
-"Usage: %s [-h] [-f FILE][-v VLEVEL] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain][-S SOFT][-g]\n",
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-M MBYTES] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain][-S SOFT][-g]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
     printf("\t-v VLEVEL  Set verbosity level\n");
+    printf("\t-M MBYTES  Set memory limit to MBYTES megabytes\n");
     printf("\t-c         Use CUDD\n");
     printf("\t-l         Use local refs\n");
     printf("\t-d         Use distributed refs\n");
@@ -247,7 +248,7 @@ int main(int argc, char *argv[]) {
     chaining_type = CHAIN_ALL;
 
 
-    while ((c = getopt(argc, argv, "hv:f:cldH:P:rL:t:C:S:g")) != -1) {
+    while ((c = getopt(argc, argv, "hv:M:f:cldH:P:rL:t:C:S:g")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -258,6 +259,9 @@ int main(int argc, char *argv[]) {
 	    break;
 	case 'v':
 	    level = atoi(optarg);
+	    break;
+	case 'M':
+	    mblimit = atoi(optarg);
 	    break;
 	case 'c':
 	    do_cudd = true;

@@ -290,19 +290,22 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
     DdNode *n = NULL;
 
     if (do_cudd) {
-	/* Modified CUDD Parameters */
+	/* CUDD Parameters */
 	unsigned int numVars = 0; /* Default 0 */
 	unsigned int numVarsZ = 0; /* Default 0 */
+#if 0
+	/* Default Parameters */
+	unsigned int numSlots = 256;
+	unsigned int cacheSize = 262144;
+	unsigned int maxMemory = 67108864;
+#endif
+	/* Modified Parameters */
 	unsigned int numSlots = 1u<<18; /* Default 256 */
 	unsigned int cacheSize = 1u<<22; /* Default 262144 */
-	/* Default 67,108,864 */
 	unsigned long int maxMemory = (1u<<31) + 32UL * 1024 * 1024 * 1024;
-#if 0
-	// Use defaults
-	numSlots = 256;
-	cacheSize = 262144;
-	maxMemory = 67108864;
-#endif
+	if (mblimit > 0)
+	    maxMemory = mblimit * 1024 * 1024;
+	report(2, "Setting memory limit to %zd", maxMemory);
 	mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
 	Cudd_AutodynDisable(mgr->bdd_manager);
 	Cudd_AutodynDisableZdd(mgr->bdd_manager);
