@@ -17,11 +17,6 @@ def show(verbose, str):
     if verbose:
         sys.stderr.write(str + '\n')
 
-def trim(s):
-    while len(s) > 1 and s[-1] in '\r\n':
-        s = s[:-1]
-    return s
-
 #For Mac.  Return gigabytes
 def runMac(verbose = False):
     key = 'hw.memsize'
@@ -34,11 +29,14 @@ def runMac(verbose = False):
         return 0
     code = process.wait()
     if code != 0:
-        show(verbose, "Running '%s' returned code %d" % (line, code))
+        show(verbose, "Running '%s' returned code %d" % (cmdline, code))
         return 0
     (stdout, stderr) = process.communicate()
-    stdout = trim(stdout)
-    fields = stdout.split()
+    lines = stdout.split('\n')
+    if len(lines) < 1:
+        show(verbose, "Runnning command '%s' produced no result" % cmdline)
+        return 0
+    fields = lines[0].split()
     if fields[0] != key + ':':
         show(verbose, "Got unexpected keyword '%s'" % fields[0])
         return 0
@@ -63,25 +61,23 @@ def runLinux(verbose = False):
         return 0
     (stdout, stderr) = process.communicate()
     col = 0
-    lineCount = 0
-    for line in stdout:
-        lineCount += 1
-        line = trim(line)
-        print("Line #%d:%s" % (lineCount, line))
-        fields = line.split()
-        if lineCount == 1 and (len(fields) < 2 or fields[1] != 'total'):
-            show(verbose, "Bad header line '%s'" % line)
-            return 0
-        if lineCount == 2 and (len(fields) < 2 or fields[0] != 'Mem:'):
-            show(verbose, "Bad infomation line '%s'" % line)
-            return 0
-        if lineCount == 2:
-            try:
-                gb = int(fields[1])
-                return gb
-            except:
-                show(verbose, "Cannot extract gigabyte count from line '%s'" % line)
-                return 0
+    lines = stdout.split('\n')
+    if len(lines) < 2:
+        show(verbose, "Running '%s' produced only %d lines" % len(lines))
+    headings = lines[0].split()
+    if len(headings) < 2 or headings[0] != 'total':
+        show(verbose, "Bad header line '%s'.  headings[1] = %s" % (lines[0], headings[0]))
+        return 0
+    data = lines[1].split()
+    if len(data) < 2 or data[0] != 'Mem:':
+        show(verbose, "Bad data line '%s'" % lines[1])
+        return 0
+    try:
+        gb = int(data[1])
+        return gb
+    except:
+        show(verbose, "Cannot extract gigabyte count from line '%s'" % data)
+        return 0
 
 def run(name, args):
     verbose = False
