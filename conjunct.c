@@ -62,6 +62,9 @@ int inprocess_soft_and_threshold_scaled = 50;
 
 int soft_and_relative_ratio_scaled = 200;
 
+/* Attempt preprocessing with soft and */
+int preprocess_conjuncts = 0;
+
 /* Allow growth during soft and? */
 int soft_and_allow_growth = 0;
 
@@ -119,6 +122,7 @@ void init_conjunct() {
     add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
     add_param("soft", &inprocess_soft_and_threshold_scaled, "Threshold for attempting soft-and simplification (0-100)", NULL);
     add_param("grow", &soft_and_allow_growth, "Allow growth from soft-and simplification", NULL);
+    add_param("preprocess", &preprocess_conjuncts, "Attempt to simplify conjuncts with soft and", NULL);
     preprocess = 0;
     reprocess = 0;
 }
@@ -629,7 +633,7 @@ bool do_conjunct(int argc, char *argv[]) {
 	itotal += asize;
 	imax = SMAX(asize, imax);
 	/* This optimization is effective, but very time consuming */
-	if (i > 2) {
+	if (preprocess_conjuncts && i > 2) {
 	    report(2, "Applying soft and to simplify argument %d using arguments 1-%d", i-1, i-2);
 	    soft_simplify(ele, set, pthreshold, "preprocess_old2new");
 	    report(2, "Applying soft and to simplify arguments 1-%d using argument %d", i-2, i-1);

@@ -16,6 +16,7 @@ ref_t get_ref(char *name);
 extern int preprocess_soft_and_threshold_scaled;
 extern int inprocess_soft_and_threshold_scaled;
 extern int soft_and_allow_growth;
+extern int preprocess_conjuncts;
 
 /* Functions defined in conjunct.c */
 void init_conjunct();
