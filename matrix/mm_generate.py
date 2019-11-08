@@ -166,19 +166,13 @@ def run(name, args):
             return
         s.loadKernels(kt)
 
-    fixedLiterals = []
     if lname is not None:
         try:
-            lfile = open(lname, 'r')
+            fixedLiterals = brent.Assignment().parseLiteralsFromFile(lname)
+            print("%d literals set to fixed values" % len(fixedLiterals))
         except Exception as ex:
-            print ("Cannot open literal file '%s' (%s)" % (lname, str(ex)))
+            print ("Failed to get literals (%s)" % str(ex))
             return
-        for line in lfile:
-            line = brent.trim(line)
-            lit = brent.Literal().fromName(line)
-            fixedLiterals.append(lit)
-        lfile.close()
-        print("Read %d literals from file" % len(fixedLiterals))
 
     if excludeSingleton and symbolicStreamline:
         print("ERROR.  Cannot enforce both fixed and symbolic streamline constraints")
