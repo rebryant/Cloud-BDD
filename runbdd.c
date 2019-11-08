@@ -212,17 +212,19 @@ static void usage(char *cmd) {
     printf("\t-f FILE    Read commands from file\n");
     printf("\t-v VLEVEL  Set verbosity level\n");
     printf("\t-M MBYTES  Set memory limit to MBYTES megabytes\n");
+    printf("\t-L FILE    Echo results to FILE\n");
+    printf("\t-t LIMIT   Set time limit (in seconds)\n");
+    printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
+    printf("\t-S SOFT[:ISOFT] Thresholds for attempting soft-and simplification (0-100)\n");
+    printf("\t-g         Allow growth from soft-and simplification\n");
+    printf("\t-p         Preprocess conjuncts with soft-and simplification\n");
+    printf("Distributed BDD options\n");
     printf("\t-c         Use CUDD\n");
     printf("\t-l         Use local refs\n");
     printf("\t-d         Use distributed refs\n");
     printf("\t-H HOST    Use HOST as controller host\n");
     printf("\t-P PORT    Use PORT as controller port\n");
     printf("\t-r         Try to use local router\n");
-    printf("\t-L FILE    Echo results to FILE\n");
-    printf("\t-t LIMIT   Set time limit (in seconds)\n");
-    printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
-    printf("\t-S SOFT[:ISOFT] Thresholds for attempting soft-and simplification (0-100)\n");
-    printf("\t-g         Allow growth from soft-and simplification\n");
     exit(0);
 
 }
@@ -248,7 +250,7 @@ int main(int argc, char *argv[]) {
     chaining_type = CHAIN_ALL;
 
 
-    while ((c = getopt(argc, argv, "hv:M:f:cldH:P:rL:t:C:S:g")) != -1) {
+    while ((c = getopt(argc, argv, "hv:M:f:cldH:P:rL:t:C:S:gp")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -311,6 +313,9 @@ int main(int argc, char *argv[]) {
 	    break;
 	case 'g':
 	    soft_and_allow_growth = 1;
+	    break;
+	case 'p':
+	    preprocess_conjuncts = 1;
 	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);
