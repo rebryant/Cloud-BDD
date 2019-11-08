@@ -9,13 +9,15 @@ import getopt
 import subprocess
 
 import brent
+import find_memsize
 
 def usage(name):
-    print("Usage %s [-h] [-r] [-R] [-C] [-I] [-s SUFFIX] [-t TIME] [-v VERB]")
+    print("Usage %s [-h] [-r] [-R] [-C] [-p] [-I] [-s SUFFIX] [-t TIME] [-v VERB]")
     print(" -h               Print this message")
     print(" -r               Redo runs that didn't complete")
     print(" -R               Redo all runs")
     print(" -C               Disable chaining")
+    print(" -p               Preprocess conjuncts with soft and")
     print(" -I IDIR          Directory containing command files")
     print(" -s SUFFIX        Specify suffix for log file root name")
     print(" -t TIME          Set runtime limit (in seconds)")
@@ -35,7 +37,16 @@ chain = True
 timeLimit = None
 verbLevel = None
 
+preprocessConjuncts = False
+
 cmdPrefix = "cmd>"
+
+# What fraction of total memory should be used
+memoryFraction = 0.90
+
+# How much memory should be used
+# Default is 32 GB, discounted by memoryFraction
+megabytes = int((1 << 15) * memoryFraction)
 
 
 # Check if should run.  Return either None (don't run) or name of log file
@@ -75,9 +86,11 @@ def process(cmdPath, suffix = None):
     if logPath is None:
         print("Skipping %s" % cmdPath)
     else:
-        cmd = ["/".join(homePathFields + runbddFields), '-c']
+        cmd = ["/".join(homePathFields + runbddFields), '-c', '-M', str(megabytes)]
         if not chain:
             cmd += ['-C', 'n']
+        if preprocessConjuncts:
+            cmd += ['-p']
         cmd += ['-f', cmdPath]
         cmd += ['-L', logPath]
         if timeLimit is not None:
@@ -85,7 +98,7 @@ def process(cmdPath, suffix = None):
         if verbLevel is not None:
             cmd += ['-v', str(verbLevel)]
         cmdLine = " ".join(cmd)
-        print("Running %s" % cmdPath)
+        print("Running %s" % cmdLine)
         p = subprocess.Popen(cmd)
         p.wait()
         if p.returncode != 0:
@@ -93,10 +106,13 @@ def process(cmdPath, suffix = None):
 
 
 def run(name, args):
-    global softRedo, hardRedo, chain, timeLimit, verbLevel
+    global softRedo, hardRedo, chain, timeLimit, verbLevel, megabytes, preprocessConjuncts
+    mb = find_memsize.megabytes()
+    if mb > 0:
+        megabytes = int(mb * memoryFraction)
     nameList = []
     suffix = None
-    optlist, args = getopt.getopt(args, 'hrRCI:s:t:v:')
+    optlist, args = getopt.getopt(args, 'hrRCpI:s:t:v:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -107,6 +123,8 @@ def run(name, args):
             hardRedo = True
         elif opt == '-C':
             chain = False
+        elif opt == '-p':
+            preprocessConjuncts = True
         elif opt == '-I':
             template = "%s/*.cmd" % val
             nameList = sorted(glob.glob(template))
