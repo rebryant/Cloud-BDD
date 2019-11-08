@@ -79,6 +79,19 @@ def runLinux(verbose = False):
         show(verbose, "Cannot extract gigabyte count from line '%s'" % data)
         return 0
 
+def megabytes(verbose = False, tryMac = True, tryLinux = True):
+    mb = 0
+    if tryMac:
+        show(verbose, "Trying Mac")
+        mb = runMac(verbose)
+    if mb == 0 and tryLinux:
+        show(verbose, "Trying Linux")
+        mb = runLinux(verbose)
+    if mb == 0:
+        show(verbose, "Couldn't find memory size")
+    return mb
+    
+
 def run(name, args):
     verbose = False
     tryMac = True
@@ -97,14 +110,7 @@ def run(name, args):
         elif opt == '-L':
             tryLinux = True
             tryMac = False
-    if tryMac:
-        show(verbose, "Trying Mac")
-        mb = runMac(verbose)
-    if mb == 0 and tryLinux:
-        show(verbose, "Trying Linux")
-        mb = runLinux(verbose)
-    if mb == 0:
-        show(verbose, "Couldn't find memory size")
+    mb = megabytes(verbose, tryMac, tryLinux)
     print(str(mb))
 
 if __name__ == "__main__":
