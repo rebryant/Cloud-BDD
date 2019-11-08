@@ -164,6 +164,9 @@ class BrentVariable:
             self.row,self.column = self.column,self.row
         return self
 
+    def shiftLevel(self, nlevel):
+        return BrentVariable(prefix = self.prefix, row = self.row, column = self.column, level = nlevel)
+
     # For use in formulas
     def generateName(self):
         var = "%s-r-%d.c-%d.l-%.2d" % (self.prefix, self.row, self.column, self.level)
@@ -331,6 +334,9 @@ class Assignment:
         for lit in lits:
             lit.assign(ckt)
 
+    def auxCount(self):
+        return max([v.level for v in self.asst.keys()])
+
     # Generate assignment consisting of randomly chosen subset
     def randomSample(self, prob = 0.5, seed = None):
         if seed is not None:
@@ -346,6 +352,18 @@ class Assignment:
             nliterals = [lit for lit in self.literals() if variableFilter(lit.variable)]
         return Assignment(nliterals)
 
+    def parseLiteralsFromFile(self, fname):
+        try:
+            lfile = open(fname, 'r')
+        except Exception as ex:
+            raise MatrixException("Cannot open literal file '%s' (%s)" % (fname, str(ex)))
+        for line in lfile:
+            line = trim(line)
+            lit = Literal().fromName(line)
+            self.asst[lit.variable] = lit.phase
+        lfile.close()
+        return self
+
     # Apply dictionary of permutations
     # Possible dictionary keys: 'i', 'j', 'k', 'variable', 'level'
     def permute(self, permutationSet):
@@ -356,6 +374,48 @@ class Assignment:
     def overWrite(self, other):
         for lit in other.literals():
             self.asst[lit.variable] = lit.phase
+
+    # Merge assignments for two levels.
+    # conflictValue defines what to do with conflicting assignment:
+    # It can be either 0, 1, or None (Leave assignment unspecified)
+    # All assignments in fromLevel are moved into toLevel
+    # Levels renumbered to close gap
+    def mergeLevels(self, fromLevel, toLevel, conflictValue):
+        allLiterals = self.literals()
+        fromLiterals = [lit for lit in allLiterals if lit.variable.level == fromLevel]
+        fromVariables = [lit.variable for lit in fromLiterals]
+        toLiterals = [lit for lit in allLiterals if lit.variable.level == toLevel]
+        otherLiterals = [lit for lit in allLiterals if lit.variable.level not in [fromLevel, toLevel]]
+
+        conflictVariables = []
+        newLiterals = []
+
+        for lit in fromLiterals:
+            oldv = lit.variable
+            phase = lit.phase
+            newv = oldv.shiftLevel(toLevel)
+            if newv in fromVariables:
+                toPhase = self.asst[newv]
+                newPhase = phase if phase == toPhase else conflictValue
+                if newPhase is not None:
+                    newLiterals.append(Literal(newv, newPhase))
+                conflictVarariables.append(newv)
+            else:
+                newLiterals.append(Literal(newv, phase))
+
+        for lit in toLiterals:
+            if lit.variable not in conflictVariables:
+                newLiterals.append(lit)
+                                        
+        for lit in otherLiterals:
+            oldv = lit.variable
+            olevel = oldv.level
+            nlevel = olevel if olevel < fromLevel else olevel-1
+            newv = oldv.shiftLevel(nlevel)
+            newLit = Literal(newv, lit.phase)
+            newLiterals.append(newLit)
+        
+        return Assignment(newLiterals)
 
 # Ways to refer to individual Brent equations
 # as well as aggregations of them
@@ -1579,7 +1639,7 @@ class MScheme(MProblem):
         return snode
 
     def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None,
-                                 fixKV = False, varKV = False, fixedLiterals = [], symmetryMap = None):
+                                 fixKV = False, varKV = False, fixedLiterals = None, symmetryMap = None):
         fixedAssignment = Assignment()
         vlist = []
         if fixKV:
@@ -1589,10 +1649,11 @@ class MScheme(MProblem):
         elif varKV:
             vlist = self.kernelTerms.variables()
         # Assign fixed literals.  Some might overlap with kernel terms (assume no conflicts)
-        for lit in fixedLiterals:
-            if lit.variable not in fixedAssignment:
-                fixedAssignment[lit.variable] = lit.phase
-                vlist.append(lit.variable)
+        if fixedLiterals is not None:
+            for lit in fixedLiterals.literals():
+                if lit.variable not in fixedAssignment:
+                    fixedAssignment[lit.variable] = lit.phase
+                    vlist.append(lit.variable)
         for cat in categoryProbabilities.keys():
             prob = categoryProbabilities[cat]
             ca = self.assignment.subset(lambda v: v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
