@@ -353,6 +353,7 @@ class Assignment:
         return Assignment(nliterals)
 
     def parseLiteralsFromFile(self, fname):
+        self.asst = {}
         try:
             lfile = open(fname, 'r')
         except Exception as ex:
@@ -380,13 +381,14 @@ class Assignment:
     # It can be either 0, 1, or None (Leave assignment unspecified)
     # All assignments in fromLevel are moved into toLevel
     # Levels renumbered to close gap
-    def mergeLevels(self, fromLevel, toLevel, conflictValue):
+    def mergeLevels(self, fromLevel, toLevel, kernelVariables):
         allLiterals = self.literals()
         fromLiterals = [lit for lit in allLiterals if lit.variable.level == fromLevel]
-        fromVariables = [lit.variable for lit in fromLiterals]
         toLiterals = [lit for lit in allLiterals if lit.variable.level == toLevel]
+        toVariables = [lit.variable for lit in toLiterals]
         otherLiterals = [lit for lit in allLiterals if lit.variable.level not in [fromLevel, toLevel]]
 
+        # Nonkernel variables for which there is a conflicting assignment
         conflictVariables = []
         newLiterals = []
 
@@ -394,13 +396,21 @@ class Assignment:
             oldv = lit.variable
             phase = lit.phase
             newv = oldv.shiftLevel(toLevel)
-            if newv in fromVariables:
-                toPhase = self.asst[newv]
-                newPhase = phase if phase == toPhase else conflictValue
-                if newPhase is not None:
-                    newLiterals.append(Literal(newv, newPhase))
-                conflictVarariables.append(newv)
-            else:
+            # Prepare to create literal at new level
+            # but watch out for some exceptions
+            assign = True
+            if newv in toVariables:
+                if oldv in kernelVariables:
+                    # Force new variable to be assigned 1
+                    conflictVariables.append(newv)
+                elif self.asst[newv] != phase:
+                    # Conflicting assignment.  Leave unassigned
+                    conflictVariables.append(newv)
+                    assign = False
+                else:
+                    # Consistent, but no need to duplicate
+                    assign = False
+            if assign:
                 newLiterals.append(Literal(newv, phase))
 
         for lit in toLiterals:
@@ -1605,6 +1615,18 @@ class MScheme(MProblem):
             raise MatrixException("Expected %d equations in polynomial file, got %d" %  (self.auxCount, level))
         self.kernelTerms = self.findKernels()
         return self
+
+    # Read set of literals from file and form (partial) scheme
+    def parseLiteralsFromFile(self, fname):
+        self.asst = self.assignment.parseLiteralsFromFile(fname)
+        self.kernelTerms = self.findKernels()
+        return self
+    
+    # Compress into scheme with one less level
+    def mergeLevels(self, fromLevel, toLevel):
+        kernelVariables = self.kernelTerms.variables()
+        nassignment = self.asst.mergeLevels(fromLevel, toLevel)
+        return MScheme(self.dim, self.auxCount-1, self.ckt, nassignment)
 
     # Generate streamline constraints based on singleton exclusion
     def generateStreamline(self):
