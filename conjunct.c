@@ -617,6 +617,9 @@ bool do_conjunct(int argc, char *argv[]) {
     size_t itotal = 0;
     size_t imax = 0;
 
+    ref_t rzero = shadow_zero(smgr);
+    int zcount = 0;
+
     for (i = 2; i < argc; i++) {
 	ref_t rarg = get_ref(argv[i]);
 	if (REF_IS_INVALID(rarg)) {
@@ -627,19 +630,33 @@ bool do_conjunct(int argc, char *argv[]) {
 	    rset_free(set);
 	    return rarg;
 	}
+	if (rarg == rzero) {
+	    zcount++;
+	    report(2, "Conjunct %s == 0", argv[i]);
+	}
 	root_addref(rarg, false);
 	rset_ele *ele = rset_new(rarg);
 	size_t asize = get_size(ele);
 	itotal += asize;
 	imax = SMAX(asize, imax);
 	/* This optimization is effective, but very time consuming */
-	if (preprocess_conjuncts && i > 2) {
+	if (preprocess_conjuncts && i > 2 && zcount == 0) {
 	    report(2, "Applying soft and to simplify argument %d using arguments 1-%d", i-1, i-2);
 	    soft_simplify(ele, set, pthreshold, "preprocess_old2new");
 	    report(2, "Applying soft and to simplify arguments 1-%d using argument %d", i-2, i-1);
 	    soft_simplify(set, ele, pthreshold, "preprocess_new2old");
 	}
 	set = rset_add_element(set, ele);
+    }
+
+    if (zcount > 0) {
+	rset_ele *ele;
+	for (ele = set; ele; ele = ele->next)
+	    root_deref(ele->fun);
+	rset_free(set);
+	assign_ref(argv[1], rzero, false, false);
+	report(1, "Conjunction has %d zero-valued conjuncts, and so is trivially zero", zcount);
+	return true;
     }
 
     /* Gather statistics about initial simplification */
