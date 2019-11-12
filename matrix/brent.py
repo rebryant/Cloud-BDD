@@ -400,7 +400,10 @@ class Assignment:
             # but watch out for some exceptions
             assign = True
             if newv in toVariables:
-                if oldv in kernelVariables:
+                if newv in kernelVariables:
+                    # Will assign based on toLiterals
+                    assign = False
+                elif oldv in kernelVariables:
                     # Force new variable to be assigned 1
                     conflictVariables.append(newv)
                 elif self.asst[newv] != phase:
@@ -1357,6 +1360,11 @@ class MScheme(MProblem):
                                 ok = ok and self.brentCheck(i1, i2, j1, j2, k1, k2)
         return ok
 
+    # Has every Brent variable been assigned a value?
+    def completeAssignment(self):
+        expected = self.dim[0] * self.dim[1] * self.dim[2] * self.auxCount
+        return len(self.assignment) == expected
+
     # Put into canonical form by canonizing kernel and trying all compatible permutations
     # Does not preserve symmetry properties
     def canonize(self):
@@ -1618,14 +1626,14 @@ class MScheme(MProblem):
 
     # Read set of literals from file and form (partial) scheme
     def parseLiteralsFromFile(self, fname):
-        self.asst = self.assignment.parseLiteralsFromFile(fname)
+        self.assignment = self.assignment.parseLiteralsFromFile(fname)
         self.kernelTerms = self.findKernels()
         return self
     
     # Compress into scheme with one less level
     def mergeLevels(self, fromLevel, toLevel):
         kernelVariables = self.kernelTerms.variables()
-        nassignment = self.asst.mergeLevels(fromLevel, toLevel)
+        nassignment = self.assignment.mergeLevels(fromLevel, toLevel, kernelVariables)
         return MScheme(self.dim, self.auxCount-1, self.ckt, nassignment)
 
     # Generate streamline constraints based on singleton exclusion
@@ -1661,35 +1669,31 @@ class MScheme(MProblem):
         return snode
 
     def generateMixedConstraints(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None,
-                                 fixKV = False, varKV = False, fixedLiterals = None, symmetryMap = None):
-        fixedAssignment = Assignment()
-        vlist = []
-        if fixKV:
-            vlist = self.kernelTerms.variables()
-            ka = self.assignment.subset(lambda v: v in vlist)
-            fixedAssignment.overWrite(ka)
-        elif varKV:
-            vlist = self.kernelTerms.variables()
-        # Assign fixed literals.  Some might overlap with kernel terms (assume no conflicts)
-        if fixedLiterals is not None:
-            for lit in fixedLiterals.literals():
-                if lit.variable not in fixedAssignment:
-                    fixedAssignment[lit.variable] = lit.phase
-                    vlist.append(lit.variable)
-        for cat in categoryProbabilities.keys():
-            prob = categoryProbabilities[cat]
-            ca = self.assignment.subset(lambda v: v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
-            fixedAssignment.overWrite(ca)
-        if len(fixedAssignment) > 0:
-            if sum(categoryProbabilities.values()) > 0.0:
-                self.ckt.comment("Fixed assignments, generated from scheme with signature %s" % self.sign())
-            fixedAssignment.assign(self.ckt)
+                                 fixKV = False, varKV = False, symmetryMap = None):
+        if self.completeAssignment():
+            fixedAssignment = Assignment()
+            vlist = []
+            if fixKV:
+                vlist = self.kernelTerms.variables()
+                ka = self.assignment.subset(lambda v: v in vlist)
+                fixedAssignment.overWrite(ka)
+            elif varKV:
+                vlist = self.kernelTerms.variables()
+            for cat in categoryProbabilities.keys():
+                prob = categoryProbabilities[cat]
+                ca = self.assignment.subset(lambda v: v.prefix == cat and v not in vlist).randomSample(prob, seed = seed)
+                fixedAssignment.overWrite(ca)
+            if len(fixedAssignment) > 0:
+                self.ckt.comment("Fixed assignment of %d Brent variables, generated from scheme %s" % (len(fixedAssignment), self.sign()))
+        else:
+            fixedAssignment = self.assignment
+            self.ckt.comment("Fixed assignment of %d Brent variables generated from partial assignment" % (len(fixedAssignment)))
+        fixedAssignment.assign(self.ckt)
         fixedVariables = [v for v in fixedAssignment.variables()]
         self.declareVariables(fixedVariables, symmetryMap)
 
-
     def generateProgram(self, categoryProbabilities = {'alpha':1.0, 'beta':1.0, 'gamma':1.0}, seed = None, timeLimit = None,
-                        fixKV = False, varKV = False, fixedLiterals = [], excludeSingleton = False, breadthFirst = False, levelList = None,
+                        fixKV = False, varKV = False, excludeSingleton = False, breadthFirst = False, levelList = None,
                         useZdd = False, symbolicStreamline = False, boundNonKernels = False, checkSymmetry = False):
         plist = list(categoryProbabilities.values())
         isFixed = functools.reduce(lambda x, y: x*y, plist) == 1.0
@@ -1709,8 +1713,6 @@ class MScheme(MProblem):
         if varKV:
             khash = self.kernelTerms.sign()
             self.ckt.comment("Leaving kernel terms from kernel %s variable" % khash)
-        if len(fixedLiterals) > 0:
-            self.ckt.comment("Fixing %d literals" % len(fixedLiterals))
         if excludeSingleton:
             self.ckt.comment("Enforcing singleton exclusion")
         if symbolicStreamline:
@@ -1721,7 +1723,7 @@ class MScheme(MProblem):
             symmetryMap = None
         if symmetryMap is not None:
             self.ckt.comment("Exploiting symmetry constraints")
-        self.generateMixedConstraints(categoryProbabilities, seed, fixKV, varKV, fixedLiterals, symmetryMap)
+        self.generateMixedConstraints(categoryProbabilities, seed, fixKV, varKV, symmetryMap)
         streamlineNode = None
         if excludeSingleton:
             streamlineNode = self.generateStreamline()
