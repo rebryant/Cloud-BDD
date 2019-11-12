@@ -168,17 +168,15 @@ def run(name, args):
 
     if lname is not None:
         try:
-            fixedLiterals = brent.Assignment().parseLiteralsFromFile(lname)
-            print("%d literals set to fixed values" % len(fixedLiterals))
-        except Exception as ex:
-            print ("Failed to get literals (%s)" % str(ex))
+            s.parseLiteralsFromFile(lname)
+        except brent.MatrixException as ex:
+            print ("Parse of literal file '%s' failed: %s" % (lname, str(ex)))
             return
 
     if excludeSingleton and symbolicStreamline:
         print("ERROR.  Cannot enforce both fixed and symbolic streamline constraints")
     else:
         s.generateProgram(categoryProbabilities, seed = seed, timeLimit = timeLimit, fixKV = fixKV, 
-                          fixedLiterals = fixedLiterals,
                           excludeSingleton = excludeSingleton, 
                           breadthFirst = breadthFirst, levelList = levelList, useZdd = useZdd, symbolicStreamline = symbolicStreamline,
                           boundNonKernels = boundNonKernels, checkSymmetry = checkSymmetry
