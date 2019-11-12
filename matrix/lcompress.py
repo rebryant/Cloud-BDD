@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 # Given set of literals, compress into set with one less level
-# This should be run within the directory matrix/mm-data/compress-levels
+# This should be run within the directory mm-data/compress-levels
 
 import sys
 import circuit
@@ -17,7 +17,7 @@ sourceAuxCount = 23
 ckt = circuit.Circuit()
 
 def outName(root, fromLevel, toLevel):
-    return "%s-%.2d-%.2d.lit" % (root, fromLevel, toLevel)
+    return "%s-m%.2d+%.2d.lit" % (root, fromLevel, toLevel)
 
 def generate(scheme, fromLevel, toLevel, root):
     snew = scheme.mergeLevels(fromLevel, toLevel)
