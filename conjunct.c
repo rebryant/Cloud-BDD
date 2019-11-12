@@ -204,6 +204,17 @@ static bool rset_is_singleton(rset_ele *set) {
     return !rset_is_empty(set) && rset_is_empty(set->next);
 }
 
+static bool rset_contains_zero(rset_ele *set) {
+    ref_t rzero = shadow_zero(smgr);
+    rset_ele *ptr;
+    for (ptr = set; ptr; ptr = ptr->next) {
+	if (ptr->fun == rzero)
+	    return true;
+    }
+    return false;
+}
+
+
 /*** Operations on rset elements ***/
 
 static size_t get_size(rset_ele *ptr) {
@@ -476,7 +487,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	return rval;
     }
     
-    while (!rset_is_singleton(set)) {
+    while (!rset_is_singleton(set) && !rset_contains_zero(set)) {
 	compute_size_range(set);
 	clear_candidates(candidates);
 	rset_ele *ptr1 = NULL;
@@ -562,14 +573,25 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    data->result_size = get_size(nset);
 	report_combination(set, data);
     }
-    report(1, "Conjunction of %zd elements.  %zd aborts.  Max argument %zd.  Max size limit %zd",
-	   argument_count, abort_count, max_argument_size, max_size_limit);
 
-    ref_t rval = set->fun;
-    rset_ele_free(set);
+    ref_t rval;
 
+    if (rset_is_singleton(set)) {
+	report(1, "Conjunction of %zd elements.  %zd aborts.  Max argument %zd.  Max size limit %zd",
+	       argument_count, abort_count, max_argument_size, max_size_limit);
+	rval = set->fun;
+	rset_free(set);
+    } else {
+	/* Must contain zero.  Delete remaining arguments */
+	rset_ele *ele;
+	for (ele = set; ele; ele = ele->next) {
+	    root_deref(ele->fun);
+	}
+	rset_free(set);
+	rval = shadow_zero(smgr);
+	report(1, "Conjunction of %zd elements.  Stopped when encountered zero-valued conjunct");
+    }
     return rval;
-
 }
 
 /* Compute conjunction of set (destructive) */
