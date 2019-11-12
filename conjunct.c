@@ -589,7 +589,8 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	}
 	rset_free(set);
 	rval = shadow_zero(smgr);
-	report(1, "Conjunction of %zd elements.  Stopped when encountered zero-valued conjunct");
+	report(1, "Conjunction of %zd elements.  Encountered zero-valued conjunct with %zd conjuncts remaining",
+	       argument_count, rset_length(set));
     }
     return rval;
 }
