@@ -382,6 +382,10 @@ class Assignment:
     # All assignments in fromLevel are moved into toLevel
     # Levels renumbered to close gap
     def mergeLevels(self, fromLevel, toLevel, kernelVariables):
+        if fromLevel == toLevel:
+            raise MatrixException("Cannot merge level with itself")
+        if fromLevel < toLevel:
+            return self.mergeLevels(toLevel, fromLevel, kernelVariables)
         allLiterals = self.literals()
         fromLiterals = [lit for lit in allLiterals if lit.variable.level == fromLevel]
         toLiterals = [lit for lit in allLiterals if lit.variable.level == toLevel]
