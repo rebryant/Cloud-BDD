@@ -9,12 +9,14 @@ import brent
 import getopt
 
 def usage(name):
-    print("Usage: %s [-h] [-r ROOT] [-L LFILE] [-m MODE] [-p AUX]" % name)
+    print("Usage: %s [-h] [-r ROOT] [-L LFILE] [-m MODE] [-p AUX] [-t TMIN] [-f FMIN]" % name)
     print("    -h       Print this message")
     print("    -r ROOT  Set root name of literal file")
     print("    -L LFILE Specify name of source literal file")
     print("    -m MODE  Specify level merging mode")
     print("    -p AUX   Set number of auxilliary variables in source")
+    print("    -t TMIN  Set minimum level to merge into")
+    print("    -f FMIN  Set minimum level to merge from")
 
 
 root = "smirnov"
@@ -22,6 +24,8 @@ infile = "smirnov-family.lit"
 mode = 2
 dim = (3,3,3)
 sourceAuxCount = 23
+toMin = 1
+fromMin = 1
 
 ckt = circuit.Circuit()
 
@@ -43,8 +47,8 @@ def generate(scheme, fromLevel, toLevel):
     print("Wrote %d literals to %s" % (len(lits), fname))
     
 def run(name, args):
-    global root, infile, mode, sourceAuxCount
-    optlist, args = getopt.getopt(args, 'hr:L:m:p:')
+    global root, infile, mode, sourceAuxCount, toMin, fromMin
+    optlist, args = getopt.getopt(args, 'hr:L:m:p:t:f:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -57,13 +61,19 @@ def run(name, args):
             mode = int(val)
         elif opt == '-p':
             sourceAuxCount = int(val)
+        elif opt == '-t':
+            toMin = int(val)
+        elif opt == '-f':
+            fromMin = int(val)
+        
     try:
         scheme = brent.MScheme(dim, sourceAuxCount, ckt).parseLiteralsFromFile(infile)
     except Exception as ex:
         print("Couldn't get initial literals from %s (%s)" % (infile, str(ex)))
         return
-    for toLevel in brent.unitRange(sourceAuxCount):
-        for fromLevel in range(toLevel+1, sourceAuxCount+1):
+    for toLevel in range(toMin, sourceAuxCount+1):
+        fromStart = max(toLevel+1, fromMin)
+        for fromLevel in range(fromStart, sourceAuxCount+1):
             generate(scheme, fromLevel, toLevel)
         
 if __name__ == "__main__":
