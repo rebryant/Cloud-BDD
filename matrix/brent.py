@@ -377,11 +377,18 @@ class Assignment:
             self.asst[lit.variable] = lit.phase
 
     # Merge assignments for two levels.
-    # conflictValue defines what to do with conflicting assignment:
-    # It can be either 0, 1, or None (Leave assignment unspecified)
     # All assignments in fromLevel are moved into toLevel
     # Levels renumbered to close gap
-    def mergeLevels(self, fromLevel, toLevel, kernelVariables):
+    # mergeMode specifies which variables are fixed and which are symbolic:
+    # 0: Fixed variables from fromLevel and toLevel are fixed EXCEPT
+    #    when there is a conflicting assignment.  Then: 1) kernel variable dominate
+    #    Any conflict between two nonkernel variables result in that variable being kept symbolic
+    # 1: Only kernel variables from fromLevel and toLevel are fixed
+    # 2: Same as 1, but also any nonkernel variable at any level whose counterpart was one of these
+    #    kernel variables is kept symbolic
+    # 3: Same as 1, but also any nonkernel variable at any level whose counterpart was in fromLevel or toLevel
+    #    is kept symbolic
+    def mergeLevels(self, fromLevel, toLevel, kernelVariables, mergeMode):
         if fromLevel == toLevel:
             raise MatrixException("Cannot merge level with itself")
         if fromLevel < toLevel:
@@ -392,23 +399,30 @@ class Assignment:
         toVariables = [lit.variable for lit in toLiterals]
         otherLiterals = [lit for lit in allLiterals if lit.variable.level not in [fromLevel, toLevel]]
 
-        # Nonkernel variables for which there is a conflicting assignment
-        conflictVariables = []
+        # Assemble new set of literals
         newLiterals = []
+        # Variables for which there is a conflicting assignment
+        conflictVariables = []
+        # Variables for which other levels must keep their counterparts symbolic
+        checkVariables = []
+
 
         for lit in fromLiterals:
             oldv = lit.variable
+            isKernel = oldv in kernelVariables
             phase = lit.phase
             newv = oldv.shiftLevel(toLevel)
+            if (mergeMode == 2 and isKernel) or mergeMode == 3:
+                checkVariables.append(newv)
             # Prepare to create literal at new level
             # but watch out for some exceptions
-            assign = True
+            assign = isKernel or mergeMode == 0
             if newv in toVariables:
                 if newv in kernelVariables:
                     # Will assign based on toLiterals
                     assign = False
-                elif oldv in kernelVariables:
-                    # Force new variable to be assigned 1
+                elif isKernel:
+                    # Force this assignment to prevail
                     conflictVariables.append(newv)
                 elif self.asst[newv] != phase:
                     # Conflicting assignment.  Leave unassigned
@@ -421,11 +435,17 @@ class Assignment:
                 newLiterals.append(Literal(newv, phase))
 
         for lit in toLiterals:
-            if lit.variable not in conflictVariables:
+            newv = lit.variable
+            isKernel = newv in kernelVariables
+            if newv not in checkVariables and ((mergeMode == 2 and isKernel) or mergeMode == 3):
+                checkVariables.append(newv)
+            if isKernel or (mergeMode == 0 and newv not in conflictVariables):
                 newLiterals.append(lit)
                                         
         for lit in otherLiterals:
             oldv = lit.variable
+            if oldv not in kernelVariables and oldv.shiftLevel(toLevel) in checkVariables:
+                continue
             olevel = oldv.level
             nlevel = olevel if olevel < fromLevel else olevel-1
             newv = oldv.shiftLevel(nlevel)
@@ -1635,9 +1655,9 @@ class MScheme(MProblem):
         return self
     
     # Compress into scheme with one less level
-    def mergeLevels(self, fromLevel, toLevel):
+    def mergeLevels(self, fromLevel, toLevel, mergeMode = 0):
         kernelVariables = self.kernelTerms.variables()
-        nassignment = self.assignment.mergeLevels(fromLevel, toLevel, kernelVariables)
+        nassignment = self.assignment.mergeLevels(fromLevel, toLevel, kernelVariables, mergeMode)
         return MScheme(self.dim, self.auxCount-1, self.ckt, nassignment)
 
     # Generate streamline constraints based on singleton exclusion
