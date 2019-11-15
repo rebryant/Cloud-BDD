@@ -825,6 +825,7 @@ static word_t uop_node_mark(uop_mgr_ptr umgr, ref_t r, word_t hival,
     return (word_t) 1;
 }
 
+#if 0
 /* Convert set of variables into bit vector */
 static word_t vset2bv(set_ptr set) {
     word_t vset = 0;
@@ -837,6 +838,7 @@ static word_t vset2bv(set_ptr set) {
     }
     return vset;
 }
+#endif
 
 /* Convert bit vector into set of variables */
 static set_ptr bv2vset(word_t vset) {

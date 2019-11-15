@@ -71,6 +71,7 @@ static char *prompt = "cmd>";
 static cmd_function quit_helpers[MAXQUIT];
 static int quit_helper_cnt = 0;
 
+#if 0
 /* Debugging */
 /* Print contents of buffer.  Turn returns into \n */
 static void show_buf(char *buf, int cnt) {
@@ -88,6 +89,7 @@ static void show_buf(char *buf, int cnt) {
     *dest++ = '\0';
     printf("Buffer '%s'\n", mybuf);
 }
+#endif
 
 
 bool do_quit_cmd(int argc, char *argv[]);
