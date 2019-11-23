@@ -4,6 +4,7 @@
 import subprocess
 import sys
 import getopt
+import find_memsize
 
 rdir = "../.."
 sdir = rdir + "/scripts"
@@ -17,6 +18,9 @@ uformats = [
             "onh-fast-q",
             "onh-slow-v"
 ]
+
+# What fraction of total memory should be used
+memoryFraction = 0.95
 
 
 # Class to define use of ZDDs
@@ -74,8 +78,12 @@ def benchrun(nstart = 8, nend = 14, fspec = "onh-fast-q", ctype = 'n', ztype = Z
                         flags = ["-c", "-v", "1", "-f", fname]
                         if not old:
                             flags = flags + ["-C", ct]
+                        mb = find_memsize.megabytes()
+                        if mb > 0:
+                            megabytes = int(mb * memoryFraction)
+                            flags += ['-M', str(megabytes)]
                         clist = prog + flags
-                        print "Running %s" % clist
+                        print "Running '%s'" % " ".join(clist)
                         rcode = subprocess.call(clist, stdout = logfile, stderr = logfile)
 
     
