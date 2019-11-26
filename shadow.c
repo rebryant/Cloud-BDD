@@ -324,7 +324,7 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 	unsigned int cacheSize = 1u<<22; /* Default 262144 */
 	unsigned long int maxMemory = (1u<<31) + 32UL * 1024 * 1024 * 1024;
 	if (mblimit > 0) {
-	    unsigned long int newLimit = mblimit * 1024 * 1024;
+	    unsigned long int newLimit = mblimit * 1024L * 1024L;
 	    double mscale = (double) newLimit / maxMemory;
 	    maxMemory = newLimit;
 	    if (mscale > 1.0) {
