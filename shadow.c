@@ -45,6 +45,11 @@ typedef enum { IS_BDD, IS_ZDD, IS_ADD } dd_type_t;
 
 bool fatal = false;
 
+/* GC statistics */
+unsigned int gc_count = 0;
+long gc_milliseconds = 0;
+
+
 bool do_ref(shadow_mgr mgr) {
     return mgr->do_local || mgr->do_dist;
 }
@@ -271,6 +276,21 @@ static bool check_refs(shadow_mgr mgr, ref_t rlocal, ref_t rdist) {
     return true;
 }
 
+int pre_gc_hook(DdManager *mgr, const char *str, void * ptr) {
+    gc_count = Cudd_ReadGarbageCollections(mgr) + 1;
+    report(4, "Garbage collection #%d started", gc_count);
+    return 1;
+}
+
+int post_gc_hook(DdManager *mgr, const char *str, void * ptr) {
+    long new_gc_milliseconds = Cudd_ReadGarbageCollectionTime(mgr);
+    double delta = 1e-3 * (new_gc_milliseconds - gc_milliseconds);
+    gc_milliseconds = new_gc_milliseconds;
+    report(2, "Garbage collection #%d completed in %.3f seconds", delta, gc_count);
+    return 1;
+}
+
+
 shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t chaining) {
     if (!(do_cudd || do_local || do_dist)) {
 	err(true, "Must have at least one active evaluation mode");
@@ -303,12 +323,21 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 	unsigned int numSlots = 1u<<18; /* Default 256 */
 	unsigned int cacheSize = 1u<<22; /* Default 262144 */
 	unsigned long int maxMemory = (1u<<31) + 32UL * 1024 * 1024 * 1024;
-	if (mblimit > 0)
-	    maxMemory = mblimit * 1024 * 1024;
-	report(2, "Setting memory limit to %zd", maxMemory);
+	if (mblimit > 0) {
+	    unsigned long int newLimit = mblimit * 1024L * 1024L;
+	    double mscale = (double) newLimit / maxMemory;
+	    maxMemory = newLimit;
+	    if (mscale > 1.0) {
+		numSlots = (unsigned int) (mscale * numSlots);
+		cacheSize = (unsigned int) (mscale * cacheSize);
+	    }
+	}
+	report(2, "Setting memory limit to %.2f MB.  numSlots to %d.  cacheSize to %d", (double) maxMemory / 1e6, numSlots, cacheSize);
 	mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);
 	Cudd_AutodynDisable(mgr->bdd_manager);
 	Cudd_AutodynDisableZdd(mgr->bdd_manager);
+	Cudd_AddHook(mgr->bdd_manager, pre_gc_hook, CUDD_PRE_GC_HOOK);
+	Cudd_AddHook(mgr->bdd_manager, post_gc_hook, CUDD_POST_GC_HOOK);
 #ifndef NO_CHAINING
 	Cudd_ChainingType ct = CUDD_CHAIN_NONE;
 	switch (chaining) {

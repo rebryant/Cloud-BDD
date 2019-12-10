@@ -323,6 +323,9 @@ int main(int argc, char *argv[]) {
 	    break;
 	}
     }
+    set_verblevel(level);
+    if (logfile_name)
+	set_logfile(logfile_name);
     bdd_init();
     init_cmd();
     if (do_dist) {
@@ -331,9 +334,6 @@ int main(int argc, char *argv[]) {
 	set_agent_stat_helper(do_summary_stat);
     }
     console_init(do_dist);
-    set_verblevel(level);
-    if (logfile_name)
-	set_logfile(logfile_name);
     add_quit_helper(bdd_quit);
     if (signal(SIGTERM, sigterm_handler) == SIG_ERR)
 	err(false, "Couldn't install signal handler");
