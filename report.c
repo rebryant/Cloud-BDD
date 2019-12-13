@@ -17,12 +17,14 @@
 FILE *errfile = NULL;
 FILE *verbfile = NULL;
 FILE *logfile = NULL;
+double first_time = 0.0;
 
 int verblevel = 0;
-void init_files(FILE *efile, FILE *vfile)
+static void init_files(FILE *efile, FILE *vfile)
 {
     errfile = efile;
     verbfile = vfile;
+    init_time(&first_time);
 }
 
 static char fail_buf[1024];
@@ -319,6 +321,12 @@ double delta_time(double *timep) {
     double delta = current_time - *timep;
     *timep = current_time;
     return delta;
+}
+
+/* Total seconds since beginning of execution */
+double elapsed_time() {
+    double start_time = first_time;
+    return delta_time(&start_time);
 }
 
 /* Number of bytes resident in physical memory */

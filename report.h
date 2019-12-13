@@ -8,7 +8,7 @@
 /* Buffer sizes */
 #define MAX_CHAR 512
 
-void init_files(FILE *errfile, FILE *verbfile);
+// void init_files(FILE *errfile, FILE *verbfile);
 
 bool set_logfile(char *file_name);
 FILE *get_logfile();
@@ -72,6 +72,9 @@ void init_time(double *timep);
 /* Compute time since last call with this timer
    and reset timer */
 double delta_time(double *timep);
+
+/* Total seconds since beginning of execution */
+double elapsed_time();
 
 /** Memory usage **/
 

@@ -100,7 +100,6 @@ typedef struct RELE {
 typedef struct {
     size_t result_size;
     size_t max_size;
-    size_t sum_size;
     size_t total_size;
 } conjunction_data;
 
@@ -344,7 +343,6 @@ static ref_t and_check(rset_ele *set) {
 static void report_combination(rset_ele *set, conjunction_data *data) {
     size_t result_size = data ? data->result_size : 0;
     size_t max_size = 0;
-    size_t sum_size = 0;
     size_t count = rset_length(set);
     /* Must convert to other form of set */
     set_ptr pset = word_set_new();
@@ -358,19 +356,17 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
 	    set_insert(pset, (word_t) r);
 	    size_t nsize = cudd_single_size(smgr, r);
 	    max_size = SMAX(max_size, nsize);
-	    sum_size += nsize;
 	}
 	ptr = ptr->next;
     }
     size_t total_size = cudd_set_size(smgr, pset);
-    double ratio = (double) total_size/sum_size;
-    report(1, "Partial result with %zd values.  Max size = %zd.  Sum of sizes = %d.  Combined size = %zd.  (Sharing factor = %.2f) Computed size = %zd",
-	   set_size, max_size, sum_size, total_size, ratio, result_size);
+    double elapsed = elapsed_time();
+    report(1, "Elapsed time %.1f.  Partial result with %zd values.  Max size = %zd.  Combined size = %zd.  Computed size = %zd",
+	   elapsed, set_size, max_size, total_size, result_size);
     set_free(pset);
     if (data) {
 	data->total_size = SMAX(data->total_size, total_size);
 	data->max_size = SMAX(data->max_size, max_size);
-	data->sum_size = SMAX(data->sum_size, sum_size);
     }
 }
 
@@ -600,7 +596,6 @@ static ref_t rset_conjunct(rset_ele *set) {
     conjunction_data cdata;
     cdata.max_size = 0;
     cdata.total_size = 0;
-    cdata.sum_size = 0;
 
     ref_t rprod = REF_INVALID;
 
@@ -620,8 +615,8 @@ static ref_t rset_conjunct(rset_ele *set) {
     }
 
     size_t rsize = cudd_single_size(smgr, rval);
-    report(0, "Conjunction result %zd Max_BDD %zd Max_combined %zd Max_sum %zd",
-	   rsize, cdata.max_size, cdata.total_size, cdata.sum_size);
+    report(0, "Conjunction result %zd Max_BDD %zd Max_combined %zd",
+	   rsize, cdata.max_size, cdata.total_size);
 
     return rval;
 }
