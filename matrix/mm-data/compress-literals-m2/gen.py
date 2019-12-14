@@ -19,7 +19,7 @@ fromMin = 6
 
 gprogram = "../../mm_generate.py"
 destAuxCount = 22
-time = 1200
+time = 1800
 template = "smirnov-m*+*.lit"
 singleton = True
 
