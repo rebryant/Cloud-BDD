@@ -585,8 +585,9 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	}
 	rset_free(set);
 	rval = shadow_zero(smgr);
-	report(1, "Conjunction of %zd elements.  Encountered zero-valued conjunct with %zd conjuncts remaining",
-	       argument_count, rset_length(set));
+	double elapsed = elapsed_time();
+	report(1, "Elapsed time %.1f.  Conjunction of %zd elements.  Encountered zero-valued conjunct with %zd conjuncts remaining",
+	       elapsed, argument_count, rset_length(set));
     }
     return rval;
 }
@@ -615,8 +616,9 @@ static ref_t rset_conjunct(rset_ele *set) {
     }
 
     size_t rsize = cudd_single_size(smgr, rval);
-    report(0, "Conjunction result %zd Max_BDD %zd Max_combined %zd",
-	   rsize, cdata.max_size, cdata.total_size);
+    double elapsed = elapsed_time();
+    report(0, "Elapsed time %.1f.  Conjunction result %zd Max_BDD %zd Max_combined %zd",
+	   elapsed, rsize, cdata.max_size, cdata.total_size);
 
     return rval;
 }
@@ -688,8 +690,9 @@ bool do_conjunct(int argc, char *argv[]) {
     }
     double tratio = (double) itotal/ntotal;
     double mratio = (double) imax/nmax;
-    report(1, "Initial simplification.  Total %zd --> %zd (%.3fX).  Max %zd --> %zd (%.3fX)",
-	   itotal, ntotal, tratio, imax, nmax, mratio);
+    double elapsed = elapsed_time();
+    report(1, "Elapsed time %.1f.  Initial simplification.  Total %zd --> %zd (%.3fX).  Max %zd --> %zd (%.3fX)",
+	   elapsed, itotal, ntotal, tratio, imax, nmax, mratio);
 
     ref_t rval = rset_conjunct(set);
     if (REF_IS_INVALID(rval)) {
