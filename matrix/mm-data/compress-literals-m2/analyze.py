@@ -19,13 +19,13 @@ import re
 import getopt
 
 def usage(name):
-    print("%s: [-h] [-u] [-r a|m|c] f1.log f2.log ..." % name)
+    print("%s: [-h] [-u] [-r a|m|c|p] f1.log f2.log ..." % name)
     print(" -h      Print this message")
     print(" -u      Uniform time format (for charting with Excel)")
-    print(" -r RPT  Specify reporting parameter; a (all combined), m (max), c (computed)")
+    print(" -r RPT  Specify reporting parameter; a (all combined), m (max), c (computed) p (products)")
 
 totalConjuncts = 81
-# Choices are 'combined', 'max', or 'computed'
+# Choices are 'combined', 'max', 'computed', or 'products'
 reportField = 'combined'
 resolution = 10.0
 floatFormat = "%.0f"
@@ -57,33 +57,33 @@ def resolve(x):
 def getInitial(line):
     m = initialMatcher.match(line)
     if m:
-        conjunctCount = totalConjuncts
+        productCount = 0
         elapsed = resolve(float(m.group(1)))
         combinedSize = int(m.group(2))
         maxSize = int(m.group(3))
         computedSize = maxSize
-        return {"type" : "initial", "elapsed" : elapsed, "conjuncts" : conjunctCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
+        return {"type" : "initial", "elapsed" : elapsed, "products" : productCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
 
 def getPartial(line):
     m = partialMatcher.match(line)
     if m:
         elapsed = resolve(float(m.group(1)))
-        conjunctCount = int(m.group(2))
+        productCount = totalConjuncts - int(m.group(2))
         maxSize = int(m.group(3))
         combinedSize = int(m.group(4))
         computedSize = int(m.group(5))
-        return {"type" : "partial", "elapsed" : elapsed, "conjuncts" : conjunctCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
+        return {"type" : "partial", "elapsed" : elapsed, "products" : productCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
     return None
 
 def getZero(line):
     m = zeroMatcher.match(line)
     if m:
         elapsed = resolve(float(m.group(1)))
-        conjunctCount = int(m.group(2))
+        productCount = totalConjuncts - int(m.group(2))
         combinedSize = 1
         computedSize = 1
         maxSize = 1
-        return {"type" : "zero", "elapsed" : elapsed, "conjuncts" : conjunctCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
+        return {"type" : "zero", "elapsed" : elapsed, "products" : productCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
     return None
 
 def getTimeout(line):
@@ -133,8 +133,8 @@ def getRoot(fname):
 # Generate dictionary from file:
 # root: root levels
 # type: completed | zero | timeout
-# partials: Dictionary indexed by conjunct count.
-#             elapsed, combined, max, computed
+# partials: Dictionary indexed by product elapsed.
+#             elapsed, combined, max, computed, and products
 # maxTime
 
 def processFile(fname):
@@ -146,7 +146,7 @@ def processFile(fname):
         print("Couldn't open file %s (%s)" % (fname, str(ex)))
         return
     lastE = None
-    conjunctCount = totalConjuncts
+    productCount = 0
     for line in f:
         d = processLine(line)
         if d is None:
@@ -154,7 +154,7 @@ def processFile(fname):
         t = d["type"]
         if t in ["initial", "partial"]:
             # Create event
-            e = { k : d[k] for k in ['elapsed', 'max', 'combined', 'computed', 'conjuncts'] }
+            e = { k : d[k] for k in ['elapsed', 'max', 'combined', 'computed', 'products'] }
             elapsed = d['elapsed']
             resultDict['partials'][elapsed] = e
             lastE = e
@@ -163,10 +163,9 @@ def processFile(fname):
             resultDict['type'] = t
             # Create terminal event
             elapsed = d['elapsed']
-            conjunctCount -= 1
-            e = { 'elapsed' : elapsed, 'conjunct' : conjunctCount }
+            e = { 'elapsed' : elapsed, 'product' : productCount }
             if lastE is not None:
-                for k in ['max', 'combined', 'computed']:
+                for k in ['max', 'combined', 'computed', 'products']:
                     e[k] = lastE[k]
             resultDict['partials'][elapsed] = e
             if showTimeout:
@@ -177,8 +176,8 @@ def processFile(fname):
             # Create terminal event
             e = { k : d[k] for k in ['elapsed', 'max', 'combined', 'computed'] }
             elapsed = d['elapsed']
-            conjunctCount -= 1
-            e['conjuncts'] = conjunctCount
+            productCount += 1
+            e['products'] = productCount
             resultDict['partials'][elapsed] = e
             maxTime = max(maxTime, elapsed)
             break
@@ -260,8 +259,10 @@ def run(name, args):
                 reportField = 'max'
             elif val == 'c':
                 reportField = 'computed'
+            elif val == 'p':
+                reportField = 'products'
             else:
-                print("Reporting field must be a, m, or c")
+                print("Reporting field must be a, m, c, or p")
                 return
         else:
             print("Unknown option '%s'" % opt)
