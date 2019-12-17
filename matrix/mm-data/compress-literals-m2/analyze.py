@@ -35,10 +35,11 @@ uniformTime = False
 
 # Are we in a pass to collect all time points?
 recordTime = True
-maxTime = 0
+globalMaxTime = 0
 timePoints = []
 
-
+# Should we continue display of line to timeout?
+showTimeout = False
 
 # Expressions
 initialMatcher = re.compile("Elapsed time ([0-9]+\.[0-9]+).  Initial simplification.  Total ([0-9]+) .*  Max ([0-9]+)")
@@ -103,7 +104,7 @@ def getCompleted(line):
     return None
 
 def processLine(line):
-    global timePoints, maxTime
+    global timePoints, globalMaxTime
     d = getInitial(line)
     if d is None:
         d = getPartial(line)
@@ -117,8 +118,9 @@ def processLine(line):
         if 'elapsed' in d:
             elapsed = d['elapsed']
             if recordTime and elapsed not in timePoints:
-                timePoints.append(elapsed)
-                maxTime = max(maxTime, elapsed)
+                if showTimeout or d['type'] != 'timeout':
+                    timePoints.append(elapsed)
+                    globalMaxTime = max(globalMaxTime, elapsed)
     return d
 
 def getRoot(fname):
@@ -133,9 +135,11 @@ def getRoot(fname):
 # type: completed | zero | timeout
 # partials: Dictionary indexed by conjunct count.
 #             elapsed, combined, max, computed
+# maxTime
 
 def processFile(fname):
-    resultDict = { "root" : getRoot(fname), "partials" : {}, "type" : "unknown" }
+    maxTime = 0
+    resultDict = { "root" : getRoot(fname), "partials" : {}, "type" : "unknown",  }
     try:
         f = open(fname, 'r')
     except Exception as ex:
@@ -154,6 +158,7 @@ def processFile(fname):
             elapsed = d['elapsed']
             resultDict['partials'][elapsed] = e
             lastE = e
+            maxTime = max(maxTime, elapsed)
         elif t in [ 'timeout' ]:
             resultDict['type'] = t
             # Create terminal event
@@ -164,6 +169,8 @@ def processFile(fname):
                 for k in ['max', 'combined', 'computed']:
                     e[k] = lastE[k]
             resultDict['partials'][elapsed] = e
+            if showTimeout:
+                maxTime = max(maxTime, elapsed)
             break
         elif t in [ 'zero', 'completed' ]:
             resultDict['type'] = t
@@ -173,16 +180,18 @@ def processFile(fname):
             conjunctCount -= 1
             e['conjuncts'] = conjunctCount
             resultDict['partials'][elapsed] = e
+            maxTime = max(maxTime, elapsed)
             break
         else:
             print("Unknown line type '%s'" % t)
     f.close()
+    resultDict['maxTime'] = maxTime
     return resultDict
 
 def generateUniformTimes():
     global timePoints
     # Create new set of time points
-    ntimes = int(maxTime/resolution) + 1
+    ntimes = int(globalMaxTime/resolution) + 1
     timePoints = [resolution * i for i in range(ntimes)]
     ifields = [""]
     ifields += [floatFormat % t for t in timePoints]
@@ -190,13 +199,14 @@ def generateUniformTimes():
 
 def generateUniformOutput(fileDict):
     partials = fileDict['partials']
+    maxTime = fileDict['maxTime']
     tfields = ["" for t in timePoints]
     for i in range(len(timePoints)):
         t = timePoints[i]
         if t in partials:
             e = partials[t]
             tfields[i] = str(e[reportField])
-        elif i > 0 and tfields[i-1] != "1":
+        elif i > 0 and t <= maxTime:
             tfields[i] = tfields[i-1]
     label = fileDict['root'] + "-" + fileDict['type'][0]
     vfields = [label] + tfields
