@@ -21,7 +21,7 @@
 #include "shadow.h"
 
 #ifndef CUDD_VERSION
-#define CUDD_VERSION "3.0.0"
+#define CUDD_VERSION "3.1.0"
 #endif
 
 /* From cuddInt.h */
