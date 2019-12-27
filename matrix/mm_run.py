@@ -16,7 +16,7 @@ def usage(name):
     print(" -h               Print this message")
     print(" -r               Redo runs that didn't complete")
     print(" -R               Redo all runs")
-    print(" -C               Disable chaining")
+    print(" -C               Use CUDD")
     print(" -p               Preprocess conjuncts with soft and")
     print(" -I IDIR          Directory containing command files")
     print(" -s SUFFIX        Specify suffix for log file root name")
@@ -28,11 +28,12 @@ def usage(name):
 homePathFields = ['.']
 
 runbddFields = ["..", "runbdd"]
+runbddCuddFields = ["..", "runbdd-cudd"]
 
 softRedo = False
 hardRedo = False
 
-chain = True
+useCudd = False
 
 timeLimit = None
 verbLevel = None
@@ -86,9 +87,8 @@ def process(cmdPath, suffix = None):
     if logPath is None:
         print("Skipping %s" % cmdPath)
     else:
-        cmd = ["/".join(homePathFields + runbddFields), '-c', '-M', str(megabytes)]
-        if not chain:
-            cmd += ['-C', 'n']
+        runFields = runbdddCuddFields if useCudd else runbddFields
+        cmd = ["/".join(homePathFields + runFields), '-c', '-M', str(megabytes)]
         if preprocessConjuncts:
             cmd += ['-p']
         cmd += ['-f', cmdPath]
@@ -106,7 +106,7 @@ def process(cmdPath, suffix = None):
 
 
 def run(name, args):
-    global softRedo, hardRedo, chain, timeLimit, verbLevel, megabytes, preprocessConjuncts
+    global softRedo, hardRedo, useCudd, timeLimit, verbLevel, megabytes, preprocessConjuncts
     mb = find_memsize.megabytes()
     if mb > 0:
         megabytes = int(mb * memoryFraction)
@@ -122,7 +122,7 @@ def run(name, args):
         elif opt == '-R':
             hardRedo = True
         elif opt == '-C':
-            chain = False
+            useCudd = True
         elif opt == '-p':
             preprocessConjuncts = True
         elif opt == '-I':
