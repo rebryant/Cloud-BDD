@@ -87,7 +87,7 @@ def process(cmdPath, suffix = None):
     if logPath is None:
         print("Skipping %s" % cmdPath)
     else:
-        runFields = runbdddCuddFields if useCudd else runbddFields
+        runFields = runbddCuddFields if useCudd else runbddFields
         cmd = ["/".join(homePathFields + runFields), '-c', '-M', str(megabytes)]
         if preprocessConjuncts:
             cmd += ['-p']
