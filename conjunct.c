@@ -368,8 +368,6 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
     report(1, "Elapsed time %.1f.  Partial result with %zd values.  Max size = %zd.  Combined size = %zd.  Computed size = %zd",
 	   elapsed, set_size, max_size, total_size, result_size);
     set_free(pset);
-    if (verblevel >= 4)
-	shadow_status(smgr);
 }
 
 /* Conditionally simplify elements of one set with those of another */
@@ -424,6 +422,8 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		} else {
 		    root_deref(nval);
 		}
+		if (verblevel >= 4)
+		    shadow_status(smgr);
 	    } else {
 		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
 		       docstring, cov, current_size, other_size);
