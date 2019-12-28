@@ -1295,13 +1295,6 @@ bool do_nothing(int argc, char *argv[]) {
 }
 
 bool do_status(int argc, char *argv[]) {
-    if (do_ref(smgr))
-	ref_show_stat(smgr->ref_mgr);
-    if (smgr->do_cudd) {
-	Cudd_PrintInfo(smgr->bdd_manager, stdout);
-	FILE *logfile = get_logfile();
-	if (logfile)
-	    Cudd_PrintInfo(smgr->bdd_manager, logfile);
-    }
+    shadow_status(smgr);
     return true;
 }

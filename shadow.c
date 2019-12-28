@@ -1683,3 +1683,16 @@ double shadow_coverage(shadow_mgr mgr, ref_t r1, ref_t r2) {
 
     return result;
 }
+
+/* Generate status report from Cudd or ref manager */
+void shadow_status(shadow_mgr mgr) {
+    if (do_ref(mgr))
+	ref_show_stat(mgr->ref_mgr);
+    if (mgr->do_cudd) {
+	Cudd_PrintInfo(mgr->bdd_manager, stdout);
+	FILE *logfile = get_logfile();
+	if (logfile)
+	    Cudd_PrintInfo(mgr->bdd_manager, logfile);
+    }
+
+}

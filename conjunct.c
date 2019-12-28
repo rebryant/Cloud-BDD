@@ -361,13 +361,15 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
     }
     size_t total_size = cudd_set_size(smgr, pset);
     double elapsed = elapsed_time();
-    report(1, "Elapsed time %.1f.  Partial result with %zd values.  Max size = %zd.  Combined size = %zd.  Computed size = %zd",
-	   elapsed, set_size, max_size, total_size, result_size);
-    set_free(pset);
     if (data) {
 	data->total_size = SMAX(data->total_size, total_size);
 	data->max_size = SMAX(data->max_size, max_size);
     }
+    report(1, "Elapsed time %.1f.  Partial result with %zd values.  Max size = %zd.  Combined size = %zd.  Computed size = %zd",
+	   elapsed, set_size, max_size, total_size, result_size);
+    set_free(pset);
+    if (verblevel >= 4)
+	shadow_status(smgr);
 }
 
 /* Conditionally simplify elements of one set with those of another */

@@ -138,3 +138,6 @@ keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots,
 /* Garbage collection.
    Find all nodes reachable from roots and keep only those in unique table */
 void shadow_collect(shadow_mgr mgr, set_ptr roots);
+
+/* Generate status report from Cudd or ref manager */
+void shadow_status(shadow_mgr mgr);
