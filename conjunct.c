@@ -60,7 +60,7 @@ int inprocess_soft_and_threshold_scaled = 50;
 /* Upper bound on size of other function for soft and */
 /* (Scaled by 100) */
 
-int soft_and_relative_ratio_scaled = 100;
+int soft_and_relative_ratio_scaled = 200;
 
 /* Attempt preprocessing with soft and */
 int preprocess_conjuncts = 0;
@@ -69,7 +69,7 @@ int preprocess_conjuncts = 0;
 int soft_and_allow_growth = 0;
 
 /* How many nodes are allowed when computing soft and.  Set to ratio with current size. (Scaled by 100) */
-int soft_and_expansion_ratio_scaled = 100;
+int soft_and_expansion_ratio_scaled = 200;
 
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
 /* (Scaled by 100) */
