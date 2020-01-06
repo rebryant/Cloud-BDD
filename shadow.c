@@ -126,7 +126,7 @@ static void unreference_dd(shadow_mgr mgr, DdNode *n, dd_type_t dtype) {
 	report(5, "Called Cudd_RecursiveDrefZdd on node %p", n);
     } else {
 	Cudd_RecursiveDeref(mgr->bdd_manager, n);
-	report(5, "Called Cudd_RecursiveDref on node %p", n);
+	report(5, "Called Cudd_RecursiveDeref on node %p", n);
     }
 }
 
@@ -1695,4 +1695,25 @@ void shadow_status(shadow_mgr mgr) {
 	    Cudd_PrintInfo(mgr->bdd_manager, logfile);
     }
 
+}
+
+bool shadow_store(shadow_mgr mgr, ref_t r, FILE *outfile) {
+    if (!mgr->do_cudd)
+	return false;
+    DdNode *nd = ref2dd(mgr, r);;
+    int ok = Cudd_bddStore(mgr->bdd_manager, nd, outfile);
+    return (bool) ok;
+}
+
+
+ref_t shadow_load(shadow_mgr mgr, FILE *infile) {
+    ref_t r = REF_INVALID;
+    if (!mgr->do_cudd)
+	return r;
+    DdNode *nd = Cudd_bddLoad(mgr->bdd_manager, infile);
+    reference_dd(mgr, nd);
+    if (!nd)
+	return r;
+    r = dd2ref(nd, IS_BDD);
+    return r;
 }

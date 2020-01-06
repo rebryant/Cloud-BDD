@@ -141,3 +141,7 @@ void shadow_collect(shadow_mgr mgr, set_ptr roots);
 
 /* Generate status report from Cudd or ref manager */
 void shadow_status(shadow_mgr mgr);
+
+/* Load and store */
+ref_t shadow_load(shadow_mgr mgr, FILE *infile);
+bool shadow_store(shadow_mgr mgr, ref_t r, FILE *outfile);

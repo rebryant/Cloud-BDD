@@ -70,6 +70,7 @@ bool do_cofactor(int argc, char *argv[]);
 bool do_count(int argc, char *argv[]);
 bool do_equal(int argc, char *argv[]);
 bool do_equant(int argc, char *argv[]);
+bool do_load(int argc, char *argv[]);
 bool do_local_flush(int argc, char *argv[]);
 bool do_information(int argc, char *argv[]);
 bool do_ite(int argc, char *argv[]);
@@ -82,6 +83,7 @@ bool do_shift(int argc, char *argv[]);
 bool do_size(int argc, char *argv[]);
 bool do_soft_and(int argc, char *argv[]);
 bool do_status(int argc, char *argv[]);
+bool do_store(int argc, char *argv[]);
 bool do_uquant(int argc, char *argv[]);
 bool do_var(int argc, char *argv[]);
 bool do_vector(int argc, char *argv[]);
@@ -159,6 +161,10 @@ static void console_init(bool do_dist) {
 	    " fd f g         | fd <- SoftAnd(f,g) [Partial And operation]");
     add_cmd("zconvert", do_zconvert,
 	    " zf f           | Convert f to ZDD and name zf");
+    add_cmd("store", do_store,
+	    " f file         | Store f in file");
+    add_cmd("load", do_load,
+	    " f file         | Load f from file");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
     add_param("allvars", &all_vars, "Count all variables in support", NULL);
     init_conjunct();
@@ -1298,3 +1304,54 @@ bool do_status(int argc, char *argv[]) {
     shadow_status(smgr);
     return true;
 }
+
+bool do_load(int argc, char *argv[]) {
+    if (argc != 3) {
+	report(0, "load requires two arguments");
+	return false;
+    }
+    FILE *infile = fopen(argv[2], "r");
+    if (infile == NULL) {
+	report(0, "Couldn't open DD file '%s'", argv[2]);
+	return false;
+    }
+    ref_t r = shadow_load(smgr, infile);
+    fclose(infile);
+    if (REF_IS_INVALID(r)) {
+	report(0, "Load failed");
+	return false;
+    }
+    assign_ref(argv[1], r, true, false);
+#if RPT >= 1
+    {
+	char buf[24];
+	shadow_show(smgr, r, buf);
+	report(2, "RESULT.  %s = %s", argv[1], buf);
+    }
+#endif
+    return true;
+}
+
+bool do_store(int argc, char *argv[]) {
+    bool ok = true;
+    if (argc != 3) {
+	report(0, "store requires two arguments");
+	return false;
+    }
+    FILE *outfile = fopen(argv[2], "w");
+    if (outfile == NULL) {
+	report(0, "Couldn't open DD file '%s'", argv[2]);
+	return false;
+    }
+    ref_t r = get_ref(argv[1]);
+    if (REF_IS_INVALID(r))
+	return false;
+
+    if (!shadow_store(smgr, r, outfile)) {
+	report(0, "Store failed");
+	ok = false;
+    }
+    fclose(outfile);
+    return ok;
+}
+
