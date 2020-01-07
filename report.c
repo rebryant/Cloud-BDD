@@ -10,6 +10,10 @@
 #include "report.h"
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 
 #define MAX(a,b) ((a)<(b)?(b):(a))
@@ -363,4 +367,25 @@ void change_timeout(int oldval) {
 /* Handler for SIGTERM signals */
 void sigterm_handler(int sig) {
     err(true, "SIGTERM signal received");
+}
+
+/* Generate random sequence of hex digits */
+void random_hex(char *dest, int digits) {
+    int i;
+    static bool seeded = false;
+    if (!seeded) {
+	/* Get initial values from entropy generator */
+	unsigned seed = getpid();
+	int rid = open("/dev/random", O_RDONLY);
+	if (rid >= 0) {
+	    read(rid, (void *) &seed, sizeof(int));
+	    close(rid);
+	}
+	srandom(seed);
+	seeded = true;
+    }
+    for (i = 0; i < digits; i++) {
+	int r = random();
+	sprintf(&dest[i], "%x", r & 0xF);
+    }
 }

@@ -105,3 +105,6 @@ void change_timeout(int oldval);
 
 /* Handler for SIGTERM signals */
 void sigterm_handler(int sig);
+
+/* Generate random sequence of hex digits */
+void random_hex(char *dest, int digits);
