@@ -9,6 +9,15 @@ OCUDDINC= -I$(OCUDDDIR)/include
 OCUDDLIBS = $(OCUDDDIR)/lib/libcudd.a
 OCUDDFLAGS = -DNO_CHAINING
 
+# Temporary
+CUDDIINC= \
+	-I/src/boolean/Chain-CUDD-3.0.0/  \
+	-I/src/boolean/Chain-CUDD-3.0.0/cudd \
+	-I/src/boolean/Chain-CUDD-3.0.0/epd \
+	-I/src/boolean/Chain-CUDD-3.0.0/mtr \
+	-I/src/boolean/Chain-CUDD-3.0.0/st \
+	-I/src/boolean/Chain-CUDD-3.0.0/util
+
 VLEVEL=5
 
 CC=gcc
@@ -68,6 +77,10 @@ msg.o: msg.c table.h chunk.h report.h msg.h
 test_df.o: test_df.c dtype.h table.h chunk.h report.h msg.h console.h agent.h test_df.h
 	$(CC) $(CFLAGS) -c test_df.c
 
+# Temporary
+cuddLoadStore.o: cuddLoadStore.c cudd-ls.h
+	$(CC) $(CFLAGS) $(CUDDIINC) -c cuddLoadStore.c
+
 chunk_test: chunk_test.c dtype.h table.h chunk.h report.h chunk.o report.o table.o
 	$(CC) $(CFLAGS) -o chunk_test chunk_test.c chunk.o report.o table.o
 
@@ -86,8 +99,10 @@ shadow_test: shadow_test.c console.o chunk.o table.o report.o bdd.o shadow.o msg
 console_test: console_test.c console.h report.h console.o report.o chunk.o table.o
 	$(CC) $(CFLAGS) -o console_test console_test.c console.o report.o chunk.o table.o
 
-runbdd: runbdd.c conjunct.o console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o
-	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c chunk.o conjunct.o console.o table.o report.o bdd.o shadow.o msg.o agent.o $(CUDDLIBS) -lm
+runbdd: runbdd.c conjunct.o console.o chunk.o table.o report.o bdd.o shadow.o msg.o agent.o 
+	$(CC) $(CFLAGS) $(CUDDFLAGS) $(BDDFLAGS) $(CUDDINC) -o runbdd runbdd.c \
+	chunk.o conjunct.o console.o table.o report.o bdd.o shadow.o msg.o agent.o \
+	$(CUDDLIBS) -lm
 
 # Use standard version of CUDD
 runbdd-cudd: runbdd.c conjunct.o console.o chunk.o table.o report.o bdd.o shadow.c msg.o agent.o
@@ -112,6 +127,9 @@ controller: controller.c table.o chunk.o report.o msg.o console.o dtype.h table.
 
 memtest: memtest.c report.o
 	$(CC) $(CFLAGS) -o memtest memtest.c  report.o
+
+
+
 
 clean:
 	rm -f *.o *~ *.dat
