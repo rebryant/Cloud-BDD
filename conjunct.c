@@ -30,6 +30,9 @@
 /* Macros */
 #define SMAX(x, y) ((x) < (y) ? (y) : (x))
 
+/* How many hex digits should there be in randomly generated file names */
+#define NAME_DIGITS  8
+
 /* Parameters */
 
 /* Should I check results of conjunct (and possibly other) operations? */
@@ -75,6 +78,12 @@ int soft_and_expansion_ratio_scaled = 200;
 /* (Scaled by 100) */
 double max_large_argument_penalty_scaled = 40;
 
+/* What is the maximum of number nodes to keep a conjunct term stored in memory */
+size_t memory_store_threshold = 10000;
+
+/* Should old conjunct files be kept */
+bool keep_conjunct_files = true;
+
 /* Size of the smallest and largest BDDs in the conjunction */
 size_t max_argument_size = 0;
 size_t min_argument_size = 0;
@@ -85,6 +94,7 @@ double log10_min_size = 4.0;
 double log10_max_size = 8.0;
 
 
+
 /* Representation of set of terms to be conjuncted */
 /* Linked list elements */
 /* Also use as standalone representation of function + metadata */
@@ -93,6 +103,8 @@ typedef struct RELE {
     size_t size;
     long support_count;
     int *support_indices;
+    bool in_file;
+    char *file_name;
     struct RELE *next;
 } rset_ele;
 
@@ -128,14 +140,59 @@ void init_conjunct() {
 
 /*** Operations on rsets ***/
 static void rset_ele_new_fun(rset_ele *ele, ref_t fun) {
+    /* Get rid of stuff associated with existing function */
+    /* See if there's a DD stored in a file */
+    if (ele->in_file && !keep_conjunct_files) {
+	bool done = remove(ele->file_name) == 0;
+	if (done)
+	    report(3, "DD file '%s' removed", ele->file_name);
+	else
+	    report(3, "Attempt to delete DD file '%s' failed", ele->file_name);
+    }
+    ele->in_file = false;
+    if (ele->support_indices != NULL)
+	free(ele->support_indices);
+    if (!REF_IS_INVALID(ele->fun))
+	root_deref(ele->fun);
+    /* Assign new function */
     ele->fun = fun;
-    ele->size = 0;
-    ele->support_count = -1;
-    ele->support_indices = NULL;
+    if (REF_IS_INVALID(fun)) {
+	ele->size = 0;
+	ele->support_count = 0;
+	ele->support_indices = NULL;
+    } else {
+	ele->size = cudd_single_size(smgr, ele->fun);
+	ele->support_count = shadow_support_indices(smgr, ele->fun, &ele->support_indices);
+	root_addref(fun, false);
+    }
+}
+
+static char *generate_name() {
+    static char hexbuf[NAME_DIGITS+1];
+    static int instance;
+    static bool initialized = false;
+    if (!initialized) {
+	random_hex(hexbuf, NAME_DIGITS);	
+	hexbuf[NAME_DIGITS] = '\0';
+	instance = 1;
+	initialized = true;
+    }
+    int name_length = strlen("dd-") + NAME_DIGITS + strlen("-XXXXXX.bdd") + 1;
+    char buf[name_length];
+    sprintf(buf, "dd-%s-%.6d.bdd", hexbuf, instance);
+    instance++;
+    report(5, "Generated file name '%s'", buf);
+    return strsave_or_fail(buf, "generate_name");
 }
 
 static rset_ele *rset_new(ref_t fun) {
     rset_ele *ele = malloc_or_fail(sizeof(rset_ele), "rset_new");
+    ele->in_file = false;
+    ele->file_name = generate_name();
+    ele->fun = REF_INVALID;
+    ele->size = 0;
+    ele->support_count = 0;
+    ele->support_indices = NULL;
     rset_ele_new_fun(ele, fun);
     ele->next = NULL;
     return ele;
@@ -144,8 +201,8 @@ static rset_ele *rset_new(ref_t fun) {
 /* Free single element */
 static void rset_ele_free(rset_ele *set) {
     rset_ele *ptr = set;
-    if (ptr->support_indices != NULL)
-	free(ptr->support_indices);
+    rset_ele_new_fun(ptr, REF_INVALID);
+    free_string(ptr->file_name);
     free_block((void *) ptr, sizeof(rset_ele));
 }
 
@@ -219,28 +276,59 @@ static bool rset_contains_zero(rset_ele *set) {
 static size_t get_size(rset_ele *ptr) {
     if (ptr == NULL)
 	return 0;
-    if (ptr->size == 0)
-	ptr->size = cudd_single_size(smgr, ptr->fun);
     return ptr->size;
 }
 
 static int get_support_count(rset_ele *ptr) {
     if (ptr == NULL)
 	return 0;
-    if (ptr->support_count < 0) {
-	ptr->support_count = shadow_support_indices(smgr, ptr->fun, &ptr->support_indices);
-    }
     return ptr->support_count;
 }
 
 static int *get_support_indices(rset_ele *ptr) {
     if (ptr == NULL)
 	return 0;
-    if (ptr->support_count < 0) {
-	ptr->support_count = shadow_support_indices(smgr, ptr->fun, &ptr->support_indices);
-    }
     return ptr->support_indices;
 }
+
+static ref_t get_function(rset_ele *ptr) {
+    if (REF_IS_INVALID(ptr->fun) && ptr->in_file) {
+	FILE *infile = fopen(ptr->file_name, "r");
+	if (infile == NULL) {
+	    err(false, "Failed to open DD file '%s' to read", ptr->file_name);
+	} else {
+	    ptr->fun = shadow_load(smgr, infile);
+	    if (REF_IS_INVALID(ptr->fun))
+		err(false, "Failed to load DD from file '%s'", ptr->file_name);
+	    report(3, "Retrieved DD from file '%s'", ptr->file_name);
+	    fclose(infile);
+	}
+    } else
+	report(3, "Retrieved DD from memory", ptr->file_name);
+    return ptr->fun;
+}
+
+static void release_function(rset_ele *ptr) {
+    if (get_size(ptr) > memory_store_threshold) {
+	FILE *outfile = fopen(ptr->file_name, "w");
+	if (outfile == NULL) {
+	    err(false, "Couldn't open DD file '%s' to write", ptr->file_name);
+	} else {
+	    if (shadow_store(smgr, ptr->fun, outfile)) {
+		ptr->in_file = true;
+		root_deref(ptr->fun);
+		ptr->fun = REF_INVALID;
+		fclose(outfile);
+		report(3, "Stored DD of size %zd in file '%s'", get_size(ptr), ptr->file_name);
+	    } else {
+		err(false, "Failed to store DD in file '%'", ptr->file_name);
+	    }
+	}
+    } else {
+	report(4, "Didn't store DD of size %zd in file", get_size(ptr));
+    }
+}
+
 
 /*** Operations on pairs of rsets ***/
 
@@ -327,7 +415,7 @@ static ref_t and_check(rset_ele *set) {
     root_addref(rval, false);
     rset_ele *ptr = set;
     while(ptr) {
-	ref_t arg = ptr->fun;
+	ref_t arg = get_function(ptr);
 	root_checkref(rval);
 	root_checkref(arg);
 	ref_t nval = shadow_and(smgr, rval, arg);
@@ -349,7 +437,7 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
     size_t set_size = count;
     rset_ele *ptr = set;
     while (ptr) {
-	ref_t r = ptr->fun;
+	ref_t r = get_function(ptr);
 	if (REF_IS_INVALID(r)) {
 	    count--;
 	} else {
@@ -374,17 +462,19 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
 static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, char *docstring) {
     rset_ele *myptr, *otherptr;
     for (myptr = set; myptr; myptr = myptr->next) {
-	ref_t myrval = myptr->fun;
+	ref_t myrval = get_function(myptr);
 	size_t start_size = get_size(myptr);
 	int try_count = 0;
 	int sa_count = 0;
 	if (REF_IS_INVALID(myrval))
 	    continue;
+	root_addref(myrval, false);
 	for (otherptr = other_set; otherptr; otherptr = otherptr->next) {
 	    try_count++;
-	    ref_t otherrval = otherptr->fun;
+	    ref_t otherrval = get_function(otherptr);
 	    if (REF_IS_INVALID(otherrval))
 		continue;
+	    root_addref(otherrval, false);
 	    /* Attempt to simplify myrval using otherrval */
 	    double cov = get_support_coverage(otherptr, myptr, false);
 	    size_t current_size = get_size(myptr);
@@ -428,7 +518,9 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
 		       docstring, cov, current_size, other_size);
 	    }
+	    root_deref(otherrval);
 	}
+	root_deref(myrval);
 	size_t final_size = get_size(myptr);
 	double reduction = (double) start_size / final_size;
 	if (sa_count > 0)
@@ -523,8 +615,8 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    ptr1 = candidates[tidx].ptr1;
 	    ptr2 = candidates[tidx].ptr2;
 	    sim = candidates[tidx].sim;
-	    arg1 = ptr1->fun;
-	    arg2 = ptr2->fun;
+	    arg1 = get_function(ptr1);
+	    arg2 = get_function(ptr2);
 
 	    root_checkref(arg1);
 	    root_checkref(arg2);
@@ -554,11 +646,10 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    shadow_show(smgr, nval, nval_buf);
 	    report(3, "%s & %s (sim = %.3f, try #%d) --> %s", arg1_buf, arg2_buf, sim, try+1, nval_buf);
 	}
-	root_deref(arg1);
-	root_deref(arg2);
 	rset_ele_free(ptr1);
 	rset_ele_free(ptr2);
 	rset_ele *nset = rset_new(nval);
+	root_deref(nval);
 
 	/* Attempt to simplify in both directions */
 	int length = rset_length(set);
@@ -577,14 +668,11 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
     if (rset_is_singleton(set)) {
 	report(1, "Conjunction of %zd elements.  %zd aborts.  Max argument %zd.  Max size limit %zd",
 	       argument_count, abort_count, max_argument_size, max_size_limit);
-	rval = set->fun;
+	rval = get_function(set);
+	root_addref(rval, false);
 	rset_free(set);
     } else {
 	/* Must contain zero.  Delete remaining arguments */
-	rset_ele *ele;
-	for (ele = set; ele; ele = ele->next) {
-	    root_deref(ele->fun);
-	}
 	rset_free(set);
 	rval = shadow_zero(smgr);
 	double elapsed = elapsed_time();
@@ -646,9 +734,6 @@ bool do_conjunct(int argc, char *argv[]) {
 	ref_t rarg = get_ref(argv[i]);
 	if (REF_IS_INVALID(rarg)) {
 	    // Fix: Must deference existing list elements before aborting
-	    rset_ele *ele;
-	    for (ele = set; ele; ele = ele->next)
-		root_deref(ele->fun);
 	    rset_free(set);
 	    return rarg;
 	}
@@ -656,7 +741,6 @@ bool do_conjunct(int argc, char *argv[]) {
 	    zcount++;
 	    report(2, "Conjunct %s == 0", argv[i]);
 	}
-	root_addref(rarg, false);
 	rset_ele *ele = rset_new(rarg);
 	size_t asize = get_size(ele);
 	itotal += asize;
@@ -672,9 +756,6 @@ bool do_conjunct(int argc, char *argv[]) {
     }
 
     if (zcount > 0) {
-	rset_ele *ele;
-	for (ele = set; ele; ele = ele->next)
-	    root_deref(ele->fun);
 	rset_free(set);
 	assign_ref(argv[1], rzero, false, false);
 	report(1, "Conjunction has %d zero-valued conjuncts, and so is trivially zero", zcount);
