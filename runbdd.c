@@ -199,6 +199,20 @@ static bool bdd_quit(int argc, char *argv[]) {
 
     if (reftable->nelements > 0) {
 	report(2, "Still have references to %zd functions", reftable->nelements);
+	if (verblevel >= 2) {
+	    char buf[24];
+	    word_t wk, wv;
+	    size_t sum = 0;
+	    keyvalue_iterstart(reftable);
+	    while (keyvalue_iternext(reftable, &wk, &wv)) {
+		ref_t r = (ref_t) wk;
+		size_t rcount = (size_t) wv;
+		sum += rcount;
+		shadow_show(smgr, r, buf);
+		report(4, "Ref %s.  Count = %zd", buf, rcount);
+	    }
+	    report(2, "Total remaining references = %zd", sum);
+	}
     } else {
 	report(2, "Reference table empty");
     }
