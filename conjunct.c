@@ -93,6 +93,15 @@ size_t min_argument_size = 0;
 double log10_min_size = 4.0;
 double log10_max_size = 8.0;
 
+/* Performance counters */
+size_t total_soft_and = 0;
+size_t total_soft_and_success = 0;
+size_t total_soft_and_fail = 0;
+size_t total_and_limit = 0;
+size_t total_and = 0;
+size_t total_skip = 0;
+size_t total_replace = 0;
+size_t total_noreplace = 0;
 
 
 /* Representation of set of terms to be conjuncted */
@@ -304,7 +313,7 @@ static ref_t get_function(rset_ele *ptr) {
 	    fclose(infile);
 	}
     } else
-	report(3, "Retrieved DD from memory", ptr->file_name);
+	report(5, "Retrieved DD for %s from memory", ptr->file_name);
     return ptr->fun;
 }
 
@@ -419,6 +428,7 @@ static ref_t and_check(rset_ele *set) {
 	root_checkref(rval);
 	root_checkref(arg);
 	ref_t nval = shadow_and(smgr, rval, arg);
+	total_and++;
 	root_addref(nval, true);
 	root_deref(rval);
 	rval = nval;
@@ -486,11 +496,15 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		root_checkref(myrval);
 		root_checkref(otherrval);
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
+		total_soft_and++;
 		if (REF_IS_INVALID(nval)) {
+		    total_soft_and_fail++;
 		    report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
 			   docstring, cov, current_size, other_size, limit);
+		    root_deref(otherrval);
 		    continue;
 		}
+		total_soft_and_success++;
 		root_addref(nval, true);
 		sa_count++;
 		size_t new_size = cudd_single_size(smgr, nval);
@@ -501,20 +515,23 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		    root_deref(myrval);
 		    rset_ele_new_fun(myptr, nval);
 		    myrval = nval;
-#if RPT >= 5
+		    total_replace++;
+#if RPT >= 3
 		    {
 			char obuf[24], nbuf[24];
 			shadow_show(smgr, myrval, obuf);
 			shadow_show(smgr, nval, nbuf);
-			report(5, "Replacing %s with %s", obuf, nbuf);
+			report(3, "Replacing %s with %s", obuf, nbuf);
 		    }
 #endif
 		} else {
 		    root_deref(nval);
+		    total_noreplace++;
 		}
-		if (verblevel >= 4)
+		if (verblevel >= 5)
 		    shadow_status(smgr);
 	    } else {
+		total_skip++;
 		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
 		       docstring, cov, current_size, other_size);
 	    }
@@ -620,7 +637,14 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 
 	    root_checkref(arg1);
 	    root_checkref(arg2);
-	    nval = final_try ? shadow_and(smgr, arg1, arg2) : shadow_and_limit(smgr, arg1, arg2, size_limit);
+	    if (final_try) {
+		nval = shadow_and(smgr, arg1, arg2);
+		total_and++;
+	    } else {
+		nval = shadow_and_limit(smgr, arg1, arg2, size_limit);
+		total_and_limit++;
+	    }
+
 
 	    if (!REF_IS_INVALID(nval))
 		break;
@@ -783,6 +807,14 @@ bool do_conjunct(int argc, char *argv[]) {
     }
     assign_ref(argv[1], rval, false, false);
     root_deref(rval);
+
+    report(3, "Total soft ands = %zd.  Succeed = %zd.  Fail = %zd", total_soft_and, total_soft_and_success, total_soft_and_fail);
+    report(3, "Total replacements = %zd", total_replace);
+    report(3, "Total non-replacements = %zd", total_noreplace);
+    report(3, "Total skip soft and = %zd", total_skip);
+    report(3, "Total limit ands = %zd", total_and_limit);
+    report(3, "Total regular ands = %zd", total_and);
+
     return true;
 }
 
