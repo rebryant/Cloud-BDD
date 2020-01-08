@@ -79,10 +79,10 @@ int soft_and_expansion_ratio_scaled = 200;
 double max_large_argument_penalty_scaled = 40;
 
 /* What is the maximum of number nodes to keep a conjunct term stored in memory */
-size_t memory_store_threshold = 10000;
+size_t memory_store_threshold = 1000;
 
 /* Should old conjunct files be kept */
-bool keep_conjunct_files = true;
+bool keep_conjunct_files = false;
 
 /* Size of the smallest and largest BDDs in the conjunction */
 size_t max_argument_size = 0;
@@ -314,16 +314,21 @@ static ref_t get_function(rset_ele *ptr) {
     if (REF_IS_INVALID(ptr->fun) && ptr->in_file) {
 	FILE *infile = fopen(ptr->file_name, "r");
 	if (infile == NULL) {
-	    err(false, "Failed to open DD file '%s' to read", ptr->file_name);
+	    err(true, "Failed to open DD file '%s' to read", ptr->file_name);
 	} else {
 	    ptr->fun = shadow_load(smgr, infile);
 	    if (REF_IS_INVALID(ptr->fun))
-		err(false, "Failed to load DD from file '%s'", ptr->file_name);
+		err(true, "Failed to load DD from file '%s'", ptr->file_name);
 	    root_addref(ptr->fun, true);
 	    report(3, "Retrieved DD of size %zd from file '%s'", get_size(ptr), ptr->file_name);
 	    total_loads++;
 	    total_loaded_nodes += get_size(ptr);
 	    fclose(infile);
+	    bool done = remove(ptr->file_name) == 0;
+	    if (done)
+		report(3, "DD file '%s' removed", ptr->file_name);
+	    else
+		report(3, "Attempt to delete DD file '%s' failed", ptr->file_name);
 	}
     } else
 	report(5, "Retrieved DD for %s from memory", ptr->file_name);
@@ -617,6 +622,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
     }
     
     while (!rset_is_singleton(set) && !rset_contains_zero(set)) {
+	size_t before_stored = total_stores;
 	compute_size_range(set);
 	clear_candidates(candidates);
 	rset_ele *ptr1 = NULL;
@@ -710,8 +716,10 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    data->result_size = get_size(nset);
 	report_combination(set, data);
 	release_function(nset);
-	size_t collected = cudd_collect(smgr);
-	report(2, "%zd nodes collected", collected);
+	if (before_stored < total_stores) {
+	    size_t collected = cudd_collect(smgr);
+	    report(2, "%zd nodes collected", collected);
+	}
     }
 
     ref_t rval;
