@@ -102,11 +102,21 @@ size_t total_and = 0;
 size_t total_skip = 0;
 size_t total_replace = 0;
 size_t total_noreplace = 0;
+size_t total_loads = 0;
+size_t total_loaded_nodes = 0;
+size_t total_stores = 0;
+size_t total_stored_nodes = 0;
 
 
 /* Representation of set of terms to be conjuncted */
 /* Linked list elements */
 /* Also use as standalone representation of function + metadata */
+/* Possible status:
+   fun INVALID, in_file = false: function is INVALID
+   fun VALID, in_file = false: function only in memory
+   fun INVALID, in_file = true: function only on disk
+   fun VALID, in_file = true: Not possible
+*/
 typedef struct RELE {
     ref_t fun;
     size_t size;
@@ -309,7 +319,10 @@ static ref_t get_function(rset_ele *ptr) {
 	    ptr->fun = shadow_load(smgr, infile);
 	    if (REF_IS_INVALID(ptr->fun))
 		err(false, "Failed to load DD from file '%s'", ptr->file_name);
-	    report(3, "Retrieved DD from file '%s'", ptr->file_name);
+	    root_addref(ptr->fun, true);
+	    report(3, "Retrieved DD of size %zd from file '%s'", get_size(ptr), ptr->file_name);
+	    total_loads++;
+	    total_loaded_nodes += get_size(ptr);
 	    fclose(infile);
 	}
     } else
@@ -318,7 +331,13 @@ static ref_t get_function(rset_ele *ptr) {
 }
 
 static void release_function(rset_ele *ptr) {
-    if (get_size(ptr) > memory_store_threshold) {
+    if (ptr->in_file) {
+	report(5, "DD of size %zd already stored in file '%s'", get_size(ptr), ptr->file_name);
+    } else if (REF_IS_INVALID(ptr->fun) || get_size(ptr) <= memory_store_threshold) {
+	/* Either nothing to save, or it's already been saved */
+	report(4, "Didn't store DD of size %zd to file '%s'", get_size(ptr), ptr->file_name);
+    } else {
+	/* Attempt to save file.  If successful, flush in-memory copy */
 	FILE *outfile = fopen(ptr->file_name, "w");
 	if (outfile == NULL) {
 	    err(false, "Couldn't open DD file '%s' to write", ptr->file_name);
@@ -328,16 +347,15 @@ static void release_function(rset_ele *ptr) {
 		root_deref(ptr->fun);
 		ptr->fun = REF_INVALID;
 		fclose(outfile);
-		report(3, "Stored DD of size %zd in file '%s'", get_size(ptr), ptr->file_name);
+		report(4, "Flushed in-memory copy and stored DD of size %zd to file '%s'", get_size(ptr), ptr->file_name);
+		total_stores++;
+		total_stored_nodes += get_size(ptr);
 	    } else {
-		err(false, "Failed to store DD in file '%'", ptr->file_name);
+		err(false, "Failed to store DD of size %zd to file '%'", get_size(ptr), ptr->file_name);
 	    }
 	}
-    } else {
-	report(4, "Didn't store DD of size %zd in file", get_size(ptr));
     }
 }
-
 
 /*** Operations on pairs of rsets ***/
 
@@ -502,6 +520,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		    report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
 			   docstring, cov, current_size, other_size, limit);
 		    root_deref(otherrval);
+		    release_function(otherptr);
 		    continue;
 		}
 		total_soft_and_success++;
@@ -536,8 +555,11 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		       docstring, cov, current_size, other_size);
 	    }
 	    root_deref(otherrval);
+	    release_function(otherptr);
 	}
 	root_deref(myrval);
+	release_function(myptr);
+	/* Consider doing garbage collection here */
 	size_t final_size = get_size(myptr);
 	double reduction = (double) start_size / final_size;
 	if (sa_count > 0)
@@ -655,6 +677,8 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 		shadow_show(smgr, arg2, arg2_buf);
 		report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd nodes", arg1_buf, arg2_buf, sim, try+1, size_limit);
 	    }
+	    release_function(ptr1);
+	    release_function(ptr2);
 
 	}
 	if (REF_IS_INVALID(nval))
@@ -685,6 +709,9 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	if (data)
 	    data->result_size = get_size(nset);
 	report_combination(set, data);
+	release_function(nset);
+	size_t collected = cudd_collect(smgr);
+	report(2, "%zd nodes collected", collected);
     }
 
     ref_t rval;
@@ -776,6 +803,7 @@ bool do_conjunct(int argc, char *argv[]) {
 	    report(2, "Applying soft and to simplify arguments 1-%d using argument %d", i-2, i-1);
 	    soft_simplify(set, ele, pthreshold, "preprocess_new2old");
 	}
+	release_function(ele);
 	set = rset_add_element(set, ele);
     }
 
@@ -814,6 +842,8 @@ bool do_conjunct(int argc, char *argv[]) {
     report(3, "Total skip soft and = %zd", total_skip);
     report(3, "Total limit ands = %zd", total_and_limit);
     report(3, "Total regular ands = %zd", total_and);
+    report(3, "Total stores = %zd (%zd nodes)", total_stores, total_stored_nodes);
+    report(3, "Total loads = %zd (%zd nodes)", total_loads, total_loaded_nodes);
 
     return true;
 }
