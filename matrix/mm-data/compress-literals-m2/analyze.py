@@ -14,19 +14,22 @@
 #   Combination levels
 #   Combined size after each conjunct
 
+# 1/9/2019.  With file-based conjunction, changed what data is collected.
+# Use sum of sizes rather than combined size of entire DD.
+# But, in past found these two numbers were essentially identical.
+
 import sys
 import re
 import getopt
 
 def usage(name):
-    print("%s: [-h] [-u] [-r a|m|c|p] f1.log f2.log ..." % name)
+    print("%s: [-h] [-u] [-r p|a|m|c] f1.log f2.log ..." % name)
     print(" -h      Print this message")
     print(" -u      Uniform time format (for charting with Excel)")
-    print(" -r RPT  Specify reporting parameter; a (all combined), m (max), c (computed) p (products)")
-
+    print(" -r RPT  Specify reporting parameter; p (products, default), a (all combined), m (max), c (computed)")
 totalConjuncts = 81
 # Choices are 'combined', 'max', 'computed', or 'products'
-reportField = 'combined'
+reportField = 'product'
 resolution = 10.0
 floatFormat = "%.0f"
 # In uniformTime format, create uniform axis for all time points
@@ -43,11 +46,18 @@ showTimeout = False
 
 # Expressions
 initialMatcher = re.compile("Elapsed time ([0-9]+\.[0-9]+).  Initial simplification.  Total ([0-9]+) .*  Max ([0-9]+)")
-partialMatcher = re.compile("Elapsed time ([0-9]+\.[0-9]+).  Partial result with ([0-9]+) values.  Max size = ([0-9]+).  Combined size = ([0-9]+).  Computed size = ([0-9]+)")
+# Two different matchers, due to shift in reported parameters
+partialMatcher1 = re.compile("Elapsed time ([0-9]+\.[0-9]+).  Partial result with ([0-9]+) values.  Max size = ([0-9]+).  Combined size = ([0-9]+).  Computed size = ([0-9]+)")
+partialMatcher2 = re.compile("Elapsed time ([0-9]+\.[0-9]+).  Partial result with ([0-9]+) values.  Max size = ([0-9]+).  Sum size = ([0-9]+).  Resident size = [0-9]+.  Computed size = ([0-9]+)")
 zeroMatcher = re.compile("Elapsed time ([0-9]+\.[0-9]+).  Conjunction of 81 elements.  Encountered zero-valued conjunct with ([0-9]+)")
 timeoutMatcher = re.compile("Error: Timeout after ([0-9]+)")
 completedMatcher = re.compile("Elapsed time ([0-9]+\.[0-9]+).  Conjunction result ([0-9]+)")
 rootMatcher = re.compile("-(m[0-9]+\+[0-9]+)-")
+
+def trim(s):
+    while len(s) > 0 and s[-1] == '\n':
+        s = s[:-1]
+    return s
 
 def resolve(x):
     if not uniformTime:
@@ -55,6 +65,7 @@ def resolve(x):
     return resolution * int(x/resolution)
 
 def getInitial(line):
+    rval = None
     m = initialMatcher.match(line)
     if m:
         productCount = 0
@@ -62,46 +73,55 @@ def getInitial(line):
         combinedSize = int(m.group(2))
         maxSize = int(m.group(3))
         computedSize = maxSize
-        return {"type" : "initial", "elapsed" : elapsed, "products" : productCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
+        rval =  {"type" : "initial", "elapsed" : elapsed, "products" : productCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
+    return rval
 
 def getPartial(line):
-    m = partialMatcher.match(line)
+    rval = None
+    m = partialMatcher1.match(line)
+    if not m:
+        m = partialMatcher2.match(line)
     if m:
         elapsed = resolve(float(m.group(1)))
         productCount = totalConjuncts - int(m.group(2))
         maxSize = int(m.group(3))
         combinedSize = int(m.group(4))
         computedSize = int(m.group(5))
-        return {"type" : "partial", "elapsed" : elapsed, "products" : productCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
-    return None
+        rval =  {"type" : "partial", "elapsed" : elapsed, "products" : productCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
+#    if rval is not None:
+#        print("Partials '%s' --> %s" % (line, str(rval)))
+    return rval
 
 def getZero(line):
+    rval = None
     m = zeroMatcher.match(line)
     if m:
         elapsed = resolve(float(m.group(1)))
-        productCount = totalConjuncts - int(m.group(2))
+        productCount = totalConjuncts # - int(m.group(2))
         combinedSize = 1
         computedSize = 1
         maxSize = 1
-        return {"type" : "zero", "elapsed" : elapsed, "products" : productCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
-    return None
+        rval = {"type" : "zero", "elapsed" : elapsed, "products" : productCount, "max" : maxSize, "combined" : combinedSize, "computed" : computedSize }
+    return rval
 
 def getTimeout(line):
+    rval = None
     m = timeoutMatcher.match(line)
     if m:
         time = resolve(int(m.group(1)))
-        return {"type" : "timeout", "elapsed" : time }
-    return None
+        rval = {"type" : "timeout", "elapsed" : time }
+    return rval
         
 def getCompleted(line):
+    rval = None
     m = completedMatcher.match(line)
     if m:
         elapsed = resolve(float(m.group(1)))
         resultSize = int(m.group(2))
         maxSize = resultSize
         combinedSize = resultSize
-        return {"elapsed" : elapsed, "type": "completed",  "max" : maxSize, "combined" : combinedSize, "computed" : resultSize }
-    return None
+        rval = {"elapsed" : elapsed, "type": "completed",  "max" : maxSize, "combined" : combinedSize, "computed" : resultSize }
+    return rval
 
 def processLine(line):
     global timePoints, globalMaxTime
@@ -148,6 +168,7 @@ def processFile(fname):
     lastE = None
     productCount = 0
     for line in f:
+        line = trim(line)
         d = processLine(line)
         if d is None:
             continue
@@ -174,10 +195,8 @@ def processFile(fname):
         elif t in [ 'zero', 'completed' ]:
             resultDict['type'] = t
             # Create terminal event
-            e = { k : d[k] for k in ['elapsed', 'max', 'combined', 'computed'] }
+            e = { k : d[k] for k in ['elapsed', 'max', 'combined', 'computed', 'products'] }
             elapsed = d['elapsed']
-            productCount += 1
-            e['products'] = productCount
             resultDict['partials'][elapsed] = e
             maxTime = max(maxTime, elapsed)
             break
