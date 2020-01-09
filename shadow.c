@@ -327,10 +327,8 @@ shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t 
 	    unsigned long int newLimit = mblimit * 1024L * 1024L;
 	    double mscale = (double) newLimit / maxMemory;
 	    maxMemory = newLimit;
-	    if (mscale > 1.0) {
-		numSlots = (unsigned int) (mscale * numSlots);
-		cacheSize = (unsigned int) (mscale * cacheSize);
-	    }
+	    numSlots = (unsigned int) (mscale * numSlots);
+	    cacheSize = (unsigned int) (mscale * cacheSize);
 	}
 	report(1, "Setting memory limit to %.2f MB.  numSlots to %d.  cacheSize to %d", (double) maxMemory / 1e6, numSlots, cacheSize);
 	mgr->bdd_manager = Cudd_Init(numVars, numVarsZ, numSlots, cacheSize, maxMemory);

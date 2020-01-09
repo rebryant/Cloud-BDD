@@ -78,8 +78,20 @@ int soft_and_expansion_ratio_scaled = 200;
 /* (Scaled by 100) */
 double max_large_argument_penalty_scaled = 40;
 
-/* What is the maximum of number nodes to keep a conjunct term stored in memory */
+/* Set to force more load/stores & more GCs */
+// #define STRESS
+
+#ifdef STRESS
+size_t memory_store_threshold = 1;
+size_t stored_gc_limit = 0;
+#else /* !STRESS */
+/* What is the maximum number nodes to keep a conjunct term stored in memory */
 size_t memory_store_threshold = 1000;
+/* What is the maximum number of nodes stored to trigger GC */
+size_t stored_gc_limit = 10000;
+#endif /* STRESS */
+
+/* How many more nodes should be stored in order to trigger GC? */
 
 /* Should old conjunct files be kept */
 bool keep_conjunct_files = false;
@@ -107,6 +119,9 @@ size_t total_loaded_nodes = 0;
 size_t total_stores = 0;
 size_t total_stored_nodes = 0;
 
+/* Tracking activity to trigger GC */
+size_t total_stored_nodes_last_gc = 0;
+
 
 /* Representation of set of terms to be conjuncted */
 /* Linked list elements */
@@ -129,9 +144,10 @@ typedef struct RELE {
 
 /* Data collected during conjunction */
 typedef struct {
-    size_t result_size;
-    size_t max_size;
-    size_t total_size;
+    size_t result_size;  // Result of last And
+    size_t max_size;     // Max size of all terms
+    size_t sum_size;     // Sum of sizes of all terms
+    size_t resident_size; // Number of nodes of terms resident in memory
 } conjunction_data;
 
 bool do_similar(int argc, char *argv[]);
@@ -464,32 +480,28 @@ static ref_t and_check(rset_ele *set) {
 static void report_combination(rset_ele *set, conjunction_data *data) {
     size_t result_size = data ? data->result_size : 0;
     size_t max_size = 0;
-    size_t count = rset_length(set);
-    /* Must convert to other form of set */
-    set_ptr pset = word_set_new();
-    size_t set_size = count;
-    rset_ele *ptr = set;
-    while (ptr) {
-	ref_t r = get_function(ptr);
-	if (REF_IS_INVALID(r)) {
-	    count--;
-	} else {
-	    set_insert(pset, (word_t) r);
-	    size_t nsize = cudd_single_size(smgr, r);
-	    max_size = SMAX(max_size, nsize);
-	}
-	ptr = ptr->next;
-    }
-    size_t total_size = cudd_set_size(smgr, pset);
+    size_t sum_size = 0;
+    size_t resident_size = 0;
+    size_t set_size = rset_length(set);
     double elapsed = elapsed_time();
-    if (data) {
-	data->total_size = SMAX(data->total_size, total_size);
-	data->max_size = SMAX(data->max_size, max_size);
+
+    rset_ele *ptr;
+    for (ptr = set; ptr; ptr = ptr->next) {
+	size_t arg_size = get_size(ptr);
+	max_size = SMAX(max_size, arg_size);
+	sum_size += arg_size;
+	if (!ptr->in_file)
+	    resident_size += arg_size;
     }
-    report(1, "Elapsed time %.1f.  Partial result with %zd values.  Max size = %zd.  Combined size = %zd.  Computed size = %zd",
-	   elapsed, set_size, max_size, total_size, result_size);
-    set_free(pset);
-}
+    if (data) {
+	data->result_size = SMAX(data->result_size, result_size);
+	data->max_size = SMAX(data->max_size, max_size);
+	data->sum_size = SMAX(data->sum_size, sum_size);
+	data->resident_size = SMAX(data->resident_size, resident_size);
+    }
+    report(1, "Elapsed time %.1f.  Partial result with %zd values.  Max size = %zd.  Sum size = %zd.  Resident size = %zd.  Computed size = %zd",
+	   elapsed, set_size, max_size, sum_size, resident_size, result_size);
+}    
 
 /* Conditionally simplify elements of one set with those of another */
 static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, char *docstring) {
@@ -608,6 +620,15 @@ static void insert_candidate(pair *candidates, rset_ele *ptr1, rset_ele *ptr2, d
     }
 }
 
+/* Perform GC if enough activity has occurred */
+static void check_gc() {
+    if (total_stored_nodes > total_stored_nodes_last_gc + stored_gc_limit) {
+	size_t collected = cudd_collect(smgr);
+	report(2, "CUDD reports %zd nodes collected", collected);
+	total_stored_nodes_last_gc = total_stored_nodes;
+    }
+}
+
 static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
     double expansion_factor = (double) expansion_factor_scaled * 0.01;
     pair candidates[abort_limit];
@@ -622,7 +643,6 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
     }
     
     while (!rset_is_singleton(set) && !rset_contains_zero(set)) {
-	size_t before_stored = total_stores;
 	compute_size_range(set);
 	clear_candidates(candidates);
 	rset_ele *ptr1 = NULL;
@@ -716,10 +736,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    data->result_size = get_size(nset);
 	report_combination(set, data);
 	release_function(nset);
-	if (before_stored < total_stores) {
-	    size_t collected = cudd_collect(smgr);
-	    report(2, "%zd nodes collected", collected);
-	}
+	check_gc();
     }
 
     ref_t rval;
@@ -745,7 +762,8 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 static ref_t rset_conjunct(rset_ele *set) {
     conjunction_data cdata;
     cdata.max_size = 0;
-    cdata.total_size = 0;
+    cdata.sum_size = 0;
+    cdata.resident_size = 0;
 
     ref_t rprod = REF_INVALID;
 
@@ -766,9 +784,8 @@ static ref_t rset_conjunct(rset_ele *set) {
 
     size_t rsize = cudd_single_size(smgr, rval);
     double elapsed = elapsed_time();
-    report(0, "Elapsed time %.1f.  Conjunction result %zd Max_BDD %zd Max_combined %zd",
-	   elapsed, rsize, cdata.max_size, cdata.total_size);
-
+    report(0, "Elapsed time %.1f.  Conjunction result %zd Max_BDD %zd Max_sum %zd Max_resident %zd",
+	   elapsed, rsize, cdata.max_size, cdata.sum_size, cdata.resident_size);
     return rval;
 }
 
