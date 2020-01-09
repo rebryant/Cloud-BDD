@@ -503,6 +503,15 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
 	   elapsed, set_size, max_size, sum_size, resident_size, result_size);
 }    
 
+/* Perform GC if enough activity has occurred */
+static void check_gc() {
+    if (total_stored_nodes > total_stored_nodes_last_gc + stored_gc_limit) {
+	size_t collected = cudd_collect(smgr);
+	report(2, "CUDD reports %zd nodes collected", collected);
+	total_stored_nodes_last_gc = total_stored_nodes;
+    }
+}
+
 /* Conditionally simplify elements of one set with those of another */
 static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, char *docstring) {
     rset_ele *myptr, *otherptr;
@@ -511,6 +520,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	size_t start_size = get_size(myptr);
 	int try_count = 0;
 	int sa_count = 0;
+	double elapsed = 0.0;
 	if (REF_IS_INVALID(myrval))
 	    continue;
 	root_addref(myrval, false);
@@ -531,11 +541,12 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		root_checkref(myrval);
 		root_checkref(otherrval);
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
+		elapsed = elapsed_time();
 		total_soft_and++;
 		if (REF_IS_INVALID(nval)) {
 		    total_soft_and_fail++;
-		    report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
-			   docstring, cov, current_size, other_size, limit);
+		    report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
+			   elapsed, docstring, cov, current_size, other_size, limit);
 		    root_deref(otherrval);
 		    release_function(otherptr);
 		    continue;
@@ -545,13 +556,9 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		sa_count++;
 		size_t new_size = cudd_single_size(smgr, nval);
 		double reduction = (double) current_size/new_size;
-		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Size --> %zd (%.3fX)",
-		       docstring, cov, current_size, other_size, new_size, reduction);
+		report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Size --> %zd (%.3fX)",
+		       elapsed, docstring, cov, current_size, other_size, new_size, reduction);
 		if (new_size < current_size || soft_and_allow_growth) {
-		    root_deref(myrval);
-		    rset_ele_new_fun(myptr, nval);
-		    myrval = nval;
-		    total_replace++;
 #if RPT >= 3
 		    {
 			char obuf[24], nbuf[24];
@@ -560,6 +567,10 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 			report(3, "Replacing %s with %s", obuf, nbuf);
 		    }
 #endif
+		    root_deref(myrval);
+		    rset_ele_new_fun(myptr, nval);
+		    myrval = nval;
+		    total_replace++;
 		} else {
 		    root_deref(nval);
 		    total_noreplace++;
@@ -568,11 +579,13 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		    shadow_status(smgr);
 	    } else {
 		total_skip++;
-		report(3, "Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
-		       docstring, cov, current_size, other_size);
+		elapsed = elapsed_time();
+		report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
+		       elapsed, docstring, cov, current_size, other_size);
 	    }
 	    root_deref(otherrval);
 	    release_function(otherptr);
+	    check_gc();
 	}
 	root_deref(myrval);
 	release_function(myptr);
@@ -617,15 +630,6 @@ static void insert_candidate(pair *candidates, rset_ele *ptr1, rset_ele *ptr2, d
 	    ptr2 = nptr2;
 	    sim = nsim;
 	}
-    }
-}
-
-/* Perform GC if enough activity has occurred */
-static void check_gc() {
-    if (total_stored_nodes > total_stored_nodes_last_gc + stored_gc_limit) {
-	size_t collected = cudd_collect(smgr);
-	report(2, "CUDD reports %zd nodes collected", collected);
-	total_stored_nodes_last_gc = total_stored_nodes;
     }
 }
 
