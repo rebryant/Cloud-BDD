@@ -540,13 +540,15 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		unsigned limit = (unsigned) (current_size * ratio);
 		root_checkref(myrval);
 		root_checkref(otherrval);
+		shadow_delta_cache_lookups(smgr);
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
+		size_t lookups = shadow_delta_cache_lookups(smgr);
 		elapsed = elapsed_time();
 		total_soft_and++;
 		if (REF_IS_INVALID(nval)) {
 		    total_soft_and_fail++;
-		    report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Requires more than %u nodes",
-			   elapsed, docstring, cov, current_size, other_size, limit);
+		    report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Requires more than %u nodes",
+			   elapsed, docstring, cov, current_size, other_size, lookups, limit);
 		    root_deref(otherrval);
 		    release_function(otherptr);
 		    continue;
@@ -556,8 +558,8 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		sa_count++;
 		size_t new_size = cudd_single_size(smgr, nval);
 		double reduction = (double) current_size/new_size;
-		report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Size --> %zd (%.3fX)",
-		       elapsed, docstring, cov, current_size, other_size, new_size, reduction);
+		report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Size --> %zd (%.3fX)",
+		       elapsed, docstring, cov, current_size, other_size, lookups, new_size, reduction);
 		if (new_size < current_size || soft_and_allow_growth) {
 #if RPT >= 3
 		    {

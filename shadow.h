@@ -145,3 +145,6 @@ void shadow_status(shadow_mgr mgr);
 /* Load and store */
 ref_t shadow_load(shadow_mgr mgr, FILE *infile);
 bool shadow_store(shadow_mgr mgr, ref_t r, FILE *outfile);
+
+/* Count of number of cache lookups since last call */
+size_t shadow_delta_cache_lookups(shadow_mgr mgr);
