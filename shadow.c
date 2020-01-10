@@ -1719,7 +1719,7 @@ ref_t shadow_load(shadow_mgr mgr, FILE *infile) {
 
 /* Count of number of cache lookups since last call */
 size_t shadow_delta_cache_lookups(shadow_mgr mgr) {
-    size_t last_count = 0;
+    static size_t last_count = 0;
     if (!mgr->do_cudd)
 	return 0;
     size_t count = (size_t) Cudd_ReadCacheLookUps(mgr->bdd_manager);
