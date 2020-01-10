@@ -521,6 +521,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	int try_count = 0;
 	int sa_count = 0;
 	double elapsed = 0.0;
+	double delta = 0.0;
 	if (REF_IS_INVALID(myrval))
 	    continue;
 	root_addref(myrval, false);
@@ -535,20 +536,22 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	    size_t current_size = get_size(myptr);
 	    size_t other_size = get_size(otherptr);
 	    size_t other_limit = (size_t) (0.01 * soft_and_relative_ratio_scaled * current_size);
-	    if (cov > threshold && (other_limit == 0 || other_size <= other_limit)) {
+	    if (cov > threshold && other_size <= other_limit) {
 		double ratio = 0.01 * soft_and_expansion_ratio_scaled;
 		unsigned limit = (unsigned) (current_size * ratio);
 		root_checkref(myrval);
 		root_checkref(otherrval);
 		shadow_delta_cache_lookups(smgr);
+		double start = elapsed_time();
 		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
 		size_t lookups = shadow_delta_cache_lookups(smgr);
 		elapsed = elapsed_time();
+		delta = elapsed - start;
 		total_soft_and++;
 		if (REF_IS_INVALID(nval)) {
 		    total_soft_and_fail++;
-		    report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Requires more than %u nodes",
-			   elapsed, docstring, cov, current_size, other_size, lookups, limit);
+		    report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Requires more than %u nodes",
+			   elapsed, delta, docstring, cov, current_size, other_size, lookups, limit);
 		    root_deref(otherrval);
 		    release_function(otherptr);
 		    continue;
@@ -558,8 +561,8 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		sa_count++;
 		size_t new_size = cudd_single_size(smgr, nval);
 		double reduction = (double) current_size/new_size;
-		report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Size --> %zd (%.3fX)",
-		       elapsed, docstring, cov, current_size, other_size, lookups, new_size, reduction);
+		report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Size --> %zd (%.3fX)",
+		       elapsed, delta, docstring, cov, current_size, other_size, lookups, new_size, reduction);
 		if (new_size < current_size || soft_and_allow_growth) {
 #if RPT >= 3
 		    {
@@ -582,7 +585,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	    } else {
 		total_skip++;
 		elapsed = elapsed_time();
-		report(3, "Elapsed time %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
+		report(3, "Elapsed time %.1f.  Delta 0.0.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Skipping",
 		       elapsed, docstring, cov, current_size, other_size);
 	    }
 	    root_deref(otherrval);

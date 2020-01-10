@@ -12,14 +12,14 @@ import brent
 import find_memsize
 
 def usage(name):
-    print("Usage %s [-h] [-r] [-R] [-C] [-p] [-I] [-s SUFFIX] [-t TIME] [-v VERB]")
+    print("Usage %s [-h] [-r] [-C] [-p] [-I] [-s SUFFIX] [-t TIME] [-v VERB] [-R RATIO]")
     print(" -h               Print this message")
     print(" -r               Redo runs that didn't complete")
-    print(" -R               Redo all runs")
     print(" -C               Use CUDD")
     print(" -p               Preprocess conjuncts with soft and")
     print(" -I IDIR          Directory containing command files")
     print(" -s SUFFIX        Specify suffix for log file root name")
+    print(" -R RATIO         Set relative size of other argument for soft and")
     print(" -t TIME          Set runtime limit (in seconds)")
     print(" -v VERB          Set verbosity level")
     sys.exit(0)
@@ -37,6 +37,8 @@ useCudd = False
 
 timeLimit = None
 verbLevel = None
+
+softRatio = None
 
 preprocessConjuncts = False
 
@@ -97,6 +99,8 @@ def process(cmdPath, suffix = None):
             cmd += ['-t', str(timeLimit)]
         if verbLevel is not None:
             cmd += ['-v', str(verbLevel)]
+        if softRatio is not None:
+            cmd += ['-R', str(softRatio)]
         cmdLine = " ".join(cmd)
         print("Running %s" % cmdLine)
         p = subprocess.Popen(cmd)
@@ -106,21 +110,19 @@ def process(cmdPath, suffix = None):
 
 
 def run(name, args):
-    global softRedo, hardRedo, useCudd, timeLimit, verbLevel, megabytes, preprocessConjuncts
+    global softRedo, hardRedo, useCudd, timeLimit, verbLevel, megabytes, preprocessConjuncts, softRatio
     mb = find_memsize.megabytes()
     if mb > 0:
         megabytes = int(mb * memoryFraction)
     nameList = []
     suffix = None
-    optlist, args = getopt.getopt(args, 'hrRCpI:s:t:v:')
+    optlist, args = getopt.getopt(args, 'hrCpI:s:t:v:R:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         elif opt == '-r':
             softRedo = True
-        elif opt == '-R':
-            hardRedo = True
         elif opt == '-C':
             useCudd = True
         elif opt == '-p':
@@ -134,6 +136,8 @@ def run(name, args):
             timeLimit = int(val)
         elif opt == '-v':
             verbLevel = int(val)
+        elif opt == '-R':
+            softRatio = int(val)
     for name in nameList:
         process(name, suffix)
 
