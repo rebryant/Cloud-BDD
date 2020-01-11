@@ -18,6 +18,7 @@ extern int inprocess_soft_and_threshold_scaled;
 extern int soft_and_relative_ratio_scaled;
 extern int soft_and_allow_growth;
 extern int preprocess_conjuncts;
+extern int cache_lookup_ratio;
 
 /* Functions defined in conjunct.c */
 void init_conjunct();

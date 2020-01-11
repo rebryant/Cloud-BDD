@@ -636,7 +636,7 @@ ref_t shadow_absval(shadow_mgr mgr, ref_t r) {
     }
 }
 
-ref_t shadow_and_limit(shadow_mgr mgr, ref_t aref, ref_t bref, size_t limit) {
+ref_t shadow_and_limit(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit, size_t lookupLimit) {
     ref_t r = REF_ZERO;
     dd_type_t dtype = IS_BDD;
     bool za = is_zdd(mgr, aref);
@@ -698,7 +698,9 @@ ref_t shadow_and_limit(shadow_mgr mgr, ref_t aref, ref_t bref, size_t limit) {
     if (dtype == IS_BDD && mgr->do_cudd) {
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);
-	DdNode *rn = limit == 0 ? Cudd_bddAnd(mgr->bdd_manager, an, bn) : Cudd_bddAndLimit(mgr->bdd_manager, an, bn, (unsigned) limit);
+	DdNode *rn = nodeLimit == 0 && lookupLimit == 0 ?
+	    Cudd_bddAnd(mgr->bdd_manager, an, bn) :
+	    Cudd_bddAndLimit2(mgr->bdd_manager, an, bn, (unsigned) nodeLimit, lookupLimit);
 	r = dd2ref(rn, IS_BDD);
 	if (!REF_IS_INVALID(r)) {
 	    reference_dd(mgr, rn);
@@ -718,11 +720,11 @@ ref_t shadow_and_limit(shadow_mgr mgr, ref_t aref, ref_t bref, size_t limit) {
 }
 
 ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
-    return shadow_and_limit(mgr, aref, bref, 0);
+    return shadow_and_limit(mgr, aref, bref, 0, 0);
 }
 	
 
-ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, unsigned limit) {
+ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit, size_t lookupLimit) {
     ref_t r = REF_ZERO;
     bool za = is_zdd(mgr, aref);
     bool zb = is_zdd(mgr, bref);
@@ -737,7 +739,9 @@ ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, unsigned limit) {
 
     DdNode *an = get_ddnode(mgr, aref);
     DdNode *bn = get_ddnode(mgr, bref);
-    DdNode *rn = limit == 0 ? Cudd_bddNPAnd(mgr->bdd_manager, an, bn) : Cudd_bddNPAndLimit(mgr->bdd_manager, an, bn, limit);
+    DdNode *rn = nodeLimit == 0 && lookupLimit == 0 ?
+	Cudd_bddNPAnd(mgr->bdd_manager, an, bn) :
+	Cudd_bddNPAndLimit2(mgr->bdd_manager, an, bn, (unsigned) nodeLimit, lookupLimit);
     r = dd2ref(rn, IS_BDD);
     if (!REF_IS_INVALID(r)) {
 	reference_dd(mgr, rn);

@@ -61,8 +61,8 @@ ref_t shadow_absval(shadow_mgr mgr, ref_t r);
 ref_t shadow_ite(shadow_mgr mgr, ref_t iref, ref_t tref, ref_t eref);
 ref_t shadow_cm_restrict(shadow_mgr mgr, ref_t fref, ref_t cref);
 ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref);
-ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, unsigned limit);
-ref_t shadow_and_limit(shadow_mgr mgr, ref_t aref, ref_t bref, size_t limit);
+ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit, size_t lookupLimit);
+ref_t shadow_and_limit(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit, size_t lookupLimit);
 ref_t shadow_or(shadow_mgr mgr, ref_t aref, ref_t bref);
 ref_t shadow_xor(shadow_mgr mgr, ref_t aref, ref_t bref);
 

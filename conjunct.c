@@ -74,6 +74,9 @@ int soft_and_allow_growth = 0;
 /* How many nodes are allowed when computing soft and.  Set to ratio with current size. (Scaled by 100) */
 int soft_and_expansion_ratio_scaled = 200;
 
+/* How many cache looks are allowed when computing (soft) and.  Set to ratio of sum of argument sizes */
+int cache_lookup_ratio = 200;
+
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
 /* (Scaled by 100) */
 double max_large_argument_penalty_scaled = 40;
@@ -108,7 +111,8 @@ double log10_max_size = 8.0;
 /* Performance counters */
 size_t total_soft_and = 0;
 size_t total_soft_and_success = 0;
-size_t total_soft_and_fail = 0;
+size_t total_soft_and_node_fail = 0;
+size_t total_soft_and_lookup_fail = 0;
 size_t total_and_limit = 0;
 size_t total_and = 0;
 size_t total_skip = 0;
@@ -169,6 +173,7 @@ void init_conjunct() {
     add_param("soft", &inprocess_soft_and_threshold_scaled, "Threshold for attempting soft-and simplification (0-100)", NULL);
     add_param("grow", &soft_and_allow_growth, "Allow growth from soft-and simplification", NULL);
     add_param("preprocess", &preprocess_conjuncts, "Attempt to simplify conjuncts with soft and", NULL);
+    add_param("lookup", &cache_lookup_ratio, "Max cache lookups during and/soft-and (ratio to arg sizes)", NULL);
     preprocess = 0;
     reprocess = 0;
 }
@@ -538,20 +543,29 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	    size_t other_limit = (size_t) (0.01 * soft_and_relative_ratio_scaled * current_size);
 	    if (cov > threshold && other_size <= other_limit) {
 		double ratio = 0.01 * soft_and_expansion_ratio_scaled;
-		unsigned limit = (unsigned) (current_size * ratio);
+		unsigned node_limit = (unsigned) (current_size * ratio);
+		size_t lookup_limit = current_size * cache_lookup_ratio;
 		root_checkref(myrval);
 		root_checkref(otherrval);
 		shadow_delta_cache_lookups(smgr);
 		double start = elapsed_time();
-		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, limit);
+
+		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, node_limit, lookup_limit);
+
 		size_t lookups = shadow_delta_cache_lookups(smgr);
 		elapsed = elapsed_time();
 		delta = elapsed - start;
 		total_soft_and++;
 		if (REF_IS_INVALID(nval)) {
-		    total_soft_and_fail++;
-		    report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Requires more than %u nodes",
-			   elapsed, delta, docstring, cov, current_size, other_size, lookups, limit);
+		    if (lookups >= lookup_limit) {
+			total_soft_and_lookup_fail++;
+			report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Too many cache lookups",
+			       elapsed, delta, docstring, cov, current_size, other_size, lookups);
+		    } else {
+			total_soft_and_node_fail++;
+			report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Requires more than %u nodes",
+			   elapsed, delta, docstring, cov, current_size, other_size, lookups, node_limit);
+		    }
 		    root_deref(otherrval);
 		    release_function(otherptr);
 		    continue;
@@ -670,6 +684,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	ref_t arg1 = REF_INVALID;
 	ref_t arg2 = REF_INVALID;
 	ref_t nval = REF_INVALID;
+	size_t size1, size2, lookup_limit;
 	double sim = -1.0;
 	/* Each pass allows a larger limit.  Final pass removes size bound */
 	size_t size_limit = max_argument_size;
@@ -691,6 +706,9 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    sim = candidates[tidx].sim;
 	    arg1 = get_function(ptr1);
 	    arg2 = get_function(ptr2);
+	    size1 = get_size(ptr1);
+	    size2 = get_size(ptr2);
+	    lookup_limit = (size1+size2) * cache_lookup_ratio;
 
 	    root_checkref(arg1);
 	    root_checkref(arg2);
@@ -698,7 +716,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 		nval = shadow_and(smgr, arg1, arg2);
 		total_and++;
 	    } else {
-		nval = shadow_and_limit(smgr, arg1, arg2, size_limit);
+		nval = shadow_and_limit(smgr, arg1, arg2, size_limit, lookup_limit);
 		total_and_limit++;
 	    }
 
@@ -870,7 +888,8 @@ bool do_conjunct(int argc, char *argv[]) {
     assign_ref(argv[1], rval, false, false);
     root_deref(rval);
 
-    report(3, "Total soft ands = %zd.  Succeed = %zd.  Fail = %zd", total_soft_and, total_soft_and_success, total_soft_and_fail);
+    report(3, "Total soft ands = %zd.  Succeed = %zd.  Node fail = %zd.  Lookup fail = %zd",
+	   total_soft_and, total_soft_and_success, total_soft_and_node_fail, total_soft_and_lookup_fail);
     report(3, "Total replacements = %zd", total_replace);
     report(3, "Total non-replacements = %zd", total_noreplace);
     report(3, "Total skip soft and = %zd", total_skip);
