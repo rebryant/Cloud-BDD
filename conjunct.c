@@ -776,11 +776,11 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	rset_free(set);
     } else {
 	/* Must contain zero.  Delete remaining arguments */
+	report(1, "Elapsed time %.1f.  Conjunction of %zd elements.  Encountered zero-valued conjunct with %zd conjuncts remaining",
+	       elapsed, argument_count, rset_length(set));
 	rset_free(set);
 	rval = shadow_zero(smgr);
 	double elapsed = elapsed_time();
-	report(1, "Elapsed time %.1f.  Conjunction of %zd elements.  Encountered zero-valued conjunct with %zd conjuncts remaining",
-	       elapsed, argument_count, rset_length(set));
     }
     return rval;
 }
