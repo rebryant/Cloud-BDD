@@ -24,6 +24,15 @@
 #define CUDD_VERSION "3.1.0"
 #endif
 
+/* Debugging help */
+static DdNode *dd_check(DdNode *f)  {
+    if (f) {
+	Cudd_Ref(f);
+	Cudd_Deref(f);
+    }
+    return f;
+}
+
 /* From cuddInt.h */
 extern int cuddGarbageCollect (DdManager *unique, int clearCache);
 
@@ -699,8 +708,8 @@ ref_t shadow_and_limit(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit,
 	DdNode *an = get_ddnode(mgr, aref);
 	DdNode *bn = get_ddnode(mgr, bref);
 	DdNode *rn = nodeLimit == 0 && lookupLimit == 0 ?
-	    Cudd_bddAnd(mgr->bdd_manager, an, bn) :
-	    Cudd_bddAndLimit2(mgr->bdd_manager, an, bn, (unsigned) nodeLimit, lookupLimit);
+	    dd_check(Cudd_bddAnd(mgr->bdd_manager, an, bn)) :
+	    dd_check(Cudd_bddAndLimit2(mgr->bdd_manager, an, bn, (unsigned) nodeLimit, lookupLimit));
 	r = dd2ref(rn, IS_BDD);
 	if (!REF_IS_INVALID(r)) {
 	    reference_dd(mgr, rn);
@@ -737,11 +746,11 @@ ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit, 
 	/* Only implemented with CUDD */
 	return shadow_and(mgr, aref, bref);
 
-    DdNode *an = get_ddnode(mgr, aref);
-    DdNode *bn = get_ddnode(mgr, bref);
+    DdNode *an = dd_check(get_ddnode(mgr, aref));
+    DdNode *bn = dd_check(get_ddnode(mgr, bref));
     DdNode *rn = nodeLimit == 0 && lookupLimit == 0 ?
-	Cudd_bddNPAnd(mgr->bdd_manager, an, bn) :
-	Cudd_bddNPAndLimit2(mgr->bdd_manager, an, bn, (unsigned) nodeLimit, lookupLimit);
+	dd_check(Cudd_bddNPAnd(mgr->bdd_manager, an, bn)) :
+	dd_check(Cudd_bddNPAndLimit2(mgr->bdd_manager, an, bn, (unsigned) nodeLimit, lookupLimit));
     r = dd2ref(rn, IS_BDD);
     if (!REF_IS_INVALID(r)) {
 	reference_dd(mgr, rn);
