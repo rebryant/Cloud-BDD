@@ -251,6 +251,7 @@ static void rset_free(rset_ele *set) {
     rset_ele *ptr = set;
     while (ptr) {
 	rset_ele *next = ptr->next;
+	ptr->next = NULL;
 	rset_ele_free(ptr);
 	ptr = next;
     }
