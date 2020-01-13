@@ -358,6 +358,7 @@ int main(int argc, char *argv[]) {
 	set_agent_stat_helper(do_summary_stat);
     }
     console_init(do_dist);
+    show_options(1);
     add_quit_helper(bdd_quit);
     if (signal(SIGTERM, sigterm_handler) == SIG_ERR)
 	err(false, "Couldn't install signal handler");

@@ -37,6 +37,9 @@ void add_cmd(char *name, cmd_function operation, char *documentation);
 void add_param(char *name, int *valp, char *doccumentation,
 	       setter_function setter);
 
+/* Display current options */
+void show_options(int vlevel);
+
 /* Execute a command from a command line */
 bool interpret_cmd(char *cmdline);
 

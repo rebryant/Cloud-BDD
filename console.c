@@ -166,6 +166,16 @@ void add_param(char *name, int *valp, char *documentation,
     *last_loc = ele;
 }
 
+/* Display current set of option values */
+void show_options(int vlevel) {
+    param_ptr plist = param_list;
+    report(vlevel, "Initial Options:");
+    while (plist) {
+	report(vlevel, "\t%s\t%d\t%s", plist->name, *plist->valp, plist->documentation);
+	plist = plist->next;
+    }
+}
+
 
 /* Parse a string into a command line */
 char **parse_args(char *line, int *argcp) {
