@@ -12,7 +12,7 @@ import brent
 import find_memsize
 
 def usage(name):
-    print("Usage %s [-h] [-r] [-C] [-p] [-I] [-s SUFFIX] [-t TIME] [-v VERB] [-R RATIO]")
+    print("Usage %s [-h] [-r] [-C] [-p] [-I] [-s SUFFIX] [-t TIME] [-v VERB] [-R RATIO] [-K LOOKUP]")
     print(" -h               Print this message")
     print(" -r               Redo runs that didn't complete")
     print(" -C               Use CUDD")
@@ -20,6 +20,7 @@ def usage(name):
     print(" -I IDIR          Directory containing command files")
     print(" -s SUFFIX        Specify suffix for log file root name")
     print(" -R RATIO         Set relative size of other argument for soft and")
+    print(" -K LOOKUP        Limit cache lookups during conjunction (ratio wrt argument sizes")
     print(" -t TIME          Set runtime limit (in seconds)")
     print(" -v VERB          Set verbosity level")
     sys.exit(0)
@@ -51,6 +52,8 @@ memoryFraction = 0.90
 # Default is 32 GB, discounted by memoryFraction
 megabytes = int((1 << 15) * memoryFraction)
 
+# What should be limit on cache lookups, as ratio to argument size(s)
+lookupRatio  = None
 
 # Check if should run.  Return either None (don't run) or name of log file
 def shouldRun(cmdPath, suffix = None):
@@ -101,6 +104,8 @@ def process(cmdPath, suffix = None):
             cmd += ['-v', str(verbLevel)]
         if softRatio is not None:
             cmd += ['-R', str(softRatio)]
+        if lookupRatio is not None:
+            cmd += ['-K', str(lookupRatio)]
         cmdLine = " ".join(cmd)
         print("Running %s" % cmdLine)
         p = subprocess.Popen(cmd)
@@ -110,13 +115,13 @@ def process(cmdPath, suffix = None):
 
 
 def run(name, args):
-    global softRedo, hardRedo, useCudd, timeLimit, verbLevel, megabytes, preprocessConjuncts, softRatio
+    global softRedo, hardRedo, useCudd, timeLimit, verbLevel, megabytes, preprocessConjuncts, softRatio, lookupRatio
     mb = find_memsize.megabytes()
     if mb > 0:
         megabytes = int(mb * memoryFraction)
     nameList = []
     suffix = None
-    optlist, args = getopt.getopt(args, 'hrCpI:s:t:v:R:')
+    optlist, args = getopt.getopt(args, 'hrCpI:s:t:v:R:K:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -138,6 +143,8 @@ def run(name, args):
             verbLevel = int(val)
         elif opt == '-R':
             softRatio = int(val)
+        elif opt == '-L':
+            lookupRatio = int(val)
     for name in nameList:
         process(name, suffix)
 
