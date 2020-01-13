@@ -143,7 +143,7 @@ def run(name, args):
             verbLevel = int(val)
         elif opt == '-R':
             softRatio = int(val)
-        elif opt == '-L':
+        elif opt == '-K':
             lookupRatio = int(val)
     for name in nameList:
         process(name, suffix)
