@@ -185,7 +185,7 @@ static void rset_ele_new_fun(rset_ele *ele, ref_t fun) {
     if (ele->in_file && !keep_conjunct_files) {
 	bool done = remove(ele->file_name) == 0;
 	if (done)
-	    report(3, "DD file '%s' removed", ele->file_name);
+	    report(4, "DD file '%s' removed", ele->file_name);
 	else
 	    report(3, "Attempt to delete DD file '%s' failed", ele->file_name);
     }
@@ -342,13 +342,13 @@ static ref_t get_function(rset_ele *ptr) {
 	    if (REF_IS_INVALID(ptr->fun))
 		err(true, "Failed to load DD from file '%s'", ptr->file_name);
 	    root_addref(ptr->fun, true);
-	    report(3, "Retrieved DD of size %zd from file '%s'", get_size(ptr), ptr->file_name);
+	    report(4, "Retrieved DD of size %zd from file '%s'", get_size(ptr), ptr->file_name);
 	    total_loads++;
 	    total_loaded_nodes += get_size(ptr);
 	    fclose(infile);
 	    bool done = remove(ptr->file_name) == 0;
 	    if (done)
-		report(3, "DD file '%s' removed", ptr->file_name);
+		report(4, "DD file '%s' removed", ptr->file_name);
 	    else
 		report(3, "Attempt to delete DD file '%s' failed", ptr->file_name);
 	}
@@ -513,7 +513,7 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
 static void check_gc() {
     if (total_stored_nodes > total_stored_nodes_last_gc + stored_gc_limit) {
 	size_t collected = cudd_collect(smgr);
-	report(2, "CUDD reports %zd nodes collected", collected);
+	report(3, "CUDD reports %zd nodes collected", collected);
 	total_stored_nodes_last_gc = total_stored_nodes;
     }
 }
@@ -584,7 +584,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 			char obuf[24], nbuf[24];
 			shadow_show(smgr, myrval, obuf);
 			shadow_show(smgr, nval, nbuf);
-			report(3, "Replacing %s with %s", obuf, nbuf);
+			report(4, "Replacing %s with %s", obuf, nbuf);
 		    }
 #endif
 		    root_deref(myrval);
@@ -692,6 +692,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	max_size_limit = SMAX(max_size_limit, size_limit);
 	int try_limit = ccount * pass_limit + 1;
 	int try;
+	size_t lookups = 0;
 	for (try = 0; try <= try_limit; try++) {
 	    bool final_try = try == try_limit;
 	    int tidx = try % ccount;
@@ -713,6 +714,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 
 	    root_checkref(arg1);
 	    root_checkref(arg2);
+	    shadow_delta_cache_lookups(smgr);
 	    if (final_try) {
 		nval = shadow_and(smgr, arg1, arg2);
 		total_and++;
@@ -720,17 +722,15 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 		nval = shadow_and_limit(smgr, arg1, arg2, size_limit, lookup_limit);
 		total_and_limit++;
 	    }
-
+	    lookups = shadow_delta_cache_lookups(smgr);
 
 	    if (!REF_IS_INVALID(nval))
 		break;
 	    abort_count ++;
-	    if (verblevel >= 4) {
-		char arg1_buf[24], arg2_buf[24];
-		shadow_show(smgr, arg1, arg1_buf);
-		shadow_show(smgr, arg2, arg2_buf);
-		report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd nodes", arg1_buf, arg2_buf, sim, try+1, size_limit);
-	    }
+	    if (lookups >= lookup_limit) 
+		report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd cache lookups", ptr1->file_name, ptr2->file_name, sim, try+1, lookup_limit);
+	    else
+		report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd nodes", ptr1->file_name, ptr2->file_name, sim, try+1, size_limit);
 	    release_function(ptr1);
 	    release_function(ptr2);
 
@@ -741,17 +741,14 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	root_addref(nval, true);
 	set = rset_remove_element(set, ptr1);
 	set = rset_remove_element(set, ptr2);
-	if (verblevel >= 3) {
-	    char arg1_buf[24], arg2_buf[24], nval_buf[24];
-	    shadow_show(smgr, arg1, arg1_buf);
-	    shadow_show(smgr, arg2, arg2_buf);
-	    shadow_show(smgr, nval, nval_buf);
-	    report(3, "%s & %s (sim = %.3f, try #%d) --> %s", arg1_buf, arg2_buf, sim, try+1, nval_buf);
-	}
-	rset_ele_free(ptr1);
-	rset_ele_free(ptr2);
 	rset_ele *nset = rset_new(nval);
 	root_deref(nval);
+	report(3, "%s (%zd nodes) & %s (%zd nodes) (sim = %.3f, try #%d) --> %s (%zd nodes).  %zd cache lookups",
+	       ptr1->file_name, get_size(ptr1), ptr2->file_name, get_size(ptr2), sim,
+	       try+1, nset->file_name, get_size(nset), lookups);
+	rset_ele_free(ptr1);
+	rset_ele_free(ptr2);
+
 
 	/* Attempt to simplify in both directions */
 	int length = rset_length(set);
