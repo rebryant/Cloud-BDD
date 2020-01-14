@@ -271,7 +271,7 @@ static rset_ele *rset_remove_element(rset_ele *set, rset_ele *ele) {
 	next = next->next;
     }
     if (!next) {
-	err(false, "Internal element.  Did not find element in set");
+	err(false, "Internal error.  Did not find element in set");
 	return set;
     }
     /* next == ele, prev points to predecessor */
