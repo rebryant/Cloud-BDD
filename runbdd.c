@@ -226,7 +226,7 @@ static bool bdd_quit(int argc, char *argv[]) {
 
 static void usage(char *cmd) {
     printf(
-"Usage: %s [-h] [-f FILE][-v VLEVEL] [-M MBYTES] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain][-K LOOKUP][-E EXPAND][-g]\n",
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-M MBYTES] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain][-K LOOKUP][-G GEN][-g]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
@@ -236,7 +236,7 @@ static void usage(char *cmd) {
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
     printf("\t-K LOOKUP  Limit cache lookups during conjunction (ratio wrt argument sizes, scaled by 100)\n");
-    printf("\t-E EXPAND  Expansion limit during soft and (scaled by 100)\n");
+    printf("\t-G GEN     Limit nodes generated during soft and (ratio wrt argument size, scaled by 100)\n");
     printf("\t-g         Allow growth from soft-and simplification\n");
     printf("\t-p         Preprocess conjuncts with soft-and simplification\n");
     printf("Distributed BDD options\n");
@@ -271,7 +271,7 @@ int main(int argc, char *argv[]) {
     chaining_type = CHAIN_ALL;
 
 
-    while ((c = getopt(argc, argv, "hv:M:f:cldH:P:rL:t:C:R:K:E:gp")) != -1) {
+    while ((c = getopt(argc, argv, "hv:M:f:cldH:P:rL:t:C:R:K:G:gp")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -332,7 +332,7 @@ int main(int argc, char *argv[]) {
 	case 'K':
 	    cache_lookup_ratio = atoi(optarg);
 	    break;
-	case 'E':
+	case 'G':
 	    soft_and_expansion_ratio_scaled = atoi(optarg);
 	    break;
 	case 'g':

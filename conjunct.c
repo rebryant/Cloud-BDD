@@ -176,6 +176,7 @@ void init_conjunct() {
     add_param("grow", &soft_and_allow_growth, "Allow growth from soft-and simplification", NULL);
     add_param("preprocess", &preprocess_conjuncts, "Attempt to simplify conjuncts with soft and", NULL);
     add_param("lookup", &cache_lookup_ratio, "Max cache lookups during and/soft-and (ratio to arg sizes)", NULL);
+    add_param("generate", &soft_and_expansion_ratio_scaled, "Limit on nodes generated during soft and", NULL);
     preprocess = 0;
     reprocess = 0;
 }
