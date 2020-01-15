@@ -42,6 +42,7 @@ def summarize(eset, category):
 def generalReport(eset):
     soft_and.showList(["Cat", "Count", "msize", "Msize", "Time", "Avg"], outFile = outFile)
     summarize(eset, "Total")
+    summarize(eset.withOutcome("skipped"), "Skip")
     summarize(eset.withOutcome("tooBig"), "TBig")
     summarize(eset.withOutcome("tooMany"), "TMany")
     summarize(eset.withOutcome("completed"), "Done")
