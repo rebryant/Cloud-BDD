@@ -1,4 +1,4 @@
-/* Support for conjunction and Coudert/Madre simplification operations */
+/* Implemention of conjunction engine */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -45,10 +45,12 @@ int preprocess = 1;
 int reprocess = 1;
 
 /* Maximum number of pairs to try when doing conjunction with aborts */
-int abort_limit = 7;
+/* Was 7 */
+int abort_limit = 5;
 /* Maximum expansion factor for conjunction (scaled 100x) */
 
-int expansion_factor_scaled = 173;
+/* Was 173 */
+int expansion_factor_scaled = 200;
 /* Number of passes of conjunction before giving up */
 int pass_limit = 3;
 
@@ -681,12 +683,16 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    }
 	}
 	/* Loop around all cases.  If don't succeed with bounded AND on first pass
-	   then do one more try with unbounded */
-	ref_t arg1 = REF_INVALID;
-	ref_t arg2 = REF_INVALID;
-	ref_t nval = REF_INVALID;
+	   then do one more try with unbounded.
+	   Once get product, continue trying remaining cases to see if can improve
+	*/
 	size_t size1, size2, lookup_limit;
-	double sim = -1.0;
+	rset_ele *best_ptr1 = NULL;
+	rset_ele *best_ptr2 = NULL;
+	rset_ele *best_nset = NULL;
+	size_t best_lookups = 0;
+	double best_sim = 0.0;
+	int best_try = 0;
 	/* Each pass allows a larger limit.  Final pass removes size bound */
 	size_t size_limit = max_argument_size;
 	max_size_limit = SMAX(max_size_limit, size_limit);
@@ -694,10 +700,18 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	int try;
 	size_t lookups = 0;
 	for (try = 0; try <= try_limit; try++) {
+	    ref_t arg1 = REF_INVALID;
+	    ref_t arg2 = REF_INVALID;
+	    ref_t nval = REF_INVALID;
+	    double sim = -1.0;
+
 	    bool final_try = try == try_limit;
 	    int tidx = try % ccount;
 	    if (tidx == 0) {
 		/* Start of a new pass */
+		if (best_nset != NULL)
+		    /* Once have product, don't look for better ones at larger size */
+		    break;
 		/* Increase size limit for this pass */
 		size_limit = (size_t) (size_limit * expansion_factor);
 		max_size_limit = SMAX(max_size_limit, size_limit);
@@ -724,43 +738,65 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    }
 	    lookups = shadow_delta_cache_lookups(smgr);
 
-	    if (!REF_IS_INVALID(nval))
-		break;
-	    abort_count ++;
-	    if (lookups >= lookup_limit) 
-		report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd cache lookups", ptr1->file_name, ptr2->file_name, sim, try+1, lookup_limit);
-	    else
-		report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd nodes", ptr1->file_name, ptr2->file_name, sim, try+1, size_limit);
+	    if (REF_IS_INVALID(nval)) {
+		abort_count ++;
+		if (lookups >= lookup_limit) 
+		    report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd cache lookups", ptr1->file_name, ptr2->file_name, sim, try+1, lookup_limit);
+		else
+		    report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd nodes", ptr1->file_name, ptr2->file_name, sim, try+1, size_limit);
+	    } else {
+		root_addref(nval, true);
+		rset_ele *nset = rset_new(nval);
+		root_deref(nval);
+		report(3, "%s & %s (sim = %.3f, try #%d).  Success with product of size %zd. %zd cache lookups", ptr1->file_name, ptr2->file_name, sim, try+1, get_size(nset), lookups);
+		if (best_nset == NULL) {
+		    best_nset = nset;
+		    best_ptr1 = ptr1;
+		    best_ptr2 = ptr2;
+		    best_lookups = lookups;
+		    best_sim = sim;
+		    best_try = try;
+		    size_limit = get_size(best_nset);
+		} else if (get_size(nset) < get_size(best_nset)) {
+		    rset_free(best_nset);
+		    best_nset = nset;
+		    best_ptr1 = ptr1;
+		    best_ptr2 = ptr2;
+		    best_lookups = lookups;
+		    best_sim = sim;
+		    best_try = try;
+		    size_limit = get_size(best_nset);
+		} else {
+		    rset_free(nset);
+		}
+	    }
 	    release_function(ptr1);
 	    release_function(ptr2);
-
 	}
-	if (REF_IS_INVALID(nval))
+	if (best_nset == NULL)
 	    err(true, "Couldn't compute conjunction");
 
-	root_addref(nval, true);
-	set = rset_remove_element(set, ptr1);
-	set = rset_remove_element(set, ptr2);
-	rset_ele *nset = rset_new(nval);
-	root_deref(nval);
+	set = rset_remove_element(set, best_ptr1);
+	set = rset_remove_element(set, best_ptr2);
+
 	report(3, "%s (%zd nodes) & %s (%zd nodes) (sim = %.3f, try #%d) --> %s (%zd nodes).  %zd cache lookups",
-	       ptr1->file_name, get_size(ptr1), ptr2->file_name, get_size(ptr2), sim,
-	       try+1, nset->file_name, get_size(nset), lookups);
-	rset_ele_free(ptr1);
-	rset_ele_free(ptr2);
+	       best_ptr1->file_name, get_size(best_ptr1), best_ptr2->file_name, get_size(best_ptr2), best_sim,
+	       best_try+1, best_nset->file_name, get_size(best_nset), best_lookups);
+	rset_ele_free(best_ptr1);
+	rset_ele_free(best_ptr2);
 
 
 	/* Attempt to simplify in both directions */
 	int length = rset_length(set);
 	report(2, "Apply soft simplify to new argument based on existing %d arguments", length);
-	soft_simplify(nset, set, ithreshold, "conj_old2new");
+	soft_simplify(best_nset, set, ithreshold, "conj_old2new");
 	report(2, "Apply soft simplify to existing %d arguments based on new argument", length);
-	soft_simplify(set, nset, ithreshold, "conj_new2old");
-	set = rset_add_element(set, nset);
+	soft_simplify(set, best_nset, ithreshold, "conj_new2old");
+	set = rset_add_element(set, best_nset);
 	if (data)
-	    data->result_size = get_size(nset);
+	    data->result_size = get_size(best_nset);
 	report_combination(set, data);
-	release_function(nset);
+	release_function(best_nset);
 	check_gc();
     }
 
