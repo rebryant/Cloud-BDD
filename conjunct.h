@@ -15,7 +15,6 @@ ref_t get_ref(char *name);
 /* Global variables defined in conjunct.c */
 extern int preprocess_soft_and_threshold_scaled;
 extern int inprocess_soft_and_threshold_scaled;
-extern int soft_and_relative_ratio_scaled;
 extern int soft_and_allow_growth;
 extern int preprocess_conjuncts;
 extern int cache_lookup_ratio;

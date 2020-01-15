@@ -226,7 +226,7 @@ static bool bdd_quit(int argc, char *argv[]) {
 
 static void usage(char *cmd) {
     printf(
-"Usage: %s [-h] [-f FILE][-v VLEVEL] [-M MBYTES] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain][-R RATIO][-K LOOKUP][-g]\n",
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-M MBYTES] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain][-K LOOKUP][-g]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
@@ -235,7 +235,6 @@ static void usage(char *cmd) {
     printf("\t-L FILE    Echo results to FILE\n");
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
-    printf("\t-R RATIO   Ratio of other DD size when attempting soft-and simplification (0-100)\n");
     printf("\t-K LOOKUP  Limit cache lookups during conjunction (ratio wrt argument sizes)\n");
     printf("\t-g         Allow growth from soft-and simplification\n");
     printf("\t-p         Preprocess conjuncts with soft-and simplification\n");
@@ -328,9 +327,6 @@ int main(int argc, char *argv[]) {
 	    default:
 		err(true, "Invalid chaining type '%c'\n", optarg[0]);
 	    }
-	    break;
-	case 'R':
-	    soft_and_relative_ratio_scaled = atoi(optarg);
 	    break;
 	case 'K':
 	    cache_lookup_ratio = atoi(optarg);

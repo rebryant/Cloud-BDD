@@ -49,7 +49,6 @@ int reprocess = 1;
 int abort_limit = 5;
 /* Maximum expansion factor for conjunction (scaled 100x) */
 
-/* Was 173 */
 int expansion_factor_scaled = 200;
 /* Number of passes of conjunction before giving up */
 int pass_limit = 3;
@@ -59,13 +58,14 @@ int pass_limit = 3;
    Distinguish between use in initial preprocessing step, vs. during conjunction operations 
  */
 
-int preprocess_soft_and_threshold_scaled = 50;
-int inprocess_soft_and_threshold_scaled = 50;
+int preprocess_soft_and_threshold_scaled = 80;
+int inprocess_soft_and_threshold_scaled = 80;
 
 /* Upper bound on size of other function for soft and */
-/* (Scaled by 100) */
-
-int soft_and_relative_ratio_scaled = 200;
+/* Piecewise linear function determined by size of argument */
+#define SRR_PIECES 3
+size_t srr_threshold[SRR_PIECES] = { 0, 100000, 1000000 };
+double srr_ratio[SRR_PIECES] =     { 2.0, 1.5, 0.75 };
 
 /* Attempt preprocessing with soft and */
 int preprocess_conjuncts = 0;
@@ -520,6 +520,17 @@ static void check_gc() {
     }
 }
 
+static size_t other_size_limit(size_t size) {
+    int t;
+    for (t = 0; t < SRR_PIECES; t++) {
+	if (size > srr_threshold[t]) {
+	    return srr_ratio[t] * size;
+	}
+    }
+    err(false, "Failed to find other size limit for argument size %zd", size);
+    return size;
+}
+
 /* Conditionally simplify elements of one set with those of another */
 static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, char *docstring) {
     rset_ele *myptr, *otherptr;
@@ -543,7 +554,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	    double cov = get_support_coverage(otherptr, myptr, false);
 	    size_t current_size = get_size(myptr);
 	    size_t other_size = get_size(otherptr);
-	    size_t other_limit = (size_t) (0.01 * soft_and_relative_ratio_scaled * current_size);
+	    size_t other_limit = other_size_limit(current_size);
 	    if (cov > threshold && other_size <= other_limit) {
 		double ratio = 0.01 * soft_and_expansion_ratio_scaled;
 		unsigned node_limit = (unsigned) (current_size * ratio);
