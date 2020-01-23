@@ -564,9 +564,8 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		root_checkref(otherrval);
 		shadow_delta_cache_lookups(smgr);
 		double start = elapsed_time();
-		size_t newNodeCount;
 
-		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, node_limit, lookup_limit, &newNodeCount);
+		ref_t nval = shadow_soft_and(smgr, myrval, otherrval, node_limit, lookup_limit);
 
 		size_t lookups = shadow_delta_cache_lookups(smgr);
 		elapsed = elapsed_time();
@@ -575,12 +574,12 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		if (REF_IS_INVALID(nval)) {
 		    if (lookups >= lookup_limit) {
 			total_soft_and_lookup_fail++;
-			report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  New nodes = %zd.  Too many cache lookups",
-			       elapsed, delta, docstring, cov, current_size, other_size, newNodeCount, lookups);
+			report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Too many cache lookups",
+			       elapsed, delta, docstring, cov, current_size, other_size, lookups);
 		    } else {
 			total_soft_and_node_fail++;
-			report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  New nodes = %zd.  Requires more than %u nodes",
-			   elapsed, delta, docstring, cov, current_size, other_size, newNodeCount, lookups, node_limit);
+			report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Requires more than %u nodes",
+			   elapsed, delta, docstring, cov, current_size, other_size, lookups, node_limit);
 		    }
 		    root_deref(otherrval);
 		    release_function(otherptr);
@@ -591,8 +590,8 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 		sa_count++;
 		size_t new_size = cudd_single_size(smgr, nval);
 		double reduction = (double) current_size/new_size;
-		report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  New nodes = %zd.  Size --> %zd (%.3fX)",
-		       elapsed, delta, docstring, cov, current_size, other_size, lookups, newNodeCount, new_size, reduction);
+		report(3, "Elapsed time %.1f.  Delta %.1f.  Soft_And.  %s.  cov = %.3f.  size = %zd.  Other size = %zd.  Lookups = %zd.  Size --> %zd (%.3fX)",
+		       elapsed, delta, docstring, cov, current_size, other_size, lookups, new_size, reduction);
 		if (new_size < current_size || soft_and_allow_growth) {
 #if RPT >= 3
 		    {

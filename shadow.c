@@ -733,7 +733,7 @@ ref_t shadow_and(shadow_mgr mgr, ref_t aref, ref_t bref) {
 }
 	
 
-ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit, size_t lookupLimit, size_t *newNodeCount) {
+ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit, size_t lookupLimit) {
     ref_t r = REF_ZERO;
     bool za = is_zdd(mgr, aref);
     bool zb = is_zdd(mgr, bref);
@@ -748,15 +748,9 @@ ref_t shadow_soft_and(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit, 
 
     DdNode *an = dd_check(get_ddnode(mgr, aref));
     DdNode *bn = dd_check(get_ddnode(mgr, bref));
-    DdNode *rn = NULL;
-    size_t ncount = 0;
-    if (nodeLimit == 0 && lookupLimit == 0) {
-	rn = dd_check(Cudd_bddNPAnd(mgr->bdd_manager, an, bn));
-	ncount = Cudd_ReadNewNode(mgr->bdd_manager);
-    } else
-	rn = dd_check(Cudd_bddNPAndLimit2(mgr->bdd_manager, an, bn, (unsigned) nodeLimit, lookupLimit));
-    if (newNodeCount != NULL)
-	*newNodeCount = ncount;
+    DdNode *rn = nodeLimit == 0 && lookupLimit == 0 ?
+	dd_check(Cudd_bddNPAnd(mgr->bdd_manager, an, bn)) :
+	dd_check(Cudd_bddNPAndLimit2(mgr->bdd_manager, an, bn, (unsigned) nodeLimit, lookupLimit));
     r = dd2ref(rn, IS_BDD);
     if (!REF_IS_INVALID(r)) {
 	reference_dd(mgr, rn);
