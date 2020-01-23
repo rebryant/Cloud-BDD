@@ -349,11 +349,6 @@ static ref_t get_function(rset_ele *ptr) {
 	    total_loads++;
 	    total_loaded_nodes += get_size(ptr);
 	    fclose(infile);
-	    bool done = remove(ptr->file_name) == 0;
-	    if (done)
-		report(4, "DD file '%s' removed", ptr->file_name);
-	    else
-		report(3, "Attempt to delete DD file '%s' failed", ptr->file_name);
 	}
     } else
 	report(5, "Retrieved DD for %s from memory", ptr->file_name);
