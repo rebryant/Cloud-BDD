@@ -177,7 +177,7 @@ class BrentVariable:
         sym = self.symbol
         s1 = str(self.row)
         s2 = str(self.column)
-        if permuteC:
+        if permuteC and self.prefix == 'gamma':
             s1, s2, = s2, s1
         return sym + s1 + s2
 
@@ -1561,7 +1561,7 @@ class MScheme(MProblem):
                 for c in unitRange(self.ncol(cat)):
                     v = BrentVariable(cat, r, c, level)
                     if self.assignment[v] == 1:
-                        cslist.append(v.generateTerm(permuteC = cat == 'gamma'))
+                        cslist.append(v.generateTerm(permuteC = True))
             s = '(' + "+".join(cslist) + ')'
             slist.append(s)
         return '*'.join(slist)
