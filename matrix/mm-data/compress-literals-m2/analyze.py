@@ -23,14 +23,21 @@ import re
 import getopt
 
 def usage(name):
-    print("%s: [-h] [-u] [-r p|a|m|c] f1.log f2.log ..." % name)
+    print("%s: [-h] [-u] [-r p|a|m|c] [-R RES] [-T MAXT] f1.log f2.log ..." % name)
     print(" -h      Print this message")
     print(" -u      Uniform time format (for charting with Excel)")
     print(" -r RPT  Specify reporting parameter; p (products, default), a (all combined), m (max), c (computed)")
+    print(" -R RES  Specify resolution (in seconds)")
+    print(" -T MAXT Upper limit on operations to consider")
+
 totalConjuncts = 81
 # Choices are 'combined', 'max', 'computed', or 'products'
 reportField = 'product'
+# What is the resolution for reporting events over time
 resolution = 10.0
+# What is the upper limit of time to report
+maxReportTime = 1000000000
+
 floatFormat = "%.0f"
 # In uniformTime format, create uniform axis for all time points
 # Otherwise, track each time for each series
@@ -155,7 +162,6 @@ def getRoot(fname):
 # type: completed | zero | timeout
 # partials: Dictionary indexed by product elapsed.
 #             elapsed, combined, max, computed, and products
-# maxTime
 
 def processFile(fname):
     maxTime = 0
@@ -209,7 +215,8 @@ def processFile(fname):
 def generateUniformTimes():
     global timePoints
     # Create new set of time points
-    ntimes = int(globalMaxTime/resolution) + 1
+    reportTime = min(globalMaxTime, maxReportTime)
+    ntimes = int(reportTime/resolution) + 1
     timePoints = [resolution * i for i in range(ntimes)]
     ifields = [""]
     ifields += [floatFormat % t for t in timePoints]
@@ -263,14 +270,18 @@ def nonuniformRun(flist):
 
 
 def run(name, args):
-    global reportField, uniformTime
-    optlist, nargs = getopt.getopt(args, 'hur:')
+    global reportField, uniformTime, resolution, maxReportTime
+    optlist, nargs = getopt.getopt(args, 'hur:R:T:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         elif opt == '-u':
             uniformTime = True
+        elif opt == '-R':
+            resolution = float(val)
+        elif opt == '-T':
+            maxReportTime = int(val)
         elif opt == '-r':
             if val == 'a':
                 reportField = 'combined'
