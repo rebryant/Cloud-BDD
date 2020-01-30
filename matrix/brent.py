@@ -181,6 +181,22 @@ class BrentVariable:
             s1, s2, = s2, s1
         return sym + s1 + s2
 
+    # For use when generating SAT formulas
+    def clauseNumber(self, dim):
+        start = (self.level-1) * (dim[0]*dim[1] + dim[1]*dim[2] + dim[1]*dim[2])
+        if self.prefix != 'alpha':
+            # Skip the A's
+            start += dim[0] * dim[1]
+            if self.prefix != 'beta':
+                # Skip the B's
+                start += dim[1] * dim[2]
+        ncol= dim[1] if self.prefix == 'alpha' else dim[2]
+        r = self.row
+        c = self.column
+        if self.prefix == 'gamma':
+            r,c = c,r
+        return start + (r-1)*ncol + c
+
     def shouldFlip(self, variablePermuter):
         klist = [self.symbolizer[variablePermuter[p]] for p in ['alpha', 'beta', 'gamma']]
         key = "".join(klist)
@@ -280,6 +296,10 @@ class Literal:
         prefix = '' if self.phase == 1 else '!'
         return prefix + str(self.variable)
 
+    def unitClause(self, dim):
+        id = self.variable.clauseNumber(dim)
+        return id if self.phase == 1 else -id
+
     def __eq__(self, other):
         return self.variable == other.variable and self.phase == other.phase
 
@@ -364,6 +384,12 @@ class Assignment:
             self.asst[lit.variable] = lit.phase
         lfile.close()
         return self
+
+    # Generate set of unit clauses for this assignment
+    def generateUnitClauses(self, dim):
+        lits = self.literals()
+        lits.sort(key = lambda lit : lit.variable.clauseNumber(dim))
+        return [lit.unitClause(dim) for lit in lits]   
 
     # Apply dictionary of permutations
     # Possible dictionary keys: 'i', 'j', 'k', 'variable', 'level'
