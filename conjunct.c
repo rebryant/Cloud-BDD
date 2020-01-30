@@ -46,7 +46,7 @@ int reprocess = 1;
 
 /* Maximum number of pairs to try when doing conjunction with aborts */
 /* Was 7 */
-int abort_limit = 5;
+int abort_limit = 10;
 /* Maximum expansion factor for conjunction (scaled 100x) */
 
 int expansion_factor_scaled = 200;
@@ -77,7 +77,8 @@ int soft_and_allow_growth = 0;
 int soft_and_expansion_ratio_scaled = 200;
 
 /* How many cache looks are allowed when computing (soft) and.  Set to ratio of sum of argument sizes */
-int cache_lookup_ratio = 200;
+int cache_soft_lookup_ratio = 200;
+int cache_hard_lookup_ratio = 500;
 
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
 /* (Scaled by 100) */
@@ -175,7 +176,8 @@ void init_conjunct() {
     add_param("soft", &inprocess_soft_and_threshold_scaled, "Threshold for attempting soft-and simplification (0-100)", NULL);
     add_param("grow", &soft_and_allow_growth, "Allow growth from soft-and simplification", NULL);
     add_param("preprocess", &preprocess_conjuncts, "Attempt to simplify conjuncts with soft and", NULL);
-    add_param("lookup", &cache_lookup_ratio, "Max cache lookups during and/soft-and (ratio to arg sizes)", NULL);
+    add_param("softlookup", &cache_soft_lookup_ratio, "Max cache lookups during soft-and (ratio to arg sizes)", NULL);
+    add_param("hardlookup", &cache_soft_lookup_ratio, "Max cache lookups during and (ratio to arg sizes)", NULL);
     add_param("generate", &soft_and_expansion_ratio_scaled, "Limit on nodes generated during soft and", NULL);
     preprocess = 0;
     reprocess = 0;
@@ -554,7 +556,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 	    if (cov > threshold && other_size <= other_limit) {
 		double ratio = 0.01 * soft_and_expansion_ratio_scaled;
 		unsigned node_limit = (unsigned) (current_size * ratio);
-		size_t lookup_limit = current_size * cache_lookup_ratio;
+		size_t lookup_limit = current_size * cache_soft_lookup_ratio;
 		root_checkref(myrval);
 		root_checkref(otherrval);
 		shadow_delta_cache_lookups(smgr);
@@ -731,10 +733,11 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    arg2 = get_function(ptr2);
 	    size1 = get_size(ptr1);
 	    size2 = get_size(ptr2);
-	    lookup_limit = (size1+size2) * cache_lookup_ratio;
+	    lookup_limit = (size1+size2) * cache_hard_lookup_ratio;
 
 	    root_checkref(arg1);
 	    root_checkref(arg2);
+	    double start = elapsed_time();
 	    shadow_delta_cache_lookups(smgr);
 	    if (final_try) {
 		nval = shadow_and(smgr, arg1, arg2);
@@ -743,19 +746,27 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 		nval = shadow_and_limit(smgr, arg1, arg2, size_limit, lookup_limit);
 		total_and_limit++;
 	    }
+	    double elapsed = elapsed_time();
+	    double delta = elapsed-start;
 	    lookups = shadow_delta_cache_lookups(smgr);
 
 	    if (REF_IS_INVALID(nval)) {
 		abort_count ++;
 		if (lookups >= lookup_limit) 
-		    report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd cache lookups", ptr1->file_name, ptr2->file_name, sim, try+1, lookup_limit);
+		    report(3, "Elapsed time %.1f.  Delta %1.f. %s & %s (sim = %.3f, try #%d) requires more than %zd cache lookups",
+			   elapsed, delta,
+			   ptr1->file_name, ptr2->file_name, sim, try+1, lookup_limit);
 		else
-		    report(3, "%s & %s (sim = %.3f, try #%d) requires more than %zd nodes", ptr1->file_name, ptr2->file_name, sim, try+1, size_limit);
+		    report(3, "Elapsed time %.1f.  Delta %1.f. %s & %s (sim = %.3f, try #%d) requires more than %zd nodes",
+			   elapsed, delta,
+			   ptr1->file_name, ptr2->file_name, sim, try+1, size_limit);
 	    } else {
 		root_addref(nval, true);
 		rset_ele *nset = rset_new(nval);
 		root_deref(nval);
-		report(3, "%s & %s (sim = %.3f, try #%d).  Success with product of size %zd. %zd cache lookups", ptr1->file_name, ptr2->file_name, sim, try+1, get_size(nset), lookups);
+		report(3, "Elapsed time %.1f.  Delta %1.f. %s & %s (sim = %.3f, try #%d).  Success with product of size %zd. %zd cache lookups",
+		       elapsed, delta,
+		       ptr1->file_name, ptr2->file_name, sim, try+1, get_size(nset), lookups);
 		if (best_nset == NULL) {
 		    best_nset = nset;
 		    best_ptr1 = ptr1;

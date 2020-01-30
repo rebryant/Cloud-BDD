@@ -235,7 +235,7 @@ static void usage(char *cmd) {
     printf("\t-L FILE    Echo results to FILE\n");
     printf("\t-t LIMIT   Set time limit (in seconds)\n");
     printf("\t-C CHAIN   n: No chaining; c: constant chaining; a: Or chaining, z: Zero chaining\n");
-    printf("\t-K LOOKUP  Limit cache lookups during conjunction (ratio wrt argument sizes, scaled by 100)\n");
+    printf("\t-K LOOKUP  Limit cache lookups during (soft) and (ratio wrt argument sizes, scaled by 100)\n");
     printf("\t-G GEN     Limit nodes generated during soft and (ratio wrt argument size, scaled by 100)\n");
     printf("\t-g         Allow growth from soft-and simplification\n");
     printf("\t-p         Preprocess conjuncts with soft-and simplification\n");
@@ -330,7 +330,8 @@ int main(int argc, char *argv[]) {
 	    }
 	    break;
 	case 'K':
-	    cache_lookup_ratio = atoi(optarg);
+	    cache_hard_lookup_ratio = atoi(optarg);
+	    cache_soft_lookup_ratio = cache_hard_lookup_ratio;
 	    break;
 	case 'G':
 	    soft_and_expansion_ratio_scaled = atoi(optarg);
