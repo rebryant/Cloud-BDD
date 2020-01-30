@@ -81,7 +81,7 @@ def run(name, args):
     if outfile is None:
         return
     dim = (n1, n2, n3)
-    asst = getFromPolynomial(fname) if isPolynomial else getFromLiteral(fname)
+    asst = getFromPolynomial(fname) if isPolynomial else getFromLiterals(fname)
     if asst is not None:
         fromAssignment(asst, outfile)
     if outfile != sys.stdout:
