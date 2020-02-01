@@ -19,10 +19,11 @@ fromMin = 6
 
 gprogram = "../../mm_generate.py"
 destAuxCount = 22
-time = 7200
+time = None
 template = "smirnov-m*+*.lit"
 singleton = True
-
+bottom_level = 1
+top_level = 6
 
 # Literal file generation
 def genLiterals():
@@ -43,7 +44,9 @@ def cname(lfname):
     return "run-%s.cmd" % croot
 
 def genCommand(lfname, oname):
-    cmd = [gprogram, '-B', '2:6',  '-t', str(time), '-L', lfname, '-o', oname, '-p', str(destAuxCount)]
+    cmd = [gprogram, '-B', "%d:%d" % (bottom_level, top_level), '-L', lfname, '-o', oname, '-p', str(destAuxCount)]
+    if time is not None:
+        cmd += ['-t', str(time)]
     if singleton:
         cmd.append('-e')
     return cmd
