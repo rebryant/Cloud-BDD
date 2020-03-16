@@ -45,6 +45,24 @@ def processFile(path):
             countMap[pair] = lit.phase
     solutionCount += 1
 
+# Special version to get literals from kernel
+def processKernelFile(path):
+    global countMap, solutionCount, termNames
+    try:
+        kset = brent.KernelSet(dim, auxCount, ckt).parseFromFile(path)
+    except Exception as ex:
+        print("ERROR: Could not extract solution from file '%s' (%s)" % (path, str(ex)))
+        return
+    for lit in kset.literals():
+        pair = pairForm(lit.variable)
+        if pair[0] not in termNames:
+            termNames.append(pair[0])
+        if pair in countMap:
+            countMap[pair] += lit.phase
+        else:
+            countMap[pair] = lit.phase
+    solutionCount += 1
+
 def processDatabases():
     databaseDict = {}
     mm_parse.loadDatabase(databaseDict, mm_parse.heuleDatabasePathFields, True)
@@ -66,6 +84,10 @@ def report():
     termNames.sort()
     # Mapping from (term, level) to [0.0, 1.0]
     printList([""] + termNames)
+    for l in brent.unitRange(auxCount):
+        for t in termNames:
+            if not (t, l) in countMap:
+                countMap[(t, l)] = 0
     for l in brent.unitRange(auxCount):
         probs = [float(countMap[(t, l)])/solutionCount for t in termNames]
         printList([l] + probs)
