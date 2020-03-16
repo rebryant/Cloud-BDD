@@ -11,16 +11,25 @@ dim = (3,3,3)
 auxCount = 23
 
 def usage(name):
-    print("%s: [-h] [-n (N|N1:N2:N3)] [-p AUX] file1 ... fileK")
+    print("%s: [-h] [-n (N|N1:N2:N3)] [-p AUX] FILE.{lit,exp} ...")
     print(" -h               Print this message")
     print " -n N or N1:N2:N3 Matrix dimension(s)"
     print(" -p AUX           Number of auxiliary variables")
-    print(" fileX            Literal (.lit) or polynomial (.exp) file")
+    print("Files with suffix '.lit' consist of literals")
+    print("Files with suffix '.exp' consist of polynomial representations")
+    print("The results will be in files of the form FILE.units")
 
-def fromAssignment(asst, outfile):
+def generateFromAssignment(asst, outname):
+    try:
+        outfile = open(outname, 'w')
+    except Exception as ex:
+        print("Couldn't open file '%s' (%s)" % (outname, str(ex)))
+        return
     units = asst.generateUnitClauses(dim)
     for u in units:
         outfile.write("%d 0\n" % u)
+    outfile.close()
+    print("Generated file %s" % outname)
 
 def getFromLiterals(fname):
     try:
@@ -61,37 +70,18 @@ def run(name, args):
 
     dim = (n1, n2, n3)
 
-    errLimit = 5
-
     for fname in args:
-        fields = fname.split('.')
+        fields = fname.split(".")
         extension = fields[-1]
-        ofname = ".".join(fields[:-1] + ['units'])
+        root = ".".join(fields[:-1])
+        outname = root + ".units"
         asst = None
-        if extension == 'exp':
-           asst = getFromPolynomial(fname)
-        elif extension == 'lit':
-           asst = getFromLiterals(fname)
-        else:
-            print("Unrecognized extension '%s'" % extension)
-            errLimit -= 1
-            if (errLimit <= 0):
-                print("Too many errors.  Exiting")
-                return
-            continue
-        try:
-            outfile = open(ofname, 'w')
-        except Exception as ex:
-            print("Couldn't open output file '%s' (%s)" % (ofname, str(Ex)))
-            errLimit -= 1
-            if (errLimit <= 0):
-                print("Too many errors.  Exiting")
-                return
-            continue
+        if extension == 'lit':
+            asst = getFromLiterals(fname)
+        elif extension == '.exp':
+            asst = getFromPolynomial(fname)
         if asst is not None:
-            fromAssignment(asst, outfile)
-            print("Generated output file %s" % ofname)
-        outfile.close()
+            generateFromAssignment(asst, outname)
     
 if __name__ == "__main__":
     run(sys.argv[0], sys.argv[1:])
