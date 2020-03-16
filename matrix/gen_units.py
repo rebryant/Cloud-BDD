@@ -11,13 +11,11 @@ dim = (3,3,3)
 auxCount = 23
 
 def usage(name):
-    print("%s: [-h] [-n (N|N1:N2:N3)] [-p AUX] (-L LFILE|-P PFILE) [-o UFILE")
+    print("%s: [-h] [-n (N|N1:N2:N3)] [-p AUX] file1 ... fileK")
     print(" -h               Print this message")
     print " -n N or N1:N2:N3 Matrix dimension(s)"
     print(" -p AUX           Number of auxiliary variables")
-    print(" -L LFILE         Input literal file")
-    print(" -P PFILE         Input polynomial file")
-    print(" -o UFILE         Output unit file")
+    print(" fileX            Literal (.lit) or polynomial (.exp) file")
 
 def fromAssignment(asst, outfile):
     units = asst.generateUnitClauses(dim)
@@ -43,25 +41,11 @@ def getFromPolynomial(fname):
 def run(name, args):
     global dim, auxCount
     n1, n2, n3 = 3, 3, 3
-    fname = None
-    isPolynomial = False
-    outfile = sys.stdout
-    optlist, args = getopt.getopt(args, 'hn:p:L:P:o:')
+    optlist, args = getopt.getopt(args, 'hn:p:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
-        elif opt == '-L':
-            fname = val
-        elif opt == '-P':
-            isPolynomial = True
-            fname = val
-        elif opt == '-o':
-            try:
-                outfile = open(val, 'w')
-            except Exception as ex:
-                print("Couldn't open output file '%s' (%s)" % (val, str(ex)))
-                outfile = None
         elif opt == '-p':
             auxCount = int(val)
         elif opt == '-n':
@@ -74,17 +58,39 @@ def run(name, args):
                 print "Invalid matrix dimension '%s'" % val
                 usage(name)
                 return
-    if fname is None:
-        print("Must have input literal or polynomial file")
-        usage(name)
-        return
-    if outfile is None:
-        return
+
     dim = (n1, n2, n3)
-    asst = getFromPolynomial(fname) if isPolynomial else getFromLiterals(fname)
-    if asst is not None:
-        fromAssignment(asst, outfile)
-    if outfile != sys.stdout:
+
+    errLimit = 5
+
+    for fname in args:
+        fields = fname.split('.')
+        extension = fields[-1]
+        ofname = ".".join(fields[:-1] + ['units'])
+        asst = None
+        if extension == 'exp':
+           asst = getFromPolynomial(fname)
+        elif extension == 'lit':
+           asst = getFromLiterals(fname)
+        else:
+            print("Unrecognized extension '%s'" % extension)
+            errLimit -= 1
+            if (errLimit <= 0):
+                print("Too many errors.  Exiting")
+                return
+            continue
+        try:
+            outfile = open(ofname, 'w')
+        except Exception as ex:
+            print("Couldn't open output file '%s' (%s)" % (ofname, str(Ex)))
+            errLimit -= 1
+            if (errLimit <= 0):
+                print("Too many errors.  Exiting")
+                return
+            continue
+        if asst is not None:
+            fromAssignment(asst, outfile)
+            print("Generated output file %s" % ofname)
         outfile.close()
     
 if __name__ == "__main__":
