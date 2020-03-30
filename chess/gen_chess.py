@@ -8,9 +8,10 @@ import getopt
 import circuit
 
 def usage(name):
-    print("Usage: %s [-h] [-z] -n N [-r C1:C2:..:Ck] [-o OUT]")
+    print("Usage: %s [-h] [-z] [-c] -n N [-r C1:C2:..:Ck] [-o OUT]")
     print("   -h        Print this message")
     print("   -z        Use ZDDs")
+    print("   -c        Use conjunction")
     print("   -n N      Set board size")
     print("   -m CORNER Remove specified corner(s).  Subset of UL, UR, LL, LR")
     print("   -o OUT    Specify output files")
@@ -27,12 +28,12 @@ class Board:
         self.removeList = removeList
 
     def vertical(self, r, c, prefix = "", negate = False):
-        name = "%sV-%d.%d" % (prefix, r, c)
+        name = "%sV-%.2d.%.2d" % (prefix, r, c)
         bang = '!' if negate else ''
         return bang + name
 
     def horizontal(self, r, c, prefix = "", negate = False):
-        name = "%sH-%d.%d" % (prefix, r, c)
+        name = "%sH-%.2d.%.2d" % (prefix, r, c)
         bang = '!' if negate else ''
         return bang + name
 
@@ -50,7 +51,7 @@ class Board:
             slist.append(self.horizontal(r+1, c,   negate = negate))
         if c > 0:
             slist.append(self.vertical(r,     c,   negate = negate))
-        if c <= self.N-1:
+        if c < self.N-1:
             slist.append(self.vertical(r,     c+1, negate = negate))
         return slist
 
@@ -75,23 +76,28 @@ class Board:
             if r > 0:
                 hr = self.hrow(r, prefix)
                 self.ckt.declare(hr)
-                if zdd != circuit.Z.none:
-                    chr = self.hrow(r)
-                    if zdd == circuit.Z.convert:
-                        self.ckt.zcV(chr, hr)
-                    elif zdd == circuit.Z.avars:
-                        self.ckt.acV(chr, hr)
             vr = self.vrow(r, prefix)
             self.ckt.declare(vr)
-            if zdd != circuit.Z.none:
-                cvr = self.vrow(r)
+        if zdd == circuit.Z.none:
+            return
+        # Convert to ZDD or ADD
+        for r in range(self.N):
+            if r > 0:
+                hr = self.hrow(r, prefix)
+                chr = self.hrow(r)
                 if zdd == circuit.Z.convert:
-                    self.ckt.zcV(cvr, vr)
+                    self.ckt.zcV(chr, hr)
                 elif zdd == circuit.Z.avars:
-                    self.ckt.acV(cvr, vr)
+                    self.ckt.acV(chr, hr)
+            vr = self.vrow(r, prefix)
+            cvr = self.vrow(r)
+            if zdd == circuit.Z.convert:
+                self.ckt.zcV(cvr, vr)
+            elif zdd == circuit.Z.avars:
+                self.ckt.acV(cvr, vr)
                         
     def squareOK(self, r, c):
-        name = "squareOK-%.2d-%-2d" % (r, c)
+        name = "squareOK-%.2d.%.2d" % (r, c)
         return circuit.Node(name)
 
     def constrainSquare(self, r, c):
@@ -122,35 +128,43 @@ class Board:
         name = "ok"
         return circuit.Node(name)
 
-    def constrainAll(self):
+    def constrainAll(self, conjunct = False):
         self.ckt.comment("Top-level constraint")
         dest = self.allOK()
-        args = [self.constrainRow(dest, r) for r in range(self.N)]
-        self.ckt.andN(dest, args)
+        # Construct from bottom to top
+        args = [self.constrainRow(dest, r) for r in range(self.N-1, -1, -1)]
+        if conjunct:
+            self.ckt.conjunctN(dest, args)
+        else:
+            self.ckt.andN(dest, args)
         self.ckt.decRefs(args)
         return dest
 
-    def generate(self, zdd = circuit.Z.none):
+    def generate(self, zdd = circuit.Z.none, conjunct = False):
         if len(self.removeList) == 0:
             self.ckt.comment("%d X %d chessboard with no corners removed" % (self.N, self.N))
         else:
             cstring = ", ".join(self.removeList)
             self.ckt.comment("%d X %d chessboard with the following corners removed: %s" % (self.N, self.N, cstring))
+#        self.ckt.write("option echo 1")
         self.declare(zdd)
-        okNode = self.constrainAll()
+        okNode = self.constrainAll(conjunct)
         ok = circuit.Vec([okNode])
         self.ckt.information(ok)
         self.ckt.count(ok)
+#        self.ckt.satisfy(ok)
+        self.ckt.write("status")
         self.ckt.write("time")
-        self.ckt.write("quit")
+#        self.ckt.write("quit")
 
     
 def run(name, args):
     N = 8
     zdd = circuit.Z.none
+    conjunct = False
     removeList = []
     outfile = sys.stdout
-    optlist, args = getopt.getopt(args, 'hN:zr:o:')
+    optlist, args = getopt.getopt(args, 'hN:zcr:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -159,6 +173,8 @@ def run(name, args):
             N = int(val)
         elif opt == '-z':
             zdd = circuit.Z.convert
+        elif opt == '-c':
+            conjunct = True
         elif opt == '-r':
             removeList = val.split(':')
         elif opt == '-o':
@@ -169,7 +185,7 @@ def run(name, args):
                 return
     ckt = circuit.Circuit(outfile)
     b = Board(ckt, N, removeList)
-    b.generate(zdd)
+    b.generate(zdd, conjunct)
     if outfile != sys.stdout:
         outfile.close()
 
