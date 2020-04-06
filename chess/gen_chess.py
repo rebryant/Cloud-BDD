@@ -9,12 +9,12 @@ import random
 import circuit
 
 def usage(name):
-    print("Usage: %s [-h] [-z] [-c CTYPE] -n N [-r C1:C2:..:Ck] [-o OUT]")
+    print("Usage: %s [-h] [-z] [-c CTYPE] -N N [-r C1:C2:..:Ck] [-o OUT]")
     print("   -h        Print this message")
     print("   -z        Use ZDDs")
     print("   -c CTYPE  Specify conjunction method: n (none), r (rows), c (row/col), s (squares)")
-    print("   -n N      Set board size")
-    print("   -m CORNER Remove specified corner(s).  Subset of UL, UR, LL, LR")
+    print("   -N N      Set board size")
+    print("   -r CORNER Remove specified corner(s).  Subset of UL, UR, LL, LR")
     print("   -o OUT    Specify output files")
 
 # Class to define conjunction method
@@ -169,11 +169,20 @@ class Board:
             self.ckt.decRefs(args)
         return dest
 
-    def conjunctAllSquares(self):
-        self.ckt.comment("Square Constraints")
+    def conjunctAllSquares(self, rowStart = None, rowCount = None):
+        if rowCount is None:
+            rowCount = self.N
+        if rowStart is None:
+            rowStart = 0
+        if rowCount < self.N:
+            self.ckt.comment("Square Constraints for all squares")
+        else:
+            self.ckt.comment("Square Constraints for rows %d to %d" % (rowStart, rowStart + rowCount - 1))            
         dest = self.allOK()
-        args = [self.constrainSquare(idx // self.N, idx % self.N) for idx in range(self.N * self.N)]
-        self.ckt.comment("Form conjunction of all square constraints")
+        args = []
+        for r in range(rowStart, rowStart + rowCount):
+            args += [self.constrainSquare(r, c) for c in range(self.N)]
+        self.ckt.comment("Form conjunction of %d square constraints" % (len(args)))
         if self.randomizeArgs:
             random.shuffle(args)
         self.ckt.conjunctN(dest, args)
