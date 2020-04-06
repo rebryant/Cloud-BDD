@@ -4,23 +4,43 @@
 
 import sys
 import getopt
+import random
 
 import circuit
 
 def usage(name):
-    print("Usage: %s [-h] [-z] [-c] -n N [-r C1:C2:..:Ck] [-o OUT]")
+    print("Usage: %s [-h] [-z] [-c CTYPE] -n N [-r C1:C2:..:Ck] [-o OUT]")
     print("   -h        Print this message")
     print("   -z        Use ZDDs")
-    print("   -c        Use conjunction")
+    print("   -c CTYPE  Specify conjunction method: n (none), r (rows), c (row/col), s (squares)")
     print("   -n N      Set board size")
     print("   -m CORNER Remove specified corner(s).  Subset of UL, UR, LL, LR")
     print("   -o OUT    Specify output files")
+
+# Class to define conjunction method
+class Conjunct:
+    none, row, rowcol, square = list(range(4))
+    names = ["none", "rows", "row/col", "squares"]
+    suffixes = ["n", "r", "c", "s"]
+
+    def name(self, id):
+        return self.names[id]
+
+    def suffix(self, id):
+        return self.suffixes[id]
+
+    def lookup(self, key):
+        for id in range(4):
+            if self.suffix(id) == key:
+                return id
+        return -1
 
 class Board:
 
     N = 8
     removeList = []
     ckt = None
+    randomizeArgs = True
 
     def __init__(self, ckt, N, removeList = []):
         self.ckt = ckt
@@ -116,28 +136,47 @@ class Board:
         name = "rowOK-%.2d" % (r)
         return circuit.Node(name)
 
-    def constrainRow(self, dest, r):
+    def constrainRow(self, dest, r, conjunct = Conjunct.none):
         self.ckt.comment("Constraints for row %d" % (r))
         dest = self.rowOK(r)
         args = [self.constrainSquare(r, c) for c in range(self.N)]
-        self.ckt.andN(dest, args)
-        self.ckt.decRefs(args)
+        if conjunct in [Conjunct.row, Conjunct.rowcol]:
+            if self.randomizeArgs:
+                random.shuffle(args)
+            self.ckt.conjunctN(dest, args)
+        else:
+            self.ckt.andN(dest, args)
+            self.ckt.decRefs(args)
+        self.ckt.information(circuit.Vec([dest]))
         return dest
 
     def allOK(self):
         name = "ok"
         return circuit.Node(name)
 
-    def constrainAll(self, conjunct = False):
+
+    def constrainAll(self, conjunct = Conjunct.none):
         self.ckt.comment("Top-level constraint")
         dest = self.allOK()
         # Construct from bottom to top
-        args = [self.constrainRow(dest, r) for r in range(self.N-1, -1, -1)]
-        if conjunct:
+        args = [self.constrainRow(dest, r, conjunct) for r in range(self.N-1, -1, -1)]
+        if conjunct in [Conjunct.rowcol]:
+            if self.randomizeArgs:
+                random.shuffle(args)
             self.ckt.conjunctN(dest, args)
         else:
             self.ckt.andN(dest, args)
-        self.ckt.decRefs(args)
+            self.ckt.decRefs(args)
+        return dest
+
+    def conjunctAllSquares(self):
+        self.ckt.comment("Square Constraints")
+        dest = self.allOK()
+        args = [self.constrainSquare(idx // self.N, idx % self.N) for idx in range(self.N * self.N)]
+        self.ckt.comment("Form conjunction of all square constraints")
+        if self.randomizeArgs:
+            random.shuffle(args)
+        self.ckt.conjunctN(dest, args)
         return dest
 
     def generate(self, zdd = circuit.Z.none, conjunct = False):
@@ -148,23 +187,21 @@ class Board:
             self.ckt.comment("%d X %d chessboard with the following corners removed: %s" % (self.N, self.N, cstring))
 #        self.ckt.write("option echo 1")
         self.declare(zdd)
-        okNode = self.constrainAll(conjunct)
+        okNode = self.conjunctAllSquares() if conjunct == Conjunct.square else self.constrainAll(conjunct)
         ok = circuit.Vec([okNode])
         self.ckt.information(ok)
         self.ckt.count(ok)
 #        self.ckt.satisfy(ok)
         self.ckt.write("status")
         self.ckt.write("time")
-#        self.ckt.write("quit")
-
     
 def run(name, args):
     N = 8
     zdd = circuit.Z.none
-    conjunct = False
+    conjunct = Conjunct.none
     removeList = []
     outfile = sys.stdout
-    optlist, args = getopt.getopt(args, 'hN:zcr:o:')
+    optlist, args = getopt.getopt(args, 'hN:zc:r:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -174,7 +211,11 @@ def run(name, args):
         elif opt == '-z':
             zdd = circuit.Z.convert
         elif opt == '-c':
-            conjunct = True
+            conjunct = Conjunct().lookup(val)
+            if conjunct < 1:
+                print("Invalid conjunction mode '%s'" % val)
+                usage(name)
+                return
         elif opt == '-r':
             removeList = val.split(':')
         elif opt == '-o':

@@ -483,7 +483,7 @@ static ref_t and_check(rset_ele *set) {
 }
 
 /* Print statistics about partial results */
-static void report_combination(rset_ele *set, conjunction_data *data) {
+static size_t report_combination(rset_ele *set, conjunction_data *data) {
     size_t result_size = data ? data->result_size : 0;
     size_t max_size = 0;
     size_t sum_size = 0;
@@ -507,6 +507,8 @@ static void report_combination(rset_ele *set, conjunction_data *data) {
     }
     report(1, "Elapsed time %.1f.  Partial result with %zd values.  Max size = %zd.  Sum size = %zd.  Resident size = %zd.  Computed size = %zd",
 	   elapsed, set_size, max_size, sum_size, resident_size, result_size);
+
+    return set_size;
 }    
 
 /* Perform GC if enough activity has occurred */
@@ -677,7 +679,9 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	return rval;
     }
     
-    while (!rset_is_singleton(set) && !rset_contains_zero(set)) {
+
+    size_t set_size = argument_count;
+    while (set_size > 1 && !rset_contains_zero(set)) {
 	compute_size_range(set);
 	clear_candidates(candidates);
 	rset_ele *ptr1 = NULL;
@@ -714,7 +718,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    ref_t nval = REF_INVALID;
 	    double sim = -1.0;
 
-	    bool final_try = try == try_limit;
+	    bool final_try = try == try_limit || set_size == 2;
 	    int tidx = try % ccount;
 	    if (tidx == 0) {
 		/* Start of a new pass */
@@ -804,31 +808,33 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	rset_ele_free(best_ptr2);
 
 
-	/* Attempt to simplify in both directions */
-	int length = rset_length(set);
-	report(2, "Apply soft simplify to new argument based on existing %d arguments", length);
-	soft_simplify(best_nset, set, ithreshold, "conj_old2new");
-	report(2, "Apply soft simplify to existing %d arguments based on new argument", length);
-	soft_simplify(set, best_nset, ithreshold, "conj_new2old");
+	if (set_size > 2) {
+	    /* Attempt to simplify in both directions */
+	    report(2, "Apply soft simplify to new argument based on existing %d arguments", set_size);
+	    soft_simplify(best_nset, set, ithreshold, "conj_old2new");
+	    report(2, "Apply soft simplify to existing %d arguments based on new argument", set_size);
+	    soft_simplify(set, best_nset, ithreshold, "conj_new2old");
+	}
 	set = rset_add_element(set, best_nset);
 	if (data)
 	    data->result_size = get_size(best_nset);
-	report_combination(set, data);
+	set_size = report_combination(set, data);
 	release_function(best_nset);
-	check_gc();
+	if (set_size > 1)
+	    check_gc();
     }
 
     ref_t rval;
 
+    double elapsed = elapsed_time();
     if (rset_is_singleton(set)) {
-	report(1, "Conjunction of %zd elements.  %zd aborts.  Max argument %zd.  Max size limit %zd",
-	       argument_count, abort_count, max_argument_size, max_size_limit);
+	report(1, "Elapsed time %.1f.  Conjunction of %zd elements.  %zd aborts.  Max argument %zd.  Max size limit %zd",
+	       elapsed, argument_count, abort_count, max_argument_size, max_size_limit);
 	rval = get_function(set);
 	root_addref(rval, false);
 	rset_free(set);
     } else {
 	/* Must contain zero.  Delete remaining arguments */
-	double elapsed = elapsed_time();
 	report(1, "Elapsed time %.1f.  Conjunction of %zd elements.  Encountered zero-valued conjunct with %zd conjuncts remaining",
 	       elapsed, argument_count, rset_length(set));
 	rset_free(set);
