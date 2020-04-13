@@ -247,6 +247,12 @@ class Circuit:
     def satisfy(self, fv):
         self.cmdLine("satisfy", fv)
 
+    def store(self, node, fname):
+        self.cmdLine("store", [node, fname])
+
+    def load(self, node, fname):
+        self.cmdLine("load", [node, fname])
+
     # Generate sequence of commands
     # argList should be list of vectors
     def cmdSequence(self, cmd, argList):

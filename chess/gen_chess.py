@@ -9,12 +9,13 @@ import random
 import circuit
 
 def usage(name):
-    print("Usage: %s [-h] [-z] [-c CTYPE] -N N [-r C1:C2:..:Ck] [-o OUT]")
+    print("Usage: %s [-h] [-z] [-c CTYPE] -N N [-r C1:C2:..:Ck] [-e ECNT] [-o OUT]")
     print("   -h        Print this message")
     print("   -z        Use ZDDs")
     print("   -c CTYPE  Specify conjunction method: n (none), r (rows), c (row/col), s (squares)")
     print("   -N N      Set board size")
     print("   -r CORNER Remove specified corner(s).  Subset of UL, UR, LL, LR")
+    print("   -e ECNT   Enumerate ECNT variables")
     print("   -o OUT    Specify output files")
 
 # Class to define conjunction method
@@ -118,7 +119,7 @@ class Board:
                         
     def squareOK(self, r, c):
         name = "squareOK-%.2d.%.2d" % (r, c)
-        return circuit.Node(name)
+        return self.ckt.node(name)
 
     def constrainSquare(self, r, c):
         self.ckt.comment("Constraint for square %d, %d" % (r, c))
@@ -134,7 +135,7 @@ class Board:
 
     def rowOK(self, r):
         name = "rowOK-%.2d" % (r)
-        return circuit.Node(name)
+        return self.ckt.node(name)
 
     def constrainRow(self, dest, r, conjunct = Conjunct.none):
         self.ckt.comment("Constraints for row %d" % (r))
@@ -150,16 +151,27 @@ class Board:
         self.ckt.information(circuit.Vec([dest]))
         return dest
 
-    def allOK(self):
+    def allOK(self, rowStart = None, rowCount = None):
+        if rowCount is None:
+            rowCount = self.N
+        if rowStart is None:
+            rowStart = 0
         name = "ok"
-        return circuit.Node(name)
+        if rowCount < self.N:
+            name += "-%.2d.%.2d" % (rowStart, rowStart + rowCount -1)
+        return self.ckt.node(name)
 
-
-    def constrainAll(self, conjunct = Conjunct.none):
-        self.ckt.comment("Top-level constraint")
-        dest = self.allOK()
-        # Construct from bottom to top
-        args = [self.constrainRow(dest, r, conjunct) for r in range(self.N-1, -1, -1)]
+    def constrainAll(self, conjunct = Conjunct.none, rowStart = None, rowCount = None):
+        if rowCount is None:
+            rowCount = self.N
+        if rowStart is None:
+            rowStart = 0
+        if rowCount < self.N:
+            self.ckt.comment("Row constraints for rows %d to %d" % (rowStart, rowStart + rowCount - 1))            
+        else:
+            self.ckt.comment("Row constraints for all rows")
+        dest = self.allOK(rowStart, rowCount)
+        args = [self.constrainRow(dest, r, conjunct) for r in range(rowStart, rowStart + rowCount)]
         if conjunct in [Conjunct.rowcol]:
             if self.randomizeArgs:
                 random.shuffle(args)
@@ -175,10 +187,10 @@ class Board:
         if rowStart is None:
             rowStart = 0
         if rowCount < self.N:
-            self.ckt.comment("Square Constraints for all squares")
+            self.ckt.comment("Square constraints for rows %d to %d" % (rowStart, rowStart + rowCount - 1))            
         else:
-            self.ckt.comment("Square Constraints for rows %d to %d" % (rowStart, rowStart + rowCount - 1))            
-        dest = self.allOK()
+            self.ckt.comment("Square constraints for all squares")
+        dest = self.allOK(rowStart, rowCount)
         args = []
         for r in range(rowStart, rowStart + rowCount):
             args += [self.constrainSquare(r, c) for c in range(self.N)]
@@ -188,7 +200,7 @@ class Board:
         self.ckt.conjunctN(dest, args)
         return dest
 
-    def generate(self, zdd = circuit.Z.none, conjunct = False):
+    def generate(self, zdd = circuit.Z.none, conjunct = False, enumerateCount = None):
         if len(self.removeList) == 0:
             self.ckt.comment("%d X %d chessboard with no corners removed" % (self.N, self.N))
         else:
@@ -196,7 +208,27 @@ class Board:
             self.ckt.comment("%d X %d chessboard with the following corners removed: %s" % (self.N, self.N, cstring))
 #        self.ckt.write("option echo 1")
         self.declare(zdd)
-        okNode = self.conjunctAllSquares() if conjunct == Conjunct.square else self.constrainAll(conjunct)
+        if enumerateCount is None:
+            okNode = self.conjunctAllSquares() if conjunct == Conjunct.square else self.constrainAll(conjunct)
+        else:
+            ucount = self.N//2
+            lcount = self.N - ucount
+            fname = "save-%.4x.bdd" % random.randint(0, (1<<16)-1)
+            if conjunct == Conjunct.square:
+                okUp = self.conjunctAllSquares(0, ucount)
+                self.ckt.store(okUp, fname)
+                self.ckt.decRefs([okUp])
+                okDown = self.conjunctAllSquares(ucount, lcount)
+                self.ckt.load(okUp, fname)
+            else:
+                okUp = self.constrainAll(conjunct, 0, ucount)
+                self.ckt.store(okUp, fname)
+                self.ckt.decRefs([okUp])
+                okDown = self.constrainAll(conjunct, ucount, lcount)
+                self.ckt.load(okUp, fname)
+            okNode = self.allOK()
+            self.ckt.andN(okNode, [okUp, okDown])
+            self.ckt.decRefs([okUp, okDown])
         ok = circuit.Vec([okNode])
         self.ckt.information(ok)
         self.ckt.count(ok)
@@ -209,8 +241,9 @@ def run(name, args):
     zdd = circuit.Z.none
     conjunct = Conjunct.none
     removeList = []
+    enumerateCount = None
     outfile = sys.stdout
-    optlist, args = getopt.getopt(args, 'hN:zc:r:o:')
+    optlist, args = getopt.getopt(args, 'hN:zc:r:o:e:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -221,12 +254,14 @@ def run(name, args):
             zdd = circuit.Z.convert
         elif opt == '-c':
             conjunct = Conjunct().lookup(val)
-            if conjunct < 1:
+            if conjunct < 0:
                 print("Invalid conjunction mode '%s'" % val)
                 usage(name)
                 return
         elif opt == '-r':
             removeList = val.split(':')
+        elif opt == '-e':
+            enumerateCount = int(val)
         elif opt == '-o':
             try:
                 outfile = open(val, 'w')
@@ -235,7 +270,7 @@ def run(name, args):
                 return
     ckt = circuit.Circuit(outfile)
     b = Board(ckt, N, removeList)
-    b.generate(zdd, conjunct)
+    b.generate(zdd, conjunct, enumerateCount)
     if outfile != sys.stdout:
         outfile.close()
 
