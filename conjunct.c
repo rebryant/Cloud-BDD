@@ -1,5 +1,12 @@
 /* Implemention of conjunction engine */
 
+/* Optional tracking of conjunctions */
+#define TRACK 1
+
+#ifndef TRACK
+#define TRACK 0
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -147,6 +154,7 @@ typedef struct RELE {
     bool in_file;
     char *file_name;
     struct RELE *next;
+    int id;
 } rset_ele;
 
 /* Data collected during conjunction */
@@ -240,7 +248,13 @@ static rset_ele *rset_new(ref_t fun) {
     ele->support_indices = NULL;
     rset_ele_new_fun(ele, fun);
     ele->next = NULL;
+    ele->id = 0;
     return ele;
+}
+
+static void assign_id(rset_ele *ele) {
+    static int next_id = 1;
+    ele->id = next_id++;
 }
 
 /* Free single element */
@@ -804,6 +818,12 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	report(3, "%s (%zd nodes) & %s (%zd nodes) (sim = %.3f, try #%d) --> %s (%zd nodes).  %zd cache lookups",
 	       best_ptr1->file_name, get_size(best_ptr1), best_ptr2->file_name, get_size(best_ptr2), best_sim,
 	       best_try+1, best_nset->file_name, get_size(best_nset), best_lookups);
+
+	assign_id(best_nset);
+#if TRACK
+		report(1, "TRACK\tAND\t%d\t%d\t%d", best_ptr1->id, best_ptr2->id, best_nset->id);
+#endif		
+	
 	rset_ele_free(best_ptr1);
 	rset_ele_free(best_ptr2);
 
@@ -903,6 +923,10 @@ bool do_conjunct(int argc, char *argv[]) {
 	    report(2, "Conjunct %s == 0", argv[i]);
 	}
 	rset_ele *ele = rset_new(rarg);
+	assign_id(ele);
+#if TRACK
+	report(1, "TRACK\tARG\t%s\t%d", argv[i], ele->id);
+#endif
 	size_t asize = get_size(ele);
 	itotal += asize;
 	imax = SMAX(asize, imax);
