@@ -1,12 +1,5 @@
 /* Implemention of conjunction engine */
 
-/* Optional tracking of conjunctions */
-#define TRACK 1
-
-#ifndef TRACK
-#define TRACK 0
-#endif
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -90,6 +83,9 @@ int cache_hard_lookup_ratio = 500;
 /* Maximum amount by which support coverage and similarities can be discounted for large arguments */
 /* (Scaled by 100) */
 double max_large_argument_penalty_scaled = 40;
+
+/* Should tracking information be generated during conjunction? */
+int track_conjunction = 0;
 
 /* Set to force more load/stores & more GCs */
 // #define STRESS
@@ -183,6 +179,7 @@ void init_conjunct() {
     add_param("expand", &expansion_factor_scaled, "Maximum expansion of successive BDD sizes (scaled by 100) for each pass", NULL);
     add_param("soft", &inprocess_soft_and_threshold_scaled, "Threshold for attempting soft-and simplification (0-100)", NULL);
     add_param("grow", &soft_and_allow_growth, "Allow growth from soft-and simplification", NULL);
+    add_param("track", &track_conjunction, "Track combining order of conjunction", NULL);
     add_param("preprocess", &preprocess_conjuncts, "Attempt to simplify conjuncts with soft and", NULL);
     add_param("softlookup", &cache_soft_lookup_ratio, "Max cache lookups during soft-and (ratio to arg sizes)", NULL);
     add_param("hardlookup", &cache_soft_lookup_ratio, "Max cache lookups during and (ratio to arg sizes)", NULL);
@@ -820,10 +817,8 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	       best_try+1, best_nset->file_name, get_size(best_nset), best_lookups);
 
 	assign_id(best_nset);
-#if TRACK
+	if (track_conjunction)
 		report(1, "TRACK\tAND\t%d\t%d\t%d", best_ptr1->id, best_ptr2->id, best_nset->id);
-#endif		
-	
 	rset_ele_free(best_ptr1);
 	rset_ele_free(best_ptr2);
 
@@ -924,9 +919,8 @@ bool do_conjunct(int argc, char *argv[]) {
 	}
 	rset_ele *ele = rset_new(rarg);
 	assign_id(ele);
-#if TRACK
-	report(1, "TRACK\tARG\t%s\t%d", argv[i], ele->id);
-#endif
+	if (track_conjunction)
+	    report(1, "TRACK\tARG\t%s\t%d", argv[i], ele->id);
 	size_t asize = get_size(ele);
 	itotal += asize;
 	imax = SMAX(asize, imax);

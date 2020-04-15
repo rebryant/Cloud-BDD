@@ -35,7 +35,6 @@ bool do_cudd = false;
 bool do_local = false;
 bool do_dist = false;
 
-
 /* What type of chaining should be used? */
 chaining_t chaining_type = CHAIN_NONE;
 
@@ -226,7 +225,7 @@ static bool bdd_quit(int argc, char *argv[]) {
 
 static void usage(char *cmd) {
     printf(
-"Usage: %s [-h] [-f FILE][-v VLEVEL] [-M MBYTES] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-C chain][-K LOOKUP][-G GEN][-g]\n",
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-M MBYTES] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-t LIMIT][-C chain][-K LOOKUP][-G GEN][-g][-p][-T]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
@@ -239,6 +238,7 @@ static void usage(char *cmd) {
     printf("\t-G GEN     Limit nodes generated during soft and (ratio wrt argument size, scaled by 100)\n");
     printf("\t-g         Allow growth from soft-and simplification\n");
     printf("\t-p         Preprocess conjuncts with soft-and simplification\n");
+    printf("\t-T         Generate tracking information on conjunctions\n");
     printf("Distributed BDD options\n");
     printf("\t-c         Use CUDD\n");
     printf("\t-l         Use local refs\n");
@@ -271,7 +271,7 @@ int main(int argc, char *argv[]) {
     chaining_type = CHAIN_ALL;
 
 
-    while ((c = getopt(argc, argv, "hv:M:f:cldH:P:rL:t:C:R:K:G:gp")) != -1) {
+    while ((c = getopt(argc, argv, "hv:M:f:cldH:P:rL:t:C:R:K:G:gpT")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -341,6 +341,9 @@ int main(int argc, char *argv[]) {
 	    break;
 	case 'p':
 	    preprocess_conjuncts = 1;
+	    break;
+	case 'T':
+	    track_conjunction = 1;
 	    break;
 	default:
 	    printf("Unknown option '%c'\n", c);

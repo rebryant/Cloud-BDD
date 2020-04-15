@@ -20,6 +20,7 @@ extern int soft_and_allow_growth;
 extern int preprocess_conjuncts;
 extern int cache_soft_lookup_ratio;
 extern int cache_hard_lookup_ratio;
+extern int track_conjunction;
 
 /* Functions defined in conjunct.c */
 void init_conjunct();
