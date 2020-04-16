@@ -20,9 +20,9 @@ def usage(name):
 
 # Class to define conjunction method
 class Conjunct:
-    none, row, rowcol, square = list(range(4))
-    names = ["none", "rows", "row/col", "squares"]
-    suffixes = ["n", "r", "c", "s"]
+    none, row, rowcol, square, dAndC = list(range(5))
+    names = ["none", "rows", "row/col", "squares", "div/conq"]
+    suffixes = ["n", "r", "c", "s", "d"]
 
     def name(self, id):
         return self.names[id]
@@ -31,7 +31,7 @@ class Conjunct:
         return self.suffixes[id]
 
     def lookup(self, key):
-        for id in range(4):
+        for id in range(5):
             if self.suffix(id) == key:
                 return id
         return -1
@@ -142,36 +142,35 @@ class Board:
         dest = self.rowOK(r)
         args = [self.constrainSquare(r, c) for c in range(self.N)]
         if conjunct in [Conjunct.row, Conjunct.rowcol]:
-            if self.randomizeArgs:
-                random.shuffle(args)
-            self.ckt.conjunctN(dest, args)
+            self.ckt.conjunctN(dest, args, self.randomizeArgs)
         else:
             self.ckt.andN(dest, args)
             self.ckt.decRefs(args)
         self.ckt.information(circuit.Vec([dest]))
         return dest
 
-    def allOK(self, rowStart = None, rowCount = None):
-        if rowCount is None:
-            rowCount = self.N
-        if rowStart is None:
-            rowStart = 0
+    def allOK(self, columnStart = None, columnCount = None):
+        if columnCount is None:
+            columnCount = self.N
+        if columnStart is None:
+            columnStart = 0
         name = "ok"
-        if rowCount < self.N:
-            name += "-%.2d.%.2d" % (rowStart, rowStart + rowCount -1)
+        if columnCount < self.N:
+            name += "-%.2d.%.2d" % (columnStart, columnStart + columnCount -1)
         return self.ckt.node(name)
 
-    def constrainAll(self, conjunct = Conjunct.none, rowStart = None, rowCount = None):
-        if rowCount is None:
-            rowCount = self.N
-        if rowStart is None:
-            rowStart = 0
-        if rowCount < self.N:
-            self.ckt.comment("Row constraints for rows %d to %d" % (rowStart, rowStart + rowCount - 1))            
+    def constrainAll(self, conjunct = Conjunct.none, columnStart = None, columnCount = None):
+        if columnStart is None:
+            columnStart = 0
+        if columnCount is None:
+            columnCount = self.N - columnStart
+        if columnCount < self.N:
+            self.ckt.comment("Top-level Constraint for columns %d-%d" % (columnStart, columnStart+columnCount-1))
         else:
-            self.ckt.comment("Row constraints for all rows")
-        dest = self.allOK(rowStart, rowCount)
-        args = [self.constrainRow(dest, r, conjunct) for r in range(rowStart, rowStart + rowCount)]
+            self.ckt.comment("Top-level constraint")
+        dest = self.allOK(columnStart, columnCount)
+        # Construct from bottom to top
+        args = [self.constrainRow(dest, r, conjunct) for r in range(self.N-1, -1, -1)]
         if conjunct in [Conjunct.rowcol]:
             if self.randomizeArgs:
                 random.shuffle(args)
@@ -181,24 +180,47 @@ class Board:
             self.ckt.decRefs(args)
         return dest
 
-    def conjunctAllSquares(self, rowStart = None, rowCount = None):
-        if rowCount is None:
-            rowCount = self.N
-        if rowStart is None:
-            rowStart = 0
-        if rowCount < self.N:
-            self.ckt.comment("Square constraints for rows %d to %d" % (rowStart, rowStart + rowCount - 1))            
+    def conjunctAllSquares(self, columnStart = None, columnCount = None):
+        if columnStart is None:
+            columnStart = 0
+        if columnCount is None:
+            columnCount = self.N - columnStart
+        if columnCount < self.N:
+            self.ckt.comment("Square Constraints for columns %d-%d" % (columnStart, columnStart+columnCount-1))
         else:
-            self.ckt.comment("Square constraints for all squares")
-        dest = self.allOK(rowStart, rowCount)
+            self.ckt.comment("Square Constraints")
+        dest = self.allOK(columnStart, columnCount)
         args = []
-        for r in range(rowStart, rowStart + rowCount):
-            args += [self.constrainSquare(r, c) for c in range(self.N)]
-        self.ckt.comment("Form conjunction of %d square constraints" % (len(args)))
+        for r in range(self.N):
+            args += [self.constrainSquare(r, c) for c in range(columnStart, columnStart + columnCount)]
+        self.ckt.comment("Form conjunction of all square constraints")
         if self.randomizeArgs:
             random.shuffle(args)
         self.ckt.conjunctN(dest, args)
         return dest
+
+    def combineAll(self, conjunct = Conjunct.none, enumerateCount = None):
+        if enumerateCount is None:
+            okNode = self.conjunctAllSquares() if conjunct == Conjunct.square else self.constrainAll(conjunct)
+        else:
+            lcount = self.N//2
+            rcount = self.N - lcount
+            fname = "save-%.4x.bdd" % random.randint(0, (1<<16)-1)
+            if conjunct == Conjunct.square:
+                okLeft = self.conjunctAllSquares(0, lcount)
+            else:
+                okLeft = self.constrainAll(conjunct, 0, lcount)
+            self.ckt.store(okLeft, fname)
+            self.ckt.decRefs([okLeft])
+            if conjunct == Conjunct.square:            
+                okRight = self.conjunctAllSquares(lcount, rcount)
+            else:
+                okRight = self.constrainAll(conjunct, lcount, rcount)
+            self.ckt.load(okLeft, fname)
+            okNode = self.allOK()
+            self.ckt.andN(okNode, [okLeft, okRight])
+            self.ckt.decRefs([okLeft, okRight])
+        return okNode
 
     def generate(self, zdd = circuit.Z.none, conjunct = False, enumerateCount = None):
         if len(self.removeList) == 0:
@@ -206,29 +228,8 @@ class Board:
         else:
             cstring = ", ".join(self.removeList)
             self.ckt.comment("%d X %d chessboard with the following corners removed: %s" % (self.N, self.N, cstring))
-#        self.ckt.write("option echo 1")
         self.declare(zdd)
-        if enumerateCount is None:
-            okNode = self.conjunctAllSquares() if conjunct == Conjunct.square else self.constrainAll(conjunct)
-        else:
-            ucount = self.N//2
-            lcount = self.N - ucount
-            fname = "save-%.4x.bdd" % random.randint(0, (1<<16)-1)
-            if conjunct == Conjunct.square:
-                okUp = self.conjunctAllSquares(0, ucount)
-                self.ckt.store(okUp, fname)
-                self.ckt.decRefs([okUp])
-                okDown = self.conjunctAllSquares(ucount, lcount)
-                self.ckt.load(okUp, fname)
-            else:
-                okUp = self.constrainAll(conjunct, 0, ucount)
-                self.ckt.store(okUp, fname)
-                self.ckt.decRefs([okUp])
-                okDown = self.constrainAll(conjunct, ucount, lcount)
-                self.ckt.load(okUp, fname)
-            okNode = self.allOK()
-            self.ckt.andN(okNode, [okUp, okDown])
-            self.ckt.decRefs([okUp, okDown])
+        okNode = self.combineAll(conjunct, enumerateCount)
         ok = circuit.Vec([okNode])
         self.ckt.information(ok)
         self.ckt.count(ok)
