@@ -43,6 +43,12 @@ typedef struct {
     size_t nzvars;
 } shadow_ele, *shadow_mgr;
 
+/* Maintaining set of variable indices */
+typedef struct {
+    int count;
+    int *indices;
+} index_set;
+
 shadow_mgr new_shadow_mgr(bool do_cudd, bool do_local, bool do_dist, chaining_t chaining);
 void free_shadow_mgr(shadow_mgr mgr);
 
@@ -82,18 +88,28 @@ void shadow_satisfy(shadow_mgr mgr, ref_t r);
 /* Create key-value table mapping set of root nodes to their densities. */
 keyvalue_table_ptr shadow_density(shadow_mgr mgr, set_ptr roots);
 
+
 /* Compute similarity metric for support sets of two functions */
 double shadow_similarity(shadow_mgr mgr, ref_t r1, ref_t r2);
+
+/* Index sets */
+
+/* Wrapper for Cudd_SupportIndices.  Creates new index set */
+index_set *shadow_support_indices(shadow_mgr mgr, ref_t r);
+
+/* Free index set */
+void index_set_free(index_set *iset);
+
+/* Remove indices from index set */
+void index_set_remove(index_set *set, index_set *rset);
+
 /* Based on indices retrieved by Cudd_SupportIndices() */
-double index_similarity(int scount1, int *indices1, int scount2, int *indices2);
+double index_similarity(index_set *iset1, index_set *iset2);
 
 /* Computer coverage metric for r1 by r2 */
 double shadow_coverage(shadow_mgr mgr, ref_t r1, ref_t r2);
 /* Based on indices retrieved by Cudd_SupportIndices() */
-double index_coverage(int scount1, int *indices1, int scount2, int *indices2);
-
-/* Wrapper for Cudd_SupportIndices */
-int shadow_support_indices(shadow_mgr mgr, ref_t r, int **indicesp);
+double index_coverage(index_set *iset1, index_set *iset2);
 
 /*
   Create key-value table mapping set of root nodes to their counts.

@@ -145,8 +145,7 @@ size_t total_stored_nodes_last_gc = 0;
 typedef struct RELE {
     ref_t fun;
     size_t size;
-    long support_count;
-    int *support_indices;
+    index_set *support; // Indices representing support set 
     bool in_file;
     char *file_name;
     struct RELE *next;
@@ -200,19 +199,18 @@ static void rset_ele_new_fun(rset_ele *ele, ref_t fun) {
 	    report(3, "Attempt to delete DD file '%s' failed", ele->file_name);
     }
     ele->in_file = false;
-    if (ele->support_indices != NULL)
-	free(ele->support_indices);
+    if (ele->support != NULL)
+	index_set_free(ele->support);
     if (!REF_IS_INVALID(ele->fun))
 	root_deref(ele->fun);
     /* Assign new function */
     ele->fun = fun;
     if (REF_IS_INVALID(fun)) {
 	ele->size = 0;
-	ele->support_count = 0;
-	ele->support_indices = NULL;
+	ele->support = NULL;
     } else {
 	ele->size = cudd_single_size(smgr, ele->fun);
-	ele->support_count = shadow_support_indices(smgr, ele->fun, &ele->support_indices);
+	ele->support = shadow_support_indices(smgr, ele->fun);
 	root_addref(fun, false);
     }
 }
@@ -241,8 +239,7 @@ static rset_ele *rset_new(ref_t fun) {
     ele->file_name = generate_name();
     ele->fun = REF_INVALID;
     ele->size = 0;
-    ele->support_count = 0;
-    ele->support_indices = NULL;
+    ele->support = NULL;
     rset_ele_new_fun(ele, fun);
     ele->next = NULL;
     ele->id = 0;
@@ -336,18 +333,6 @@ static size_t get_size(rset_ele *ptr) {
     return ptr->size;
 }
 
-static int get_support_count(rset_ele *ptr) {
-    if (ptr == NULL)
-	return 0;
-    return ptr->support_count;
-}
-
-static int *get_support_indices(rset_ele *ptr) {
-    if (ptr == NULL)
-	return 0;
-    return ptr->support_indices;
-}
-
 static ref_t get_function(rset_ele *ptr) {
     if (REF_IS_INVALID(ptr->fun) && ptr->in_file) {
 	FILE *infile = fopen(ptr->file_name, "r");
@@ -415,11 +400,7 @@ static double size_weight(rset_ele *ptr1, rset_ele *ptr2) {
 }
 
 static double get_support_similarity(rset_ele *ptr1, rset_ele *ptr2, bool weighted) {
-    int support_count1 = get_support_count(ptr1);
-    int *indices1 = get_support_indices(ptr1);
-    int support_count2 = get_support_count(ptr2);
-    int *indices2 = get_support_indices(ptr2);
-    double sim = index_similarity(support_count1, indices1, support_count2, indices2);
+    double sim = index_similarity(ptr1->support, ptr2->support);
     if (weighted) {
 	double weight = size_weight(ptr1, ptr2);
 	sim *= weight;
@@ -428,11 +409,7 @@ static double get_support_similarity(rset_ele *ptr1, rset_ele *ptr2, bool weight
 }
 
 static double get_support_coverage(rset_ele *ptr1, rset_ele *ptr2, bool weighted) {
-    int support_count1 = get_support_count(ptr1);
-    int *indices1 = get_support_indices(ptr1);
-    int support_count2 = get_support_count(ptr2);
-    int *indices2 = get_support_indices(ptr2);
-    double cov = index_coverage(support_count1, indices1, support_count2, indices2);
+    double cov = index_coverage(ptr1->support, ptr2->support);
     if (weighted) {
 	double weight = size_weight(ptr1, ptr2);
 	cov *= weight;

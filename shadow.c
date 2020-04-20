@@ -1585,10 +1585,65 @@ keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots,
     return reconcile_maps(mgr, lmap, dmap, cmap);
 }
 
+/* Working with index sets */
+static index_set *index_set_new() {
+    index_set *iset = malloc_or_fail(sizeof(index_set), "index_set_new");
+    if (iset) {
+	iset->count = 0;
+	iset->indices = NULL;
+    }
+    return iset;
+}
+
+void index_set_free(index_set *iset) {
+    if (iset->indices)
+	free(iset->indices);
+    iset->indices = NULL;
+    free_block(iset, sizeof(index_set));
+}
+
+void index_set_remove(index_set *set, index_set *rset) {
+    if (rset->count == 0)
+	return;
+    int idx = 0;
+    int ridx = 0;
+    int ncount = 0;
+    while (idx < set->count && ridx < rset->count) {
+	int next = set->indices[idx];
+	int rnext = rset->indices[idx];
+	if (next == rnext) {
+	    // Remove from set
+	    idx ++;
+	    ridx ++;
+	} else if (next < rnext) {
+	    // Copy from old position to new in set
+	    set->indices[ncount++] = next;
+	    idx ++;
+	} else {
+	    // Not in set
+	    ridx ++;
+	}
+    }
+    while (idx < set->count) {
+	int next = set->indices[idx];
+	set->indices[ncount++] = next;
+	idx ++;
+    }
+    if (ncount == 0) {
+	free(set->indices);
+    }
+    set->count = ncount;
+}
+
 /* Compute similarity metric for support sets of two functions */
 /* Modified 09/17/2019 with revised similarity count */
 
-double index_similarity(int support_count1, int *indices1, int support_count2, int *indices2) {
+double index_similarity(index_set *iset1, index_set *iset2) {
+    int *indices1 = iset1->indices;
+    int *indices2 = iset2->indices;
+    int support_count1 = iset1->count;
+    int support_count2 = iset2->count;
+
     double score = 0.0;
     int intersection_count = 0;
     int r1_count = 0;
@@ -1623,7 +1678,11 @@ double index_similarity(int support_count1, int *indices1, int support_count2, i
     return score;
 }
 
-double index_coverage(int support_count1, int *indices1, int support_count2, int *indices2) {
+double index_coverage(index_set *iset1, index_set *iset2) {
+    int *indices1 = iset1->indices;
+    int *indices2 = iset2->indices;
+    int support_count1 = iset1->count;
+    int support_count2 = iset2->count;
     int intersection_count = 0;
     int r1_count = 0;
     int idx1 = 0;
@@ -1650,47 +1709,40 @@ double index_coverage(int support_count1, int *indices1, int support_count2, int
 }
 
 
-int shadow_support_indices(shadow_mgr mgr, ref_t r, int **indicesp) {
-    if (!mgr->do_cudd) {
-	*indicesp = NULL;
-	return -1;
+index_set *shadow_support_indices(shadow_mgr mgr, ref_t r) {
+    index_set *iset = index_set_new();
+    if (mgr->do_cudd) {
+	DdNode *n = ref2dd(mgr, r);
+	iset->count = Cudd_SupportIndices(mgr->bdd_manager, n, &iset->indices);
     }
-    DdNode *n = ref2dd(mgr, r);
-    int support_count = Cudd_SupportIndices(mgr->bdd_manager, n, indicesp);
-    return support_count;
+    return iset;
 }
 
 /* Compute similarity metric for support sets of two functions */
 double shadow_similarity(shadow_mgr mgr, ref_t r1, ref_t r2) {
-    int *indices1;
-    int *indices2;
-
     if (!mgr->do_cudd)
 	return 0.0;
-    int support_count1 = shadow_support_indices(mgr, r1, &indices1);
-    int support_count2 = shadow_support_indices(mgr, r2, &indices2);
+    index_set *iset1 = shadow_support_indices(mgr, r1);
+    index_set *iset2 = shadow_support_indices(mgr, r2);
 
-    double result = index_similarity(support_count1, indices1, support_count2, indices2);
+    double result = index_similarity(iset1, iset2);
 
-    free(indices1);
-    free(indices2);
+    index_set_free(iset1);
+    index_set_free(iset2);
 
     return result;
 }
 
 double shadow_coverage(shadow_mgr mgr, ref_t r1, ref_t r2) {
-    int *indices1;
-    int *indices2;
-
     if (!mgr->do_cudd)
 	return 0.0;
-    int support_count1 = shadow_support_indices(mgr, r1, &indices1);
-    int support_count2 = shadow_support_indices(mgr, r2, &indices2);
+    index_set *iset1 = shadow_support_indices(mgr, r1);
+    index_set *iset2 = shadow_support_indices(mgr, r2);
 
-    double result = index_coverage(support_count1, indices1, support_count2, indices2);
+    double result = index_coverage(iset1, iset2);
 
-    free(indices1);
-    free(indices2);
+    index_set_free(iset1);
+    index_set_free(iset2);
 
     return result;
 }
