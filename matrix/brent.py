@@ -1088,6 +1088,15 @@ class MProblem:
             levelList = unitRange(6)
         ranges = self.fullRanges()
         lastLevel = 0
+        if streamlineNode is not None and self.streamlineLevel not in levelList:
+            slevel = 0
+            for level in levelList:
+                if level > self.streamlineLevel:
+                    break
+                slevel = level
+        else:
+            slevel = self.streamlineLevel
+            
         for level in levelList:
             self.ckt.comment("Combining terms at level %d" % level)
             gcounts = ranges[6-level:6-lastLevel]
@@ -1097,7 +1106,7 @@ class MProblem:
                 tlist = [BrentTerm(idx + ls) for ls in indexExpand(gcounts)]
                 terms = self.ckt.addVec(circuit.Vec(tlist))
                 args = terms
-                if level >= self.streamlineLevel and lastLevel < self.streamlineLevel and streamlineNode is not None:
+                if streamlineNode is not None and level == slevel:
                     tlist = [streamlineNode] + tlist
                     args = circuit.Vec(tlist)
                 bn = BrentTerm(idx)
@@ -1108,7 +1117,7 @@ class MProblem:
                 self.ckt.decRefs([terms])
                 if check:
                     self.ckt.checkConstant(bn, 1)
-            if streamlineNode is not None and level == self.streamlineLevel:
+            if streamlineNode is not None and level == slevel:
                 self.ckt.decRefs([streamlineNode])
             if not check:
                 names = circuit.Vec([BrentTerm(idx) for idx in indices])

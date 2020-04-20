@@ -8,19 +8,23 @@ time = 7200
 lcount = 336
 lname = 'smirnov-family.lit'
 
-def fname(cat):
-    return "run-fix%d-%s.cmd" % (lcount, cat)
+def fname(suffix, blevel):
+    return "run-fix%d-b%d-%s.cmd" % (lcount, blevel, suffix)
 
-def cmd(cat = 'se', singleton = True):
-    ls = [program, '-k', '-B', '2:6',  '-t', str(time), '-L', lname, '-o', fname(cat)]
+def cmd(singleton = True, blevel = 2):
+    suffix = 'se' if singleton else 'nse'
+    brange = '6' if blevel == 0 else '%d:6' % blevel
+    ls = [program, '-k', '-B', brange,  '-t', str(time), '-L', lname, '-o', fname(suffix, blevel)]
     if singleton:
         ls.append('-e')
     return ls
 
-command = cmd()
-print "Running: %s" % " ".join(command)
-process = subprocess.Popen(command)
-process.wait()
+singleton = True
+for blevel in range(3):
+    command = cmd(singleton, blevel)
+    print "Running: %s" % " ".join(command)
+    process = subprocess.Popen(command)
+    process.wait()
     
 
 
