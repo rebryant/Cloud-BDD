@@ -9,13 +9,15 @@ import random
 import circuit
 
 def usage(name):
-    print("Usage: %s [-h] [-z] [-c CTYPE] -N N [-r C1:C2:..:Ck] [-e ECNT] [-o OUT]")
+    print("Usage: %s [-h] [-zZ] [-d [-q]] [-c CTYPE] -N N [-r C1:C2:..:Ck] [-o OUT]")
     print("   -h        Print this message")
-    print("   -z        Use ZDDs")
+    print("   -d        Generate BDDs for two halves and then combine")
+    print("   -q        Existentially quantify vars from each half")
+    print("   -Z        Use ZDDs all the way through")
+    print("   -z        Generate with BDDs and convert to ZDDs for final conjunction")
     print("   -c CTYPE  Specify conjunction method: n (none), r (rows), c (row/col), s (squares)")
     print("   -N N      Set board size")
     print("   -r CORNER Remove specified corner(s).  Subset of UL, UR, LL, LR")
-    print("   -e ECNT   Enumerate ECNT variables")
     print("   -o OUT    Specify output files")
 
 # Class to define conjunction method
@@ -76,6 +78,25 @@ class Board:
             slist.append(self.vertical(r,     c+1, negate = negate))
         return slist
 
+    def partialVars(self, columnStart, columnCount, internalOnly = False):
+        vlist = []
+        for r in range(1, self.N):
+            for c in range(columnStart, columnStart + columnCount):
+                vlist.append(self.horizontal(r, c))
+
+        cleft = columnStart
+        if internalOnly or cleft == 0:
+            cleft += 1
+        cright = columnStart + columnCount
+        if internalOnly or cright == self.N-1:
+            cright -= 1
+        for r in range(self.N):
+            for c in range(cleft, cright + 1):
+                vlist.append(self.vertical(r, c))
+
+        return vlist
+
+
     def removed(self, r, c):
         if r == 0 and c == 0:
             return "UL" in self.removeList
@@ -89,10 +110,10 @@ class Board:
 
     def declare(self, zdd = circuit.Z.none):
         self.ckt.comment("Declare Boolean variables")
-        if zdd != circuit.Z.none:
+        if zdd not in [circuit.Z.none, circuit.Z.convert]:
             tname = "ADD" if zdd == circuit.Z.avars else "ZDD"
             self.ckt.comment("  and convert to %s variables" % tname)
-        prefix = "" if zdd == circuit.Z.none else "b"
+        prefix = "" if zdd in [circuit.Z.none, circuit.Z.convert] else "b"
         for r in range(self.N):
             if r > 0:
                 hr = self.hrow(r, prefix)
@@ -106,13 +127,13 @@ class Board:
             if r > 0:
                 hr = self.hrow(r, prefix)
                 chr = self.hrow(r)
-                if zdd == circuit.Z.convert:
+                if zdd == circuit.Z.vars:
                     self.ckt.zcV(chr, hr)
                 elif zdd == circuit.Z.avars:
                     self.ckt.acV(chr, hr)
             vr = self.vrow(r, prefix)
             cvr = self.vrow(r)
-            if zdd == circuit.Z.convert:
+            if zdd == circuit.Z.vars:
                 self.ckt.zcV(cvr, vr)
             elif zdd == circuit.Z.avars:
                 self.ckt.acV(cvr, vr)
@@ -156,7 +177,7 @@ class Board:
             columnStart = 0
         name = "ok"
         if columnCount < self.N:
-            name += "-%.2d.%.2d" % (columnStart, columnStart + columnCount -1)
+            name += "-%.2d:%.2d" % (columnStart, columnStart + columnCount -1)
         return self.ckt.node(name)
 
     def constrainAll(self, conjunct = Conjunct.none, columnStart = None, columnCount = None):
@@ -193,14 +214,17 @@ class Board:
         args = []
         for r in range(self.N):
             args += [self.constrainSquare(r, c) for c in range(columnStart, columnStart + columnCount)]
-        self.ckt.comment("Form conjunction of all square constraints")
+        if columnCount == self.N:
+            self.ckt.comment("Form conjunction of all square constraints")
+        else:
+            self.ckt.comment("Form conjunction of square constraints for columns %d to %d" % (columnStart, columnStart + columnCount - 1))
         if self.randomizeArgs:
             random.shuffle(args)
         self.ckt.conjunctN(dest, args)
         return dest
 
-    def combineAll(self, conjunct = Conjunct.none, enumerateCount = None):
-        if enumerateCount is None:
+    def combineAll(self, conjunct = Conjunct.none, divide = False, quantify = False, zdd = circuit.Z.none):
+        if not divide:
             okNode = self.conjunctAllSquares() if conjunct == Conjunct.square else self.constrainAll(conjunct)
         else:
             lcount = self.N//2
@@ -216,23 +240,58 @@ class Board:
                 okRight = self.conjunctAllSquares(lcount, rcount)
             else:
                 okRight = self.constrainAll(conjunct, lcount, rcount)
+
+            okLeft = self.allOK(0, lcount)
             self.ckt.load(okLeft, fname)
+            self.ckt.comment("Final two conjuncts")
+            self.ckt.information([okLeft, okRight])
             okNode = self.allOK()
+            if quantify:
+                leftVars = self.partialVars(0, lcount, True)
+                rightVars = self.partialVars(lcount, rcount, True)
+                okLeftQ = self.ckt.node("q-" + okLeft.name)
+                okRightQ = self.ckt.node("q-" + okRight.name)
+                self.ckt.equantN(okLeftQ, okLeft, leftVars)
+#                self.ckt.satisfy(okLeftQ)
+                self.ckt.equantN(okRightQ, okRight, rightVars)
+#                self.ckt.satisfy(okRightQ)
+                self.ckt.comment("Existentially quantified conjuncts")
+                self.ckt.information([okLeftQ, okRightQ])
+                okKernel = self.ckt.node("k-" + okNode.name)
+                self.ckt.andN(okKernel, [okLeftQ, okRightQ])
+                self.ckt.decRefs([okLeftQ, okRightQ])
+                self.ckt.comment("Quantified kernel")
+                self.ckt.information([okKernel])
+                self.ckt.andN(okLeft, [okLeft, okKernel])
+                self.ckt.andN(okRight, [okRight, okKernel])                
+                self.ckt.comment("Reduce final conjuncts")
+                self.ckt.information([okLeft, okRight])
+            if zdd == circuit.Z.convert:
+                okLeftZ = self.ckt.node("z-" + okLeft.name)
+                okRightZ = self.ckt.node("z-" + okRight.name)
+                self.ckt.zc(okLeftZ, okLeft)
+                self.ckt.zc(okRightZ, okRight)
+                self.ckt.decRefs([okLeft, okRight])
+                okLeft = okLeftZ
+                okRight = okRightZ
+                self.ckt.comment("After ZDD conversion")
+                self.ckt.information([okLeft, okRight])
             self.ckt.andN(okNode, [okLeft, okRight])
             self.ckt.decRefs([okLeft, okRight])
         return okNode
 
-    def generate(self, zdd = circuit.Z.none, conjunct = False, enumerateCount = None):
+    def generate(self, zdd = circuit.Z.none, conjunct = False, divide = False, quantify = False):
         if len(self.removeList) == 0:
             self.ckt.comment("%d X %d chessboard with no corners removed" % (self.N, self.N))
         else:
             cstring = ", ".join(self.removeList)
             self.ckt.comment("%d X %d chessboard with the following corners removed: %s" % (self.N, self.N, cstring))
         self.declare(zdd)
-        okNode = self.combineAll(conjunct, enumerateCount)
+        okNode = self.combineAll(conjunct, divide = divide, quantify = quantify, zdd = zdd)
         ok = circuit.Vec([okNode])
         self.ckt.information(ok)
-        self.ckt.count(ok)
+#        self.ckt.count(ok)
+        self.ckt.checkConstant(ok, 0)
 #        self.ckt.satisfy(ok)
         self.ckt.write("status")
         self.ckt.write("time")
@@ -242,15 +301,18 @@ def run(name, args):
     zdd = circuit.Z.none
     conjunct = Conjunct.none
     removeList = []
-    enumerateCount = None
+    divide = False
+    quantify = False
     outfile = sys.stdout
-    optlist, args = getopt.getopt(args, 'hN:zc:r:o:e:')
+    optlist, args = getopt.getopt(args, 'hN:dqzZc:r:o:')
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         elif opt == '-N':
             N = int(val)
+        elif opt == '-Z':
+            zdd = circuit.Z.vars
         elif opt == '-z':
             zdd = circuit.Z.convert
         elif opt == '-c':
@@ -261,8 +323,10 @@ def run(name, args):
                 return
         elif opt == '-r':
             removeList = val.split(':')
-        elif opt == '-e':
-            enumerateCount = int(val)
+        elif opt == '-d':
+            divide = True
+        elif opt == '-q':
+            quantify = True
         elif opt == '-o':
             try:
                 outfile = open(val, 'w')
@@ -271,7 +335,7 @@ def run(name, args):
                 return
     ckt = circuit.Circuit(outfile)
     b = Board(ckt, N, removeList)
-    b.generate(zdd, conjunct, enumerateCount)
+    b.generate(zdd, conjunct, divide = divide, quantify = quantify)
     if outfile != sys.stdout:
         outfile.close()
 

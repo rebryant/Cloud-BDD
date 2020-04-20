@@ -296,8 +296,17 @@ class Circuit:
         ls = [dest]
         ls.extend(argList)
         self.cmdLine("ite", ls)
-
         
+    def equantN(self, dest, fun, argList):
+        ls = [dest, fun]
+        ls.extend(argList)
+        self.cmdLine("equant", ls)
+
+    def uquantN(self, dest, fun, argList):
+        ls = [dest, fun]
+        ls.extend(argList)
+        self.cmdLine("uquant", ls)
+
     def assignConstant(self, dest, val):
         if val == 1:
             self.andN(dest, [])
