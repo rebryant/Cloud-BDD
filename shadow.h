@@ -94,11 +94,15 @@ double shadow_similarity(shadow_mgr mgr, ref_t r1, ref_t r2);
 
 /* Index sets */
 
+
 /* Wrapper for Cudd_SupportIndices.  Creates new index set */
 index_set *shadow_support_indices(shadow_mgr mgr, ref_t r);
 
 /* Free index set */
 void index_set_free(index_set *iset);
+
+/* Duplicate index set */
+index_set *index_set_duplicate(index_set *iset);
 
 /* Remove indices from index set */
 void index_set_remove(index_set *set, index_set *rset);

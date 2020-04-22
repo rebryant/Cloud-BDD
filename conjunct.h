@@ -21,6 +21,7 @@ extern int preprocess_conjuncts;
 extern int cache_soft_lookup_ratio;
 extern int cache_hard_lookup_ratio;
 extern int track_conjunction;
+extern int quantify_threshold;
 
 /* Functions defined in conjunct.c */
 void init_conjunct();

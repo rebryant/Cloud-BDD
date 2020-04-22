@@ -100,6 +100,9 @@ size_t memory_store_threshold = 1000;
 size_t stored_gc_limit = 10000;
 #endif /* STRESS */
 
+/* How large can the BDD get before attempting existential quantification (0 == infinity) */
+int quantify_threshold = 0;
+
 /* How many more nodes should be stored in order to trigger GC? */
 
 /* Should old conjunct files be kept */
@@ -183,6 +186,7 @@ void init_conjunct() {
     add_param("softlookup", &cache_soft_lookup_ratio, "Max cache lookups during soft-and (ratio to arg sizes)", NULL);
     add_param("hardlookup", &cache_soft_lookup_ratio, "Max cache lookups during and (ratio to arg sizes)", NULL);
     add_param("generate", &soft_and_expansion_ratio_scaled, "Limit on nodes generated during soft and", NULL);
+    add_param("quantify", &quantify_threshold, "Min. BDD size at which attempt existential quantification (0 == infinity)", NULL);
     preprocess = 0;
     reprocess = 0;
 }
@@ -618,6 +622,28 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
     }
 }
 
+/* Attempt existential quantification of those variables occuring in ele that do not occur in any functions in set */
+static void try_quantification(rset_ele *ele, rset_ele *set) {
+    if (quantify_threshold == 0 || ele->size < quantify_threshold)
+	return;
+    index_set *iset = index_set_duplicate(ele->support);
+    rset_ele *sele;
+    int ecount = 0;
+    for (sele = set; sele; sele = sele->next) {
+	index_set_remove(iset, sele->support);
+	ecount++;
+	if (iset->count == 0) {
+	    int length = rset_length(set);
+	    report(2, "Unique support dropped from %zd to 0 after %d/%d conjuncts for conjunct %d",
+		   ele->support->count, ecount, length, ele->id);
+	    return;
+	}
+    }
+    /* Have nontrivial set to quantify */
+    report(1, "Prepared to existentially quantify %d/%d variables from conjunct %d",
+	   iset->count, ele->support->count, ele->id);
+}
+
 /* Manage candidate argument pairs */
 typedef struct {
     rset_ele *ptr1;
@@ -806,7 +832,12 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    soft_simplify(best_nset, set, ithreshold, "conj_old2new");
 	    report(2, "Apply soft simplify to existing %d arguments based on new argument", set_size);
 	    soft_simplify(set, best_nset, ithreshold, "conj_new2old");
+
+	    /* Apply existential quantification */
+	    try_quantification(best_nset, set);
+
 	}
+
 	set = rset_add_element(set, best_nset);
 	if (data)
 	    data->result_size = get_size(best_nset);

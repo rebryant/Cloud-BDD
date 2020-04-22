@@ -225,7 +225,7 @@ static bool bdd_quit(int argc, char *argv[]) {
 
 static void usage(char *cmd) {
     printf(
-"Usage: %s [-h] [-f FILE][-v VLEVEL] [-M MBYTES] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-t LIMIT][-C chain][-K LOOKUP][-G GEN][-g][-p][-T]\n",
+"Usage: %s [-h] [-f FILE][-v VLEVEL] [-M MBYTES] [-c][-l][-d][-H HOST] [-P PORT][-r][-L FILE][-t LIMIT][-C chain][-K LOOKUP][-G GEN][-g][-p][-q QTHRES][-T]\n",
 	   cmd);
     printf("\t-h         Print this information\n");
     printf("\t-f FILE    Read commands from file\n");
@@ -238,6 +238,7 @@ static void usage(char *cmd) {
     printf("\t-G GEN     Limit nodes generated during soft and (ratio wrt argument size, scaled by 100)\n");
     printf("\t-g         Allow growth from soft-and simplification\n");
     printf("\t-p         Preprocess conjuncts with soft-and simplification\n");
+    printf("\t-q QTHRES  Set BDD size threshold at which attempt existential quantification of conjuncts\n");    
     printf("\t-T         Generate tracking information on conjunctions\n");
     printf("Distributed BDD options\n");
     printf("\t-c         Use CUDD\n");
@@ -271,7 +272,7 @@ int main(int argc, char *argv[]) {
     chaining_type = CHAIN_ALL;
 
 
-    while ((c = getopt(argc, argv, "hv:M:f:cldH:P:rL:t:C:R:K:G:gpT")) != -1) {
+    while ((c = getopt(argc, argv, "hv:M:f:cldH:P:rL:t:C:R:K:G:gpq:T")) != -1) {
 	switch(c) {
 	case 'h':
 	    usage(argv[0]);
@@ -342,6 +343,8 @@ int main(int argc, char *argv[]) {
 	case 'p':
 	    preprocess_conjuncts = 1;
 	    break;
+	case 'q':
+	    quantify_threshold = atoi(optarg);
 	case 'T':
 	    track_conjunction = 1;
 	    break;

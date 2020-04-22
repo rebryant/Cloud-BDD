@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <string.h>
 
 #ifdef QUEUE
 #include <pthread.h>
@@ -1588,10 +1589,8 @@ keyvalue_table_ptr shadow_shift(shadow_mgr mgr, set_ptr roots,
 /* Working with index sets */
 static index_set *index_set_new() {
     index_set *iset = malloc_or_fail(sizeof(index_set), "index_set_new");
-    if (iset) {
-	iset->count = 0;
-	iset->indices = NULL;
-    }
+    iset->count = 0;
+    iset->indices = NULL;
     return iset;
 }
 
@@ -1601,6 +1600,19 @@ void index_set_free(index_set *iset) {
     iset->indices = NULL;
     free_block(iset, sizeof(index_set));
 }
+
+index_set *index_set_duplicate(index_set *iset) {
+    index_set *nset = index_set_new();
+    if (nset) {
+	nset->count = iset->count;
+	if (nset->count > 0) {
+	    nset->indices = calloc_or_fail(nset->count, sizeof(int), "index_set_duplicate");
+	    memcpy(nset->indices, iset->indices, sizeof(int) * nset->count);
+	}
+    }
+    return nset;
+}
+
 
 void index_set_remove(index_set *set, index_set *rset) {
     if (rset->count == 0)
