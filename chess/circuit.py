@@ -268,8 +268,11 @@ class Circuit:
         ls.extend(argList)
         self.cmdLine("and", ls)
 
-    def conjunctN(self, dest, argList, randomize = False):
-        ls = [dest]
+    def conjunctN(self, dest, argList, randomize = False, quantify = False):
+        if quantify:
+            ls = ['-q', dest]
+        else:
+            ls = [dest]
         if randomize:
             args = list(argList)
             random.shuffle(args)
