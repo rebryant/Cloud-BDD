@@ -170,7 +170,7 @@ bool do_conjunct(int argc, char *argv[]);
 void init_conjunct() {
     /* Add commands and options */
     add_cmd("conjunct", do_conjunct,
-	    " fd f1 f2 ...   | fd <- f1 & f2 & ...");
+	    "[-q] fd f1 f2 ...   | fd <- f1 & f2 & ... (optionally perform existential quantification");
     add_cmd("similar", do_similar,
 	    "f1 f2 ...       | Compute pairwise support similarity for functions");
     add_cmd("cover", do_coverage,
@@ -689,7 +689,7 @@ static void insert_candidate(pair *candidates, rset_ele *ptr1, rset_ele *ptr2, d
     }
 }
 
-static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
+static ref_t similarity_combine(rset_ele *set, conjunction_data *data, bool quantify) {
     double expansion_factor = (double) expansion_factor_scaled * 0.01;
     pair candidates[abort_limit];
     size_t abort_count = 0;
@@ -842,11 +842,11 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 	    report(2, "Apply soft simplify to existing %d arguments based on new argument", set_size);
 	    soft_simplify(set, best_nset, ithreshold, "conj_new2old");
 
-	    /* Apply existential quantification */
-	    try_quantification(best_nset, set);
+	    /* Optionally apply existential quantification */
+	    if (quantify)
+		try_quantification(best_nset, set);
 
 	}
-
 	set = rset_add_element(set, best_nset);
 	if (data)
 	    data->result_size = get_size(best_nset);
@@ -876,7 +876,7 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data) {
 }
 
 /* Compute conjunction of set (destructive) */
-static ref_t rset_conjunct(rset_ele *set) {
+static ref_t rset_conjunct(rset_ele *set, bool quantify) {
     conjunction_data cdata;
     cdata.max_size = 0;
     cdata.sum_size = 0;
@@ -887,7 +887,7 @@ static ref_t rset_conjunct(rset_ele *set) {
     if (check_results)
 	rprod = and_check(set);
 
-    ref_t rval = similarity_combine(set, &cdata);
+    ref_t rval = similarity_combine(set, &cdata, quantify);
 
     if (check_results) {
 	if (rprod != rval) {
@@ -907,7 +907,12 @@ static ref_t rset_conjunct(rset_ele *set) {
 }
 
 bool do_conjunct(int argc, char *argv[]) {
-    if (argc < 2) {
+    int dest_arg = 1;
+    bool quantify = argc > 1 && strcmp(argv[1], "-q") == 0;
+    if (quantify)
+	dest_arg++;
+
+    if (argc <= dest_arg) {
 	report(0, "Need destination name");
 	return false;
     }
@@ -923,7 +928,7 @@ bool do_conjunct(int argc, char *argv[]) {
     ref_t rzero = shadow_zero(smgr);
     int zcount = 0;
 
-    for (i = 2; i < argc; i++) {
+    for (i = dest_arg+1; i < argc; i++) {
 	ref_t rarg = get_ref(argv[i]);
 	if (REF_IS_INVALID(rarg)) {
 	    // Fix: Must deference existing list elements before aborting
@@ -954,7 +959,7 @@ bool do_conjunct(int argc, char *argv[]) {
 
     if (zcount > 0) {
 	rset_free(set);
-	assign_ref(argv[1], rzero, false, false);
+	assign_ref(argv[dest_arg], rzero, false, false);
 	report(1, "Conjunction has %d zero-valued conjuncts, and so is trivially zero", zcount);
 	return true;
     }
@@ -974,7 +979,7 @@ bool do_conjunct(int argc, char *argv[]) {
     report(1, "Elapsed time %.1f.  Initial simplification.  Total %zd --> %zd (%.3fX).  Max %zd --> %zd (%.3fX)",
 	   elapsed, itotal, ntotal, tratio, imax, nmax, mratio);
 
-    ref_t rval = rset_conjunct(set);
+    ref_t rval = rset_conjunct(set, quantify);
     if (REF_IS_INVALID(rval)) {
 	return false;
     }
