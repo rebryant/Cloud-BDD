@@ -107,6 +107,9 @@ index_set *index_set_duplicate(index_set *iset);
 /* Remove indices from index set */
 void index_set_remove(index_set *set, index_set *rset);
 
+/* Existential quantification over variables in index set */
+ref_t index_equant(shadow_mgr mgr, ref_t r, index_set *iset);
+
 /* Based on indices retrieved by Cudd_SupportIndices() */
 double index_similarity(index_set *iset1, index_set *iset2);
 

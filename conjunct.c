@@ -634,14 +634,23 @@ static void try_quantification(rset_ele *ele, rset_ele *set) {
 	ecount++;
 	if (iset->count == 0) {
 	    int length = rset_length(set);
-	    report(2, "Unique support dropped from %zd to 0 after %d/%d conjuncts for conjunct %d",
+	    report(1, "QUANT: Unique support dropped from %zd to 0 after %d/%d conjuncts for conjunct %d",
 		   ele->support->count, ecount, length, ele->id);
 	    return;
 	}
     }
     /* Have nontrivial set to quantify */
-    report(1, "Prepared to existentially quantify %d/%d variables from conjunct %d",
+    report(1, "QUANT: Prepared to existentially quantify %d/%d variables from conjunct %d",
 	   iset->count, ele->support->count, ele->id);
+    ref_t rq = index_equant(smgr, ele->fun, iset);
+
+    size_t osize = ele->size;
+    int ocount = ele->support->count;
+    rset_ele_new_fun(ele, rq);
+    size_t nsize = ele->size;
+    report(1, "QUANT: Existentially quantified %d/%d variables from conjunct %d.  %zd-->%zd",
+	   iset->count, ocount, ele->id, osize, nsize);
+    index_set_free(iset);
 }
 
 /* Manage candidate argument pairs */

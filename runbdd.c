@@ -345,6 +345,7 @@ int main(int argc, char *argv[]) {
 	    break;
 	case 'q':
 	    quantify_threshold = atoi(optarg);
+	    break;
 	case 'T':
 	    track_conjunction = 1;
 	    break;

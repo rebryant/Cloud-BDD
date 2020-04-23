@@ -92,6 +92,10 @@ static dd_type_t find_type(shadow_mgr mgr, ref_t r) {
     return IS_BDD;
 }
 
+static bool is_bdd(shadow_mgr mgr, ref_t r) {
+    return find_type(mgr, r) == IS_BDD;
+}
+
 static bool is_zdd(shadow_mgr mgr, ref_t r) {
     return find_type(mgr, r) == IS_ZDD;
 }
@@ -1622,7 +1626,7 @@ void index_set_remove(index_set *set, index_set *rset) {
     int ncount = 0;
     while (idx < set->count && ridx < rset->count) {
 	int next = set->indices[idx];
-	int rnext = rset->indices[idx];
+	int rnext = rset->indices[ridx];
 	if (next == rnext) {
 	    // Remove from set
 	    idx ++;
@@ -1646,6 +1650,37 @@ void index_set_remove(index_set *set, index_set *rset) {
     }
     set->count = ncount;
 }
+
+/* Existential quantification over variables in index set */
+ref_t index_equant(shadow_mgr mgr, ref_t r, index_set *iset) {
+    if (!mgr->do_cudd)
+	return r;
+    size_t nele = iset->count;
+    if (!is_bdd(mgr, r)) {
+	err(false, "Cannot quantify non-BDD");
+	return r;
+    }
+    DdNode *n = ref2dd(mgr, r);
+    DdNode **vars = calloc_or_fail(nele, sizeof(DdNode *), "index_equant");
+    int *phase = calloc_or_fail(nele, sizeof(int), "index_equant");
+    int i;
+    for (i = 0; i < nele; i++) {
+	vars[i] = ref2dd(mgr, shadow_get_variable(mgr, iset->indices[i]));
+	phase[i] = 1;
+    }
+    DdNode *cube = Cudd_bddComputeCube(mgr->bdd_manager, vars, phase, nele);
+    reference_dd(mgr, cube);
+    free_array(vars, nele, sizeof(DdNode *));
+    free_array(phase, nele, sizeof(int));
+
+    DdNode *nq = Cudd_bddExistAbstract(mgr->bdd_manager, n, cube);
+    reference_dd(mgr, nq);
+    unreference_dd(mgr, cube, IS_BDD);
+    
+    return dd2ref(nq, IS_BDD);
+}
+
+
 
 /* Compute similarity metric for support sets of two functions */
 /* Modified 09/17/2019 with revised similarity count */
