@@ -623,6 +623,7 @@ static void soft_simplify(rset_ele *set, rset_ele *other_set, double threshold, 
 }
 
 /* Attempt existential quantification of those variables occuring in ele that do not occur in any functions in set */
+/* Possible for ele to be in set, in which case just skip over it */
 static void try_quantification(rset_ele *ele, rset_ele *set) {
     if (quantify_threshold == 0 || ele->size < quantify_threshold)
 	return;
@@ -630,8 +631,10 @@ static void try_quantification(rset_ele *ele, rset_ele *set) {
     rset_ele *sele;
     int ecount = 0;
     for (sele = set; sele; sele = sele->next) {
-	index_set_remove(iset, sele->support);
 	ecount++;
+	if (sele == ele)
+	    continue;
+	index_set_remove(iset, sele->support);
 	if (iset->count == 0) {
 	    int length = rset_length(set);
 	    report(1, "QUANT: Unique support dropped from %zd to 0 after %d/%d conjuncts for conjunct %d",
@@ -639,13 +642,13 @@ static void try_quantification(rset_ele *ele, rset_ele *set) {
 	    return;
 	}
     }
-    /* Have nontrivial set to quantify */
-    report(1, "QUANT: Prepared to existentially quantify %d/%d variables from conjunct %d",
-	   iset->count, ele->support->count, ele->id);
-    ref_t rq = index_equant(smgr, ele->fun, iset);
 
     size_t osize = ele->size;
     int ocount = ele->support->count;
+
+    /* Have nontrivial set to quantify */
+    ref_t r = get_function(ele);
+    ref_t rq = index_equant(smgr, r, iset);
     rset_ele_new_fun(ele, rq);
     size_t nsize = ele->size;
     report(1, "QUANT: Existentially quantified %d/%d variables from conjunct %d.  %zd-->%zd",
@@ -702,6 +705,15 @@ static ref_t similarity_combine(rset_ele *set, conjunction_data *data, bool quan
 	return rval;
     }
     
+    /* Do initial quantification over entire set */
+    if (quantify) {
+	rset_ele *ele;
+	for (ele = set; ele; ele = ele->next) {
+	    try_quantification(ele, set);
+	    release_function(ele);
+	}
+    }
+
 
     size_t set_size = argument_count;
     while (set_size > 1 && !rset_contains_zero(set)) {
@@ -983,7 +995,7 @@ bool do_conjunct(int argc, char *argv[]) {
     if (REF_IS_INVALID(rval)) {
 	return false;
     }
-    assign_ref(argv[1], rval, false, false);
+    assign_ref(argv[dest_arg], rval, false, false);
     root_deref(rval);
 
     report(3, "Total soft ands = %zd.  Succeed = %zd.  Node fail = %zd.  Lookup fail = %zd",

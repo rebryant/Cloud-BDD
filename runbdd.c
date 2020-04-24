@@ -106,8 +106,8 @@ static void bdd_init() {
     reftable = word_keyvalue_new();
     ref_t rzero = shadow_zero(smgr);
     ref_t rone = shadow_one(smgr);
-    assign_ref("zero", rzero, true, false);
-    assign_ref("one", rone, true, false);
+    assign_ref("zero", rzero, false, false);
+    assign_ref("one", rone, false, false);
     set_gc_handlers(client_gc_start, client_gc_finish);
 }
 
@@ -554,7 +554,7 @@ ref_t get_ref(char *name) {
 	    return r;
 	}
     }
-    report(0, "Function '%s' undefined", name);
+    err(false, "Function '%s' undefined", name);
     return REF_INVALID;
 }
 
