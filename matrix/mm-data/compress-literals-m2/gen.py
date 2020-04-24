@@ -22,7 +22,7 @@ destAuxCount = 22
 time = None
 template = "smirnov-m*+*.lit"
 singleton = True
-bottom_level = 1
+bottom_level = 2
 top_level = 6
 
 # Literal file generation
