@@ -60,23 +60,70 @@ class Colors:
 
 class Square:
     row  = -1
-    col = -1
+    column = -1
 
-    def __init__(self, row = None, col = None):
+    def __init__(self, row = None, column = None):
         if row is not None:
             self.row = row
-        if self.col is not None:
-            self.col = col
+        if self.column is not None:
+            self.column = column
 
     def parse(self, s):
-        suffix = s.split("-")[1]
-        rstring, cstring = suffix.split(".")
-        self.row = int(rstring)
-        self.col = int(cstring)
+        parts = s.split("-")
+        if len(parts) != 2 or parts[0] != 'squareOK':
+            return None
+        try:
+            suffix = parts[1]
+            rstring, cstring = suffix.split(".")
+            self.row = int(rstring)
+            self.column = int(cstring)
+        except Exception:
+            return None
         return self
 
     def __str__(self):
-        return "sq-%.2d.%.2d" % (self.row, self.col)
+        return "sq-%.2d.%.2d" % (self.row, self.column)
+
+class Tile:
+    rowStart = 0
+    rowEnd = 0
+    columnStart = 0
+    columnEnd = 0
+    
+    def parse(self, s):
+        parts = s.split("-")
+        if len(parts) != 2 or parts[0] != "tileOK":
+            return None
+        try:
+            suffix = parts[1]
+            fields = suffix.split(".")
+            self.rowStart = int(fields[0])
+            self.rowEnd = int(fields[2])
+            self.columnStart = int(fields[3])
+            self.columnEnd = int(fields[5])
+        except Exception:
+            return None
+        return self
+        
+    # Given list of squares, find smallest enclosing tile
+    def encloseSquares(self, slist):
+        rowStart = None
+        rowEnd = None
+        columnStart = None
+        columnEnd = None
+        for sq in slist:
+            rowStart = sq.row if rowStart is None else min(sq.row, rowStart)
+            rowEnd = sq.row if rowEnd is None else max(sq.row, rowEnd)
+            columnStart = sq.column if columnStart is None else min(sq.column, columnStart)
+            columnEnd = sq.column if columnEnd is None else max(sq.column, columnEnd)
+        self.rowStart = rowStart
+        self.rowEnd = rowEnd
+        self.columnStart = columnStart
+        self.columnEnd = columnEnd
+        return self
+
+    def __str__(self):
+        return "tileOK-%d..%d.%d..%d" % (self.rowStart, self.rowEnd, self.columnStart, self.columnEnd)
 
 class Display:
     nrow = 16
@@ -173,20 +220,38 @@ class Tracker:
     regionDict = {}
     pauseIncrement = 0.1
     colorDict = {}
+    # mapping from tile name to argument number
+    tileDict = {}
     
     def __init__(self, display, pauseIncrement = None):
         self.display = display
         self.regionDict = {}
         self.colorDict = {}
+        self.tileDict = {}
         if pauseIncrement is not None:
             self.pauseIncrement = pauseIncrement
 
     def newArgument(self, id, sname):
         sq = Square().parse(sname)
-        self.regionDict[id] = [sq]
-        self.colorDict[id] = None
+        if sq is None:
+            tile = Tile().parse(sname)
+            if tile is None:
+                print("ERROR: Could not parse argument %s" % sname)
+                return
+            else:
+                oldId = self.findTileRegion(tile)
+                self.rename(oldId, id)
+        else:
+            self.regionDict[id] = [sq]
+            self.colorDict[id] = None
 
     def merge(self, id1, id2, newId):
+        if id1 not in self.regionDict:
+            print("merge: No region with id1 %d" % id1)
+            return
+        if id2 not in self.regionDict:
+            print("merge: No region with id2 %d" % id2)
+            return
         ls1 = self.regionDict[id1]
         del self.regionDict[id1]
         ls2 = self.regionDict[id2]
@@ -200,10 +265,34 @@ class Tracker:
             color = self.colorDict[id2]
         self.colorDict[newId] = color
         for sq in nls:
-            idx = self.display.index(sq.row, sq.col)
+            idx = self.display.index(sq.row, sq.column)
             self.display.colorSquare(idx, color)
         self.display.update()
             
+    def rename(self, oldId, newId):
+        if oldId == newId:
+            return
+        self.regionDict[newId] = self.regionDict[oldId]
+        del self.regionDict[oldId]
+        print("Renamed region %d to be %d" % (oldId, newId))
+        self.colorDict[newId] = self.colorDict[oldId]
+
+    # Once encounter tiles, form tile for each remaining region
+    def buildTiles(self):
+        for id in self.regionDict.keys():
+            tile = Tile().encloseSquares(self.regionDict[id])
+            print("Generated tile %s" % str(tile))
+            self.tileDict[str(tile)] = id
+
+    def findTileRegion(self, tile):
+        tstring = str(tile)
+        if len(self.tileDict) == 0:
+            self.buildTiles()
+        if tstring not in self.tileDict:
+            print("ERROR: Could not find region matching tile %s" % tstring)
+            return None
+        return self.tileDict[tstring]
+
     def showRegion(self, id):
         if id not in self.regionDict:
             print("ERROR: Region %d does not exist" % id)
