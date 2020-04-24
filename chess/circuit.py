@@ -1,6 +1,7 @@
 # Library of routines for generating Boolean expression evaluations scripts
 # Assume constants one & zero are named "one" and "zero"
 
+import random
 import sys
 
 
