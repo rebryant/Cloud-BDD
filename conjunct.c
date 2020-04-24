@@ -101,7 +101,7 @@ size_t stored_gc_limit = 10000;
 #endif /* STRESS */
 
 /* How large can the BDD get before attempting existential quantification (0 == infinity) */
-int quantify_threshold = 0;
+int quantify_threshold = 1000;
 
 /* How many more nodes should be stored in order to trigger GC? */
 
