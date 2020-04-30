@@ -51,6 +51,7 @@ extern int cuddGarbageCollect (DdManager *unique, int clearCache);
 #define USE_APA 0
 
 /* Support BDDs, ZDDs, and ADDs with Cudd */
+/* These match the types used by CUDD when loading and storing DDs */
 typedef enum { IS_BDD, IS_ZDD, IS_ADD } dd_type_t;
 
 bool fatal = false;
@@ -58,7 +59,6 @@ bool fatal = false;
 /* GC statistics */
 unsigned int gc_count = 0;
 long gc_milliseconds = 0;
-
 
 bool do_ref(shadow_mgr mgr) {
     return mgr->do_local || mgr->do_dist;
@@ -1811,20 +1811,24 @@ bool shadow_store(shadow_mgr mgr, ref_t r, FILE *outfile) {
     if (!mgr->do_cudd)
 	return false;
     DdNode *nd = ref2dd(mgr, r);;
-    int ok = Cudd_bddStore(mgr->bdd_manager, nd, outfile);
+    dd_type_t dtype = find_type(mgr, r);
+    dd_store_t stype = (dd_store_t) dtype;
+    int ok = Cudd_ddStore(mgr->bdd_manager, nd, outfile, stype);
     return (bool) ok;
 }
 
 
 ref_t shadow_load(shadow_mgr mgr, FILE *infile) {
     ref_t r = REF_INVALID;
+    dd_store_t stype = CUDD_STORED_BDD;
     if (!mgr->do_cudd)
 	return r;
-    DdNode *nd = Cudd_bddLoad(mgr->bdd_manager, infile);
+    DdNode *nd = Cudd_ddLoad(mgr->bdd_manager, infile, &stype);
     reference_dd(mgr, nd);
+    dd_type_t dtype = (dd_type_t) stype;
     if (!nd)
 	return r;
-    r = dd2ref(nd, IS_BDD);
+    r = dd2ref(nd, dtype);
     return r;
 }
 
