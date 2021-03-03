@@ -42,6 +42,10 @@ chaining_t chaining_type = CHAIN_NONE;
    should I assume all variables are in support of function? */
 int all_vars = 1;
 
+/* Should combining be done linearly or as a tree */
+int tree_reduction = 0;
+
+
 /* Data structures */
 shadow_mgr smgr;
 
@@ -166,6 +170,7 @@ static void console_init(bool do_dist) {
 	    " f file         | Load f from file");
     add_param("collect", &enable_collect, "Enable garbage collection", NULL);
     add_param("allvars", &all_vars, "Count all variables in support", NULL);
+    add_param("tree", &tree_reduction, "Do reduction operations as tree", NULL);
     init_conjunct();
 }
 
@@ -635,8 +640,42 @@ static ref_t tree_reduce(char *argv[], ref_t unit_ref, combine_fun_t cfun, int a
     return rval;
 }
 
+static ref_t linear_reduce(char *argv[], ref_t unit_ref, combine_fun_t  cfun, int arglo, int arghi) {
+    if (arghi < arglo) {
+	root_addref(unit_ref, false);
+	return unit_ref;
+    }
+    int i;
+    ref_t rval = get_ref(argv[arglo]);
+    if (REF_IS_INVALID(rval))
+	return rval;
+    root_addref(rval, false);
+    for (i = arglo+1; i <= arghi; i++) {
+	ref_t aval = get_ref(argv[i]);
+	root_addref(aval, false);
+	if (REF_IS_INVALID(aval)) {
+	    root_deref(rval);
+	    return aval;
+	} else {
+	    root_checkref(aval);
+	    ref_t nval = cfun(smgr, rval, aval);
+	    root_addref(nval, true);
+	    root_deref(aval);
+	    root_deref(rval);
+	    rval = nval;
+	}
+	/* Check for local garbage collection */
+	if (shadow_gc_check(smgr))
+	    do_collect(0, NULL);
+	/* Initiate any deferred garbage collection */
+	if (do_dist)
+	    undefer();
+    }
+    return rval;
 
-/* Use tree reduction.  Enable GC after each operation */
+}
+
+/* Perform reduction. */
 static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun) {
     char buf[24];
     ref_t rval = unit_ref;
@@ -644,7 +683,8 @@ static bool do_reduce(int argc, char *argv[], ref_t unit_ref, combine_fun_t cfun
 	report(0, "Need destination name");
 	return false;
     }
-    rval = tree_reduce(argv, unit_ref, cfun, 2, argc-1);
+    rval = tree_reduction ? tree_reduce(argv, unit_ref, cfun, 2, argc-1) : 
+	linear_reduce(argv, unit_ref, cfun, 2, argc-1);
     if (REF_IS_INVALID(rval))
 	return false;
     assign_ref(argv[1], rval, false, false);
