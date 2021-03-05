@@ -325,9 +325,9 @@ bool do_comment_cmd(int argc, char *argv[]) {
     if (echo)
 	return true;
     for (i = 0; i < argc; i++) {
-	report_noreturn_nostdout(0, "%s ", argv[i]);
+	report_noreturn(0, "%s ", argv[i]);
     }
-    report_noreturn_nostdout(0, "\n");
+    report_noreturn(0, "\n");
     return true;
 }
 

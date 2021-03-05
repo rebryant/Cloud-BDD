@@ -1292,24 +1292,26 @@ bool do_information(int argc, char *argv[]) {
 	report_noreturn(0, "%s ", argv[idx]);
     }
     report_noreturn(0, "\n");
-    set_ptr supset = shadow_support(smgr, roots);
-    report_noreturn(0, "  Support:");
-    for (idx = 0; idx < smgr->nvars; idx++) {
-	r = shadow_get_variable(smgr, idx);
-	if (set_member(supset, (word_t) r, false)) {
-	    char *name = name_find(r);	    
-	    if (name)
-		report_noreturn(0, " %s", name);
-	    else {
-		char buf[24];
-		ref_show(r, buf);
-		report_noreturn(0, " %s", buf);
+    if (verblevel >= 2) {
+	set_ptr supset = shadow_support(smgr, roots);
+	report_noreturn(0, "  Support:");
+	for (idx = 0; idx < smgr->nvars; idx++) {
+	    r = shadow_get_variable(smgr, idx);
+	    if (set_member(supset, (word_t) r, false)) {
+		char *name = name_find(r);	    
+		if (name)
+		    report_noreturn(0, " %s", name);
+		else {
+		    char buf[24];
+		    ref_show(r, buf);
+		    report_noreturn(0, " %s", buf);
+		}
 	    }
+	    shadow_deref(smgr, r);
 	}
-	shadow_deref(smgr, r);
+	report(0, "");
+	set_free(supset);
     }
-    report(0, "");
-    set_free(supset);
     if (smgr->do_local) {
 	set_ptr rset = ref_reach(smgr->ref_mgr, roots);
 	report(0, "  Ref size: %lu nodes", rset->nelements);
