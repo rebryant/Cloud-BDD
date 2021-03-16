@@ -8,15 +8,15 @@ import getopt
 
 
 def usage(name):
-    print("Usage: %s [-h] [-M] [-P] [-S] [-Z] [-R] [-r ROWS] [-c COLS] [-s R:C] [-t R:C] [-o OUT]" % name)
+    print("Usage: %s [-h] [-M] [-P] [-S] [-Z] -m R|F|B -r ROWS [-c COLS] [-s R:C] [-t R:C] [-o OUT]" % name)
     print("  -h      Print this information")
     print("  -M      Use Mesh graph, rather than Knight's move graph")
     print("  -P      Use position-major ordering of variables")
     print("  -S      Enumerate satisfying solutions")
     print("  -Z      Use ZDDs")
-    print("  -R      Recursively divide space and time")
-    print("  -r ROWS Specify number of rows (default = 8)")
-    print("  -c COLS Specify number of cols (default = number of rows)")
+    print("  -m MODE Specify temporal combining mode: R=recursive, F=forward, B=bidirectional, S=split")
+    print("  -r COLS Specify number of rows")
+    print("  -c COLS Specify number of columns (default = number of rows)")
     print("  -s R:C  Specify source node")
     print("  -t R:C  Specify sink node")
     print("  -o OUT  Output file")
@@ -81,6 +81,7 @@ class Graph:
     sourceVertex = None
     sinkVertex = None
     graphDescription = None
+    gcThreshold = 16
 
     def __init__(self, ckt=None):
         if ckt is None:
@@ -197,7 +198,7 @@ class Graph:
         return id
 
     # Generate formula by splitting both time and space
-    def generateFormulaTS(self, tree = None, stepMin = None, stepMax = None):
+    def generateFormulaTR(self, tree = None, stepMin = None, stepMax = None):
         if tree is None:
             tree = self.splittingTree()
             self.nextId = 1
@@ -217,29 +218,33 @@ class Graph:
                 return cluster
             else:
                 # Spatial split
-                c1 = self.generateFormulaTS(tree[0], stepMin, stepMax)
-                c2 = self.generateFormulaTS(tree[1], stepMin, stepMax)
+                c1 = self.generateFormulaTR(tree[0], stepMin, stepMax)
+                c2 = self.generateFormulaTR(tree[1], stepMin, stepMax)
                 nc = c1.join(c2, self.assignId())
                 c1.flush()
                 c2.flush()
+                if vcount * scount >= self.gcThreshold:
+                    self.ckt.collect()
                 return nc
         else:
             stepMid = (stepMin + stepMax) // 2
-            c1 = self.generateFormulaTS(tree, stepMin, stepMid)
-            c2 = self.generateFormulaTS(tree, stepMid+1, stepMax)
+            c1 = self.generateFormulaTR(tree, stepMin, stepMid)
+            c2 = self.generateFormulaTR(tree, stepMid+1, stepMax)
             nc = c1.join(c2, self.assignId())
             c1.flush()
             c2.flush()
+            if vcount * scount >= self.gcThreshold:
+                self.ckt.collect()
             return nc
 
-    # Generate formula stepwise
-    def generateFormulaT(self):
+    # Generate formula stepwise from start forward
+    def generateFormulaTF(self):
         tree = self.splittingTree()
         self.nextId = 1
-        cluster = self.generateFormulaTS(tree, 1, 1)
+        cluster = self.generateFormulaTR(tree, 1, 1)
 
         for step in inclusiveRange(2, len(self.vertices)):
-            sc = self.generateFormulaTS(tree, step, step)
+            sc = self.generateFormulaTR(tree, step, step)
             self.ckt.collect()
             nc = cluster.join(sc, self.assignId())
             cluster.flush()
@@ -248,7 +253,65 @@ class Graph:
             cluster = nc
 
         return cluster
+
+    # Generate formula for upper half only
+    def generateUpper(self):
+        tree = self.splittingTree()
+        self.nextId = 1
+
+        N = len(self.vertices)
+        HN = N//2
+
+        # Starting at source and going forward
+        fc = self.generateFormulaTR(tree, 1, 1)
+        for step in inclusiveRange(2, HN):
+            sc = self.generateFormulaTR(tree, step, step)
+            self.ckt.collect()
+            nc = fc.join(sc, self.assignId())
+            fc.flush()
+            sc.flush()
+            self.ckt.collect()
+            fc = nc
+        return fc
         
+    # Generate formula for lower half only
+    def generateLower(self):
+        tree = self.splittingTree()
+        self.nextId = 1001
+
+        N = len(self.vertices)
+        HN = N//2
+
+        # Start at sink and go backward
+        rc = self.generateFormulaTR(tree, N, N)
+        for step in range(N-1,HN,-1):
+            sc = self.generateFormulaTR(tree, step, step)
+            self.ckt.collect()
+            nc = rc.join(sc, self.assignId())
+            rc.flush()
+            sc.flush()
+            self.ckt.collect()
+            rc = nc
+        return rc
+
+    def generateJoin(self, uc, lc):
+        self.id = 2001
+        cluster = uc.join(lc, self.assignId())
+        return cluster
+
+
+    # Generate formula stepwise forward from source and reverse from sink.
+    # Do temporal join in middle
+    def generateFormulaTB(self):
+        uc = self.generateUpper()
+        lc = self.generateLower()
+        mc = self.generateJoin(uc, lc)
+        uc.flush()
+        lc.flush()
+        self.ckt.collect()
+        return mc
+
+
     # Final step.  Variable cluster is top-level cluster
     def wrapup(self, cluster, showSolutions = False):
         vec = [cluster.okFormula]
@@ -257,6 +320,7 @@ class Graph:
         self.ckt.count(vec)
         if showSolutions:
             self.ckt.satisfy(vec)
+        self.ckt.write("time")
 
 # Grid consisting of Array of nodes with mesh connections
 class MeshGraph(Graph):
@@ -335,7 +399,7 @@ class KnightGraph(MeshGraph):
 
     def __init__(self, ckt = None, rows = 8, columns = None):
         MeshGraph.__init__(self, ckt, rows, columns)
-        self.graphDescription = "Knight %.2d X %.2c" % (rows, columns)
+        self.graphDescription = "Knight %.2d X %.2d" % (rows, columns)
                         
     def addEdges(self):
         # Generate edges
@@ -368,14 +432,13 @@ class Cluster:
     okFormula = None
     vertexFormulaDict = {}
     stepFormulaDict = {}
-    isUnit = False
 
     def __init__(self, graph, id, stepMin = None, stepMax = None, vertexSet = None):
         self.graph = graph
-        self.id = "%.3d" % id if type(id) == type(1) else str(id)
+        self.id = "%.4d" % id if type(id) == type(1) else str(id)
         self.stepMin = 0 if stepMin is None else stepMin
         self.stepMax = 0 if stepMax is None else stepMax 
-        self.vertexSet = {} if vertexSet is None else vertexSet 
+        self.vertexSet = set([]) if vertexSet is None else vertexSet 
         self.okFormula = None
         self.vertexFormulaDict = {}
         self.stepFormulaDict = {}
@@ -392,6 +455,63 @@ class Cluster:
     def vertexSpanning(self):
         return len(self.vertexSet) == len(self.graph.vertices)
 
+    def fname(self, tag, suffix):
+        return str(self) + "_" + str(tag) + "_" + suffix + ".bdd"
+
+    def getTag(self, fname):
+        return fname.split("_")[1]
+
+    def getId(self, fname):
+        left = fname.split("_")[0]
+        return left[4:]
+
+    def getSuffix(self, fname):
+        fields = fname.split("_")
+        # Strip extension
+        fields[-1] = fields[-1][:-4]
+        sfields = fields[2:]
+        return "_".join(sfields)
+
+    def getVertex(self, fname):
+        suffix = self.getSuffix(fname)
+        fields = suffix.split("_")
+        return fields[-1]
+
+    def store(self):
+        fnames = []
+        fname = self.fname("o", self.okFormula)
+        fnames.append(fname)
+        self.graph.ckt.store(self.okFormula, fname)
+        for k in self.vertexFormulaDict.keys():
+            fname = self.fname("v", self.vertexFormulaDict[k])
+            fnames.append(fname)
+            self.graph.ckt.store(self.vertexFormulaDict[k], fname)
+        for k in self.stepFormulaDict.keys():
+            fname = self.fname("s", self.stepFormulaDict[k])
+            fnames.append(fname)
+            self.graph.ckt.store(self.stepFormulaDict[k], fname)        
+        return fnames
+
+    def load(self, id, fnames):
+        onames = [fname for fname in fnames if self.getTag(fname) == 'o']
+        if len(onames) != 1:
+            raise GraphException("Couldn't find OK formula for cluster %s" % self.getId(fnames[0]))
+        self.okFormula = self.getSuffix(onames[0])
+        self.graph.ckt.load(self.okFormula, onames[0])
+        vnames = [fname for fname in fnames if self.getTag(fname) == 'v']
+        for fname in vnames:
+            suffix = self.getSuffix(fname)
+            step = int(suffix[-2:])
+            self.graph.ckt.load(suffix, fname)
+            self.vertexFormulaDict[step] = suffix
+        snames = [fname for fname in fnames if self.getTag(fname) == 's']        
+        self.vertexSet = set([])
+        for fname in snames:
+            suffix = self.getSuffix(fname)
+            vertex = self.getVertex(fname)
+            self.vertexSet |= {vertex}
+            self.graph.ckt.load(suffix, fname)
+            self.stepFormulaDict[vertex] = suffix
 
     def unitCluster(self, vertex, step):
         isSource = vertex == self.graph.sourceVertex
@@ -535,7 +655,8 @@ class Cluster:
             self.graph.ckt.decRefs([vec])
             for step in inclusiveRange(nstepMin, nstepMax):
                 ncluster.vertexFormulaDict[step] = None
-        self.graph.ckt.information(ilist)
+        if vertexSpanning:
+            self.graph.ckt.information(ilist)
         return ncluster
     
     def join(self, other, newId):
@@ -543,7 +664,7 @@ class Cluster:
             overlap = self.vertexSet & other.vertexSet
             if len(overlap) > 0:
                 ostring = ", ".join(sorted([str(v) for v in overlap]))
-                msg = "Invalid spatial join %s + %s.  Vertex sets overlap: {%s}" % (str(self), str(other), ostring)
+                ms  = "Invalid spatial join %s + %s.  Vertex sets overlap: {%s}" % (str(self), str(other), ostring)
                 raise GraphException(msg)
             return self.spatialJoin(other, newId)
         elif self.vertexSet == other.vertexSet:
@@ -553,7 +674,14 @@ class Cluster:
                 msg = "Invalid temporal join %s (Steps %.2d--%.2d) + %s (Steps %.2d--%.2d)" % (str(self), self.stepMin, self.stepMax, str(other), other.stepMin, other.stepMax)
                 raise GraphException(msg)
         else:
+            slist = ", ".join(sorted([v for v in self.vertexSet]))
+            oslist = ", ".join(sorted([v for v in other.vertexSet]))
             msg = "Invalid join %s + %s.  Does not qualify as temporal or spatial join" % (str(self), str(other))
+            msg += "\n"
+            msg += "Cluster %s: [%.2d:%.2d]" % (str(self), self.stepMin, self.stepMax)
+            msg += "\n   Vertices: %s\n" % slist
+            msg += "Cluster %s: [%.2d:%.2d]" % (str(other), other.stepMin, other.stepMax)
+            msg += "\n   Vertices: %s" % oslist
             raise GraphException(msg)
 
     def flush(self):
@@ -566,26 +694,27 @@ class Cluster:
                 
         
 def run(name, args):
-    rows = 8
+    rows = None
     columns = None
     meshGraph = False
     positionMajor = False
     isZdd = False
     showSolutions = False
-    outfile = sys.stdout
+    outname = None
     sourceRC = (1,1)
     sinkRC = (1,1)
-    recursive = False
+    mode = None
+
     
-    optlist, args = getopt.getopt(args, "hMPZSRr:c:s:t:o:")
+    optlist, args = getopt.getopt(args, "hMPZSm:r:c:s:t:o:")
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
             return
         elif opt == '-M':
             meshGraph = True
-        elif opt == '-R':
-            recursive = True
+        elif opt == '-m':
+            mode = val
         elif opt == '-P':
             positionMajor = True
         elif opt == '-Z':
@@ -621,16 +750,51 @@ def run(name, args):
                 usage(name)
                 return
         elif opt == '-o':
-            try:
-                outfile = open(val, 'w')
-            except:
-                print("Couldn't open output file '%s'" % val)
-                return
+            outname = val
 
+    if rows is None:
+        print("Must specify number of rows")
+        return
     if columns is None:
         columns = rows
 
-    ckt = circuit.Circuit(outfile = outfile)
+    if mode is None:
+        print("Must specify temporal combining mode")
+        usage(name)
+        return
+    elif mode not in 'RFBS':
+        print("Invalid temporal combining mode")
+
+    outfiles = []
+
+    if mode == 'S':
+        if outname is None:
+            print("Must specify output file name in split mode")
+            return
+        # Remove extension
+        fields = outname.split(".")
+        extension = fields[-1]
+        root = ".".join(fields[:-1])
+        for part in ["A", "B", "C"]:
+            name = root + "_" + part + "." + extension
+            try:
+                outfile = open(name, 'w')
+                outfiles.append(outfile)
+            except:
+                print("Couldn't open output file '%s'" % name)
+                return
+    else:
+        if outname is None:
+            outfile = sys.stdout
+        else:
+            try:
+                outfile = open(outname, 'w')
+                outfiles.append(outfile)
+            except:
+                print("Couldn't open output file '%s'" % outname)
+                return
+        
+    ckt = circuit.Circuit(outfile = outfiles[0])
     graph = MeshGraph(ckt, rows, columns) if meshGraph else KnightGraph(ckt, rows, columns)
     source = graph.getVertex(sourceRC[0], sourceRC[1])
     if source is None:
@@ -641,8 +805,54 @@ def run(name, args):
         print("Invalid sink %s" % str(sinkRC))
         return
     graph.declareVariables(source, sink, isZdd = isZdd, positionMajor = positionMajor)
-    cluster = graph.generateFormulaTS() if recursive else graph.generateFormulaT()
+    if mode == 'R':
+        cluster = graph.generateFormulaTF()
+    elif mode == 'F':
+        cluster = graph.generateFormulaTR()
+    elif mode == 'S':
+        # Generate Upper half and store files
+        uc = graph.generateUpper()
+        graph.wrapup(uc, False)
+        unames = uc.store()
+        uid = uc.id
+        uStepMin = uc.stepMin
+        uStepMax = uc.stepMax
+        uc.flush()
+        graph.ckt.collect()
+
+        # Generate Lower half and store files
+        ckt.changeFile(outfiles[1])
+        graph = MeshGraph(ckt, rows, columns) if meshGraph else KnightGraph(ckt, rows, columns)
+        source = graph.getVertex(sourceRC[0], sourceRC[1])
+        sink = graph.getVertex(sinkRC[0], sinkRC[1])
+        graph.declareVariables(source, sink, isZdd = isZdd, positionMajor = positionMajor)
+        lc = graph.generateLower()
+        graph.wrapup(lc, False)
+        lnames = lc.store()
+        lid = lc.id
+        lStepMin = lc.stepMin
+        lStepMax = lc.stepMax
+        lc.flush()
+        graph.ckt.collect()
+
+        # Read files for two halves and combine
+        ckt.changeFile(outfiles[2])
+        graph = MeshGraph(ckt, rows, columns) if meshGraph else KnightGraph(ckt, rows, columns)
+        source = graph.getVertex(sourceRC[0], sourceRC[1])
+        sink = graph.getVertex(sinkRC[0], sinkRC[1])
+        graph.declareVariables(source, sink, isZdd = isZdd, positionMajor = positionMajor)
+        uc = Cluster(graph, uid, uStepMin, uStepMax)
+        uc.load(uid, unames)
+        lc = Cluster(graph, lid, lStepMin, lStepMax)
+        lc.load(lid, lnames)
+        cluster = graph.generateJoin(lc, uc)
+        uc.flush()
+        lc.flush()
+    else:
+        cluster = graph.generateFormulaTB()
     graph.wrapup(cluster, showSolutions)
+    cluster.flush()
+    graph.ckt.collect()
 
 if __name__ == "__main__":
     run(sys.argv[0], sys.argv[1:])

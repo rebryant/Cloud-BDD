@@ -165,6 +165,11 @@ class Circuit:
         self.nodes.add(nd)
         return nd
 
+    def changeFile(self, newfile):
+        if self.outfile != sys.stdout:
+            self.outfile.close
+        self.outfile = newfile
+
     def flush(self):
         rnodes = []
         for nd in self.nodes:
@@ -247,6 +252,13 @@ class Circuit:
 
     def satisfy(self, fv):
         self.cmdLine("satisfy", fv)
+
+    # Store and load
+    def store(self, arg, fname):
+        self.cmdLine("store", [arg, fname])
+
+    def load(self, arg, fname):
+        self.cmdLine("load", [arg, fname])
 
     # Generate sequence of commands
     # argList should be list of vectors
