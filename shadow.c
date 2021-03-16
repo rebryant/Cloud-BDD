@@ -720,7 +720,7 @@ ref_t shadow_and_limit(shadow_mgr mgr, ref_t aref, ref_t bref, size_t nodeLimit,
 	    reference_dd(mgr, rn);
 	    add_ref(mgr, r, rn);
 	}
-    } else
+    } else if (!mgr->do_cudd)
 	r = shadow_ite(mgr, aref, bref, shadow_zero(mgr));
 
 #if RPT >= 4
