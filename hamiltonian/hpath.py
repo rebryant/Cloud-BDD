@@ -8,12 +8,13 @@ import getopt
 
 
 def usage(name):
-    print("Usage: %s [-h] [-M] [-P] [-S] [-Z] -m R|F|B -r ROWS [-c COLS] [-s R:C] [-t R:C] [-o OUT]" % name)
+    print("Usage: %s [-h] [-M] [-P] [-S] [-Z] [-L] -m R|F|B -r ROWS [-c COLS] [-s R:C] [-t R:C] [-o OUT]" % name)
     print("  -h      Print this information")
     print("  -M      Use Mesh graph, rather than Knight's move graph")
     print("  -P      Use position-major ordering of variables")
     print("  -S      Enumerate satisfying solutions")
     print("  -Z      Use ZDDs")
+    print("  -L      Add layers stepwise")
     print("  -m MODE Specify temporal combining mode: R=recursive, F=forward, B=bidirectional, S=split")
     print("  -r COLS Specify number of rows")
     print("  -c COLS Specify number of columns (default = number of rows)")
@@ -238,44 +239,50 @@ class Graph:
             return nc
 
     # Generate formula stepwise from start forward
-    def generateFormulaTF(self):
+    def generateFormulaTF(self, layered = False):
         tree = self.splittingTree()
         self.nextId = 1
         cluster = self.generateFormulaTR(tree, 1, 1)
 
         for step in inclusiveRange(2, len(self.vertices)):
-            sc = self.generateFormulaTR(tree, step, step)
-            self.ckt.collect()
-            nc = cluster.join(sc, self.assignId())
+            if layered:
+                nc = cluster.addStep(self.assignId(), before=False)
+            else:
+                sc = self.generateFormulaTR(tree, step, step)
+                self.ckt.collect()
+                nc = cluster.join(sc, self.assignId())
+                sc.flush()
             cluster.flush()
-            sc.flush()
             self.ckt.collect()
             cluster = nc
 
         return cluster
 
     # Generate formula for upper half only
-    def generateUpper(self):
+    def generateUpper(self, layered = False):
         tree = self.splittingTree()
         self.nextId = 1
 
         N = len(self.vertices)
         HN = N//2
 
-        # Starting at source and going forward
+        # Start at source and go forward
         fc = self.generateFormulaTR(tree, 1, 1)
         for step in inclusiveRange(2, HN):
-            sc = self.generateFormulaTR(tree, step, step)
-            self.ckt.collect()
-            nc = fc.join(sc, self.assignId())
+            if layered:
+                nc = fc.addStep(self.assignId(), before=False)
+            else:
+                sc = self.generateFormulaTR(tree, step, step)
+                self.ckt.collect()
+                nc = fc.join(sc, self.assignId())
+                sc.flush()
             fc.flush()
-            sc.flush()
             self.ckt.collect()
             fc = nc
         return fc
         
     # Generate formula for lower half only
-    def generateLower(self):
+    def generateLower(self, layered = False):
         tree = self.splittingTree()
         self.nextId = 1001
 
@@ -285,11 +292,14 @@ class Graph:
         # Start at sink and go backward
         rc = self.generateFormulaTR(tree, N, N)
         for step in range(N-1,HN,-1):
-            sc = self.generateFormulaTR(tree, step, step)
-            self.ckt.collect()
-            nc = rc.join(sc, self.assignId())
+            if layered:
+                nc = rc.addStep(self.assignId(), before=True)
+            else:
+                sc = self.generateFormulaTR(tree, step, step)
+                self.ckt.collect()
+                nc = rc.join(sc, self.assignId())
+                sc.flush()
             rc.flush()
-            sc.flush()
             self.ckt.collect()
             rc = nc
         return rc
@@ -302,9 +312,9 @@ class Graph:
 
     # Generate formula stepwise forward from source and reverse from sink.
     # Do temporal join in middle
-    def generateFormulaTB(self):
-        uc = self.generateUpper()
-        lc = self.generateLower()
+    def generateFormulaTB(self, layered = False):
+        uc = self.generateUpper(layered)
+        lc = self.generateLower(layered)
         mc = self.generateJoin(uc, lc)
         uc.flush()
         lc.flush()
@@ -558,10 +568,11 @@ class Cluster:
         stepSpanning = ncluster.stepSpanning()
         ncluster.vertexFormulaDict = {}
         ncluster.stepFormulaDict = {}
+        # List for which may want information at end
         ilist = []
 
-
         if not self.vertexSpanning():
+            # Copied from source clusters
             for step in inclusiveRange(self.stepMin, self.stepMax):
                 vformula = "Vertex_occupied_" + str(ncluster) + "_S%.2d" % step
                 ncluster.vertexFormulaDict[step] = vformula
@@ -573,33 +584,36 @@ class Cluster:
                 self.graph.ckt.andN(vformula, [other.vertexFormulaDict[step]])
                 ilist.append(vformula)
 
-        vlist = []
+        # Newly generated Step_occupied formulas
+        solist = []
+        # Step occupied for vertex if occupied in either cluster
         for vertex in nvertexSet:
             sformula = "Step_occupied_" + str(ncluster) + '_' + str(vertex)
-            vlist.append(sformula)
-            ncluster.stepFormulaDict[vertex] = sformula
-            self.graph.ckt.orN(sformula, [self.stepFormulaDict[vertex], other.stepFormulaDict[vertex]])
+            solist.append(sformula)
             if not stepSpanning:
+                ncluster.stepFormulaDict[vertex] = sformula
                 ilist.append(sformula)
+            self.graph.ckt.orN(sformula, [self.stepFormulaDict[vertex], other.stepFormulaDict[vertex]])
 
         ncluster.okFormula = "OK" if stepSpanning and ncluster.vertexSpanning() else "OK_" + str(ncluster)
         ilist.append(ncluster.okFormula)
+        # At-most-one constraints in step formulas for each vertex
         tvec = self.graph.ckt.tmpVec(len(ncluster.vertexSet))
         nvec = self.graph.ckt.tmpVec(len(ncluster.vertexSet))
         avec = self.graph.ckt.vec([self.stepFormulaDict[vertex] for vertex in ncluster.vertexSet])
         ovec = self.graph.ckt.vec([other.stepFormulaDict[vertex] for vertex in ncluster.vertexSet])
         self.graph.ckt.andV(tvec, [avec, ovec])
         self.graph.ckt.notV(nvec, tvec)
+        # OK constraints include source OK formulas + AMO constraints
         clist = [self.okFormula, other.okFormula] + nvec.nodes
         if stepSpanning:
-            clist += vlist
+            # If joins all steps, then add ALO constraints
+            clist += solist
         rvec = self.graph.ckt.andN(ncluster.okFormula, clist)
         self.graph.ckt.decRefs([tvec, nvec])
         if stepSpanning:
-            vec = self.graph.ckt.vec(vlist)
+            vec = self.graph.ckt.vec(solist)
             self.graph.ckt.decRefs([vec])
-            for vertex in nvertexSet:
-                ncluster.stepFormulaDict[vertex] = None
         self.graph.ckt.information(ilist)
         return ncluster
 
@@ -611,20 +625,22 @@ class Cluster:
         ncluster = Cluster(self.graph, newId, nstepMin, nstepMax, nvertexSet)
         self.graph.ckt.comment("Cluster %s: spatial join of clusters %s and %s.  Steps [%.2d..%.2d]" % (str(ncluster), str(self), str(other), nstepMin, nstepMax))
         vlist = sorted([str(v) for v in nvertexSet])
-        self.graph.ckt.comment("Cluster vertices: %s" % ", ".join(vlist))
+        self.graph.ckt.comment("Cluster vertices: (%d total) %s" % (len(vlist), ", ".join(vlist)))
         vertexSpanning = ncluster.vertexSpanning()
         ncluster.vertexFormulaDict = {}
         ncluster.stepFormulaDict = {}
 
+        # List for which may want information at end
         ilist = []
-        slist = []
+        # List of vertex occupied formulas
+        volist = []
         for step in inclusiveRange(nstepMin, nstepMax):
             vformula = "Vertex_occupied_" + str(ncluster) + "_S%.2d" % step
-            slist.append(vformula)
-            ncluster.vertexFormulaDict[step] = vformula
-            self.graph.ckt.orN(vformula, [self.vertexFormulaDict[step], other.vertexFormulaDict[step]])
+            volist.append(vformula)
             if not vertexSpanning:
+                ncluster.vertexFormulaDict[step] = vformula
                 ilist.append(vformula)
+            self.graph.ckt.orN(vformula, [self.vertexFormulaDict[step], other.vertexFormulaDict[step]])
         if not self.stepSpanning():
             for vertex in self.vertexSet:
                 sformula = "Step_occupied_" + str(ncluster) + '_' + str(vertex)
@@ -647,18 +663,18 @@ class Cluster:
         self.graph.ckt.notV(nvec, tvec)
         clist = [self.okFormula, other.okFormula] + nvec.nodes
         if vertexSpanning:
-            clist += slist
+            clist += volist
         rvec = self.graph.ckt.andN(ncluster.okFormula, clist)
         self.graph.ckt.decRefs([tvec, nvec])
         if vertexSpanning:
-            vec = self.graph.ckt.vec(slist)
+            vec = self.graph.ckt.vec(volist)
             self.graph.ckt.decRefs([vec])
-            for step in inclusiveRange(nstepMin, nstepMax):
-                ncluster.vertexFormulaDict[step] = None
         if vertexSpanning:
             self.graph.ckt.information(ilist)
         return ncluster
     
+
+
     def join(self, other, newId):
         if self.stepMin == other.stepMin and self.stepMax == other.stepMax:
             overlap = self.vertexSet & other.vertexSet
@@ -684,6 +700,89 @@ class Cluster:
             msg += "\n   Vertices: %s" % oslist
             raise GraphException(msg)
 
+    # Create a new cluster by adding one more step to the beginning or end
+    def addStep(self, newId, before = False):
+        step = self.stepMin-1 if before else self.stepMax+1
+        nstepMin =  min(step, self.stepMin)
+        nstepMax = max(step, self.stepMax)
+        ncluster = Cluster(self.graph, newId, nstepMin, nstepMax, self.vertexSet)
+        position = "beginning" if before else "end"
+        self.graph.ckt.comment("Cluster %s: Add step to the %s of cluster %s.  Steps [%.2d..%.2d]" % (str(ncluster), position, str(self), nstepMin, nstepMax))
+        # Vertex list
+        vlist = sorted([v for v in self.vertexSet])
+        svlist = [str(v) for v in vlist]
+        self.graph.ckt.comment("Cluster vertices (%d total): %s" % (len(vlist), ", ".join(svlist)))
+        vertexSpanning = ncluster.vertexSpanning()
+        stepSpanning = ncluster.stepSpanning()
+        ncluster.vertexFormulaDict = {}
+        ncluster.stepFormulaDict = {}
+        # Unit cluster list
+        ulist = []
+        for v in vlist:
+            uc = Cluster(self.graph, self.graph.assignId())
+            uc.unitCluster(v, step)
+            ulist.append(uc)
+        # List for which might want information at end
+        ilist = []
+        # List of temporaries
+        tlist = []
+
+        ncluster.okFormula = "OK" if stepSpanning and vertexSpanning else "OK_" + str(ncluster)
+        # Constraint list for OK formula
+        clist = [self.okFormula]
+
+        # Generate ALO/AMO constraint for step
+        vformula = "Vertex_occupied_" + str(ncluster) + "_S%.2d" % step
+        volist = [uc.vertexFormulaDict[step] for uc in ulist]
+        vec = self.graph.ckt.vec(volist)
+        nvolist = ["!" + vo for vo in volist]
+        nvec = self.graph.ckt.vec(nvolist)
+        self.graph.ckt.orN(vformula, vec)
+        if self.vertexSpanning:
+            clist.append(vformula)
+        else:
+            ncluster.vertexFormulaDict[step] = vformula
+            ilist.append(vformula)
+        amo = self.graph.ckt.tmpNode()
+        tlist.append(amo)
+        self.graph.ckt.atMost1(amo, vec, nvec)
+        clist.append(amo)
+
+        if not vertexSpanning:
+            # Copied from source cluster
+            for s in inclusiveRange(self.stepMin, self.stepMax):
+                vformula = "Vertex_occupied_" + str(ncluster) + "_S%.2d" % s
+                ncluster.vertexFormulaDict[s] = vformula
+                self.graph.ckt.andN(vformula, [self.vertexFormulaDict[s]])
+                ilist.append(vformula)
+
+        # Generate ALO/AMO constraints for vertices
+        solist = []
+        for vertex, uc in zip(vlist, ulist):
+            sformula = "Step_occupied_" + str(ncluster) + '_' + str(vertex)
+            solist.append(sformula)
+            if not stepSpanning:
+                ncluster.stepFormulaDict[vertex] = sformula
+                ilist.append(sformula)
+            self.graph.ckt.orN(sformula, [self.stepFormulaDict[vertex], uc.stepFormulaDict[vertex]])
+        if stepSpanning:
+            clist += solist
+        tvec = self.graph.ckt.tmpVec(len(vlist))
+        nvec = self.graph.ckt.tmpVec(len(vlist))
+        tlist += [tvec, nvec]
+        avec = self.graph.ckt.vec([self.stepFormulaDict[vertex] for vertex in vlist])
+        ovec = self.graph.ckt.vec([uc.stepFormulaDict[vertex] for vertex, uc in zip(vlist, ulist)])
+        self.graph.ckt.andV(tvec, [avec, ovec])
+        self.graph.ckt.notV(nvec, tvec)
+        clist += nvec.nodes
+
+        self.graph.ckt.andN(ncluster.okFormula, clist)
+        self.graph.ckt.decRefs(tlist)
+        for uc in ulist:
+            uc.flush()
+        self.graph.ckt.information(ilist)
+        return ncluster
+
     def flush(self):
         vlist = [self.okFormula] 
         vlist += [v for v in self.vertexFormulaDict.values()]
@@ -704,9 +803,10 @@ def run(name, args):
     sourceRC = (1,1)
     sinkRC = (1,1)
     mode = None
+    layered = False
 
     
-    optlist, args = getopt.getopt(args, "hMPZSm:r:c:s:t:o:")
+    optlist, args = getopt.getopt(args, "hMPZSLm:r:c:s:t:o:")
     for (opt, val) in optlist:
         if opt == '-h':
             usage(name)
@@ -721,6 +821,8 @@ def run(name, args):
             isZdd = True
         elif opt == '-S':
             showSolutions = True
+        elif opt == '-L':
+            layered = True
         elif opt == '-r':
             rows = int(val)
         elif opt == '-c':
@@ -811,7 +913,7 @@ def run(name, args):
         cluster = graph.generateFormulaTR()
     elif mode == 'S':
         # Generate Upper half and store files
-        uc = graph.generateUpper()
+        uc = graph.generateUpper(layered)
         graph.wrapup(uc, False)
         unames = uc.store()
         uid = uc.id
@@ -826,7 +928,7 @@ def run(name, args):
         source = graph.getVertex(sourceRC[0], sourceRC[1])
         sink = graph.getVertex(sinkRC[0], sinkRC[1])
         graph.declareVariables(source, sink, isZdd = isZdd, positionMajor = positionMajor)
-        lc = graph.generateLower()
+        lc = graph.generateLower(layered)
         graph.wrapup(lc, False)
         lnames = lc.store()
         lid = lc.id
@@ -849,7 +951,7 @@ def run(name, args):
         uc.flush()
         lc.flush()
     else:
-        cluster = graph.generateFormulaTB()
+        cluster = graph.generateFormulaTB(layered)
     graph.wrapup(cluster, showSolutions)
     cluster.flush()
     graph.ckt.collect()
