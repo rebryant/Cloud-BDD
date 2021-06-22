@@ -908,9 +908,9 @@ def run(name, args):
         return
     graph.declareVariables(source, sink, isZdd = isZdd, positionMajor = positionMajor)
     if mode == 'R':
-        cluster = graph.generateFormulaTF()
-    elif mode == 'F':
         cluster = graph.generateFormulaTR()
+    elif mode == 'F':
+        cluster = graph.generateFormulaTF()
     elif mode == 'S':
         # Generate Upper half and store files
         uc = graph.generateUpper(layered)
